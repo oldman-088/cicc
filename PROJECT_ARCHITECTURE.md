@@ -1,0 +1,33 @@
+# Architecture and implementation inventory
+
+The repository initially contained only README at commit `c6ef133`. The default application is a Next.js dashboard with a fixed same-origin server route to a FastAPI synthetic read-only overview. Navigation other than the overview is informational and the globe is a placeholder; no external feed is connected. No browser authentication, AI, workers, or persistent database is connected to the demo.
+
+A separate opt-in experimental FastAPI router uses PostgreSQL-backed opaque bearer sessions, Argon2id passwords, role checks and tenant-filtered queries. It provides login/logout, administrator account actions, manual intelligence creation/list and analyst-entered evidence references. These are not connected to the UI and are not production-ready. Tenant/actor/entity foreign keys enforce selected boundaries. Audit events are transactional but not tamper-resistant. SHA-256 values in evidence references are unverified assertions; no file is uploaded or fetched. List APIs return pages of at most 100. Entity and evidence lists use UUID keysets; provenance, relationships and audit use timestamp/UUID keysets. Traversals are not consistent snapshots.
+
+Alembic migrations and SQLAlchemy models use PostgreSQL JSONB with SQLite compatibility. A disposable PostgreSQL 16.2 test run exercised migrations, schema parity, selected tenant constraints, login concurrency, bootstrap and API workflows. It does not prove full isolation, production security, TLS or deployment readiness. No graph database is used; introduce one only if actual query needs justify it. Redis, object storage, source connectors and a provider-independent AI layer remain planned.
+
+The fixed Next server route reads `API_INTERNAL_URL` at runtime; the browser never needs the API host directly. Compose is an unverified local development convenience, not hardened deployment. The offline bootstrap CLI creates a new tenant and admin only, with interactive password entry; operator attribution and production provisioning controls remain incomplete. See SECURITY_STATUS.md, BLOCKERS.md and MASTER_TASK_QUEUE.md.
+
+Manual entity and evidence writes now create tenant-scoped provenance events atomically. The event table binds evidence to its exact tenant and entity via a composite foreign key. The API provides read-only event history with an explicit warning that earlier history may be absent; no historical backfill is invented. Database-level tamper resistance, transformations, verification history and connector provenance are not yet implemented.
+
+Experimental entity title/confidence updates use optimistic version checks and atomically record before/after provenance and audit; verification resets to unverified. Concurrent edits were tested on disposable PostgreSQL, not a production deployment. Historical pre-feature changes remain unavailable.
+
+Experimental relationship assertions link two tenant-scoped entities, source, actor, optional subjective confidence and optionally an evidence reference attached to the subject. Composite foreign keys enforce the subject/evidence relationship and tenant scope. Assertions are explicitly unverified and create a provenance event and audit record in the write transaction. This is not an automatic correlation engine or a complete knowledge graph.
+
+The isolated CISA KEV connector adapter fetches a fixed HTTPS URL with bounded size, no redirects or environment proxies, validates source fields and records collection time; retries are bounded and excessive Retry-After values stop rather than retry early. A separate internal snapshot importer persists tenant-scoped CISA records linked to unified entities, and an internal sync coordinator orchestrates fetching and attempt status; no API, UI or scheduling is wired and the source has not been verified live. No operational status is implied.
+
+CISA snapshot import requires an administrator session, serializes imports using a tenant row lock on PostgreSQL, rejects older snapshots, preserves analyst entity edits, deduplicates by tenant and CVE, and commits source data, provenance and audit atomically. Missing entries are retained, not inferred to be remediated. Snapshot state records successful imports; separate internal attempt records show running/succeeded/failed/abandoned and sanitized error codes. A crash can leave a running attempt until explicitly abandoned. The importer expects a validated internal snapshot and is not exposed to network input.
+
+The CISA coordinator performs fetch outside database transactions, serializes starts per tenant on PostgreSQL, atomically commits successful import with attempt status, audits state changes and refuses a late result after abandonment. No automatic scheduler or start-sync endpoint exists. An experimental administrator-only status and abandonment interface is available; abandonment prevents later import but does not terminate a running network worker. This has only been exercised with synthetic fetch fixtures.
+
+Audit history keyset pagination uses event time and UUID, indexed by tenant/time/ID. Each page is separately authorized and audited; concurrent changes may not appear during the traversal, and the audit store is not tamper-resistant.
+
+Experimental investigations have tenant/actor foreign keys, UUID-paged listing, optimistic status versions and case-specific history plus generic security audit in the same transaction. They have no verified evidence lifecycle or UI; case history is not tamper-resistant; newer case-specific security audit events identify the case, but earlier events are not backfilled.
+
+An experimental analyst-created case/entity link requires same-tenant composite foreign keys, permits linking only to an open case, rejects duplicates and records case history and targeted audit atomically. Links are unverified assertions, not evidence or a full investigation workflow.
+
+Case/evidence associations require a pre-existing same-tenant case/entity link and a reference belonging to that entity. Composite foreign keys enforce both; entity unlink is blocked until case evidence links are removed. The reference remains unverified and no file is handled.
+
+Admin-only case assignment locks actor and assignee user rows in UUID order, rechecks session and active role, then locks the case and checks version/open status. Assigned users retain no extra privileges; disabled/demoted assignees are not auto-cleared.
+
+Analyst notes are tenant/case/actor constrained, chronological and API append-only; case history records note IDs and audit records case target. Notes are unverified, not database-immutable and must be escaped if rendered.

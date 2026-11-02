@@ -1,0 +1,3 @@
+# Agent execution rules
+
+Read PROJECT_STATE.json, MASTER_TASK_QUEUE.md, DEVELOPMENT_LOG.md and BLOCKERS.md; inspect git status and actual code; select the highest-priority eligible task. Preserve user changes, test honestly, update traceability and recovery state. Never present synthetic or stale data as live, infer source connectivity, expose tenant data, or claim untested controls. Remain on the session branch. An external orchestrator would require an authorized mechanism to start sessions, repository access, and an explicit instruction to read recovery files; no such mechanism is implemented or running.

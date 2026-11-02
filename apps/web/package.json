@@ -1,0 +1,27 @@
+{
+  "name": "cicc-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:browser": "node --test tests/browser-smoke.cjs"
+  },
+  "dependencies": {
+    "lucide-react": "1.66.0",
+    "next": "16.4.4",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@sparticuz/chromium": "^141.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "playwright-core": "^1.56.1",
+    "typescript": "^5.7.2"
+  }
+}
