@@ -13,7 +13,7 @@
     "P0-05 request size guard and CI configured; CI not executed on GitHub",
     "P1-01 manual entity and evidence reference create/list/update; full lifecycle missing",
     "P2-01 limited provenance and analyst-authored relationships",
-    "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI; NVD single-CVE adapter and internal tenant-scoped importer tested with fixtures",
+    "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI; NVD single-CVE adapter, internal tenant-scoped importer and protected observation read tested with fixtures",
     "P1-05 partial EN/AR/FA selected demo labels and exact-match synthetic fixture text, preference and scoped RTL; remaining translations, RTL layout implemented but browser accessibility verification missing",
     "P1-04 experimental cases, versioned details/status/assignment and history; verified evidence lifecycle, reporting and UI missing"
   ],
@@ -95,7 +95,8 @@
     "API locked suite 226 passed, 24 SQLite PostgreSQL-only variants skipped; case literal title search and deterministic fixed-window boundary tests passed",
     "API suite 226 passed, 24 SQLite PostgreSQL-only variants skipped; secure-prefix ASGI rejects forwarded conflicting content-length/transfer-encoding, targeted request-limit tests pass",
     "Restored workspace revalidated: API 237 passed, 24 SQLite PostgreSQL-only variants skipped; synthetic PostgreSQL restore, web 7 unit and 5 browser smoke tests, typecheck/build and npm audit passed",
-    "API 243 passed, 25 PostgreSQL-only SQLite variants skipped; NVD import tested with migrated SQLite/PostgreSQL, concurrent PostgreSQL deduplication, authorization, rollback and isolation; parity and synthetic restore passed"
+    "API 243 passed, 25 PostgreSQL-only SQLite variants skipped; NVD import tested with migrated SQLite/PostgreSQL, concurrent PostgreSQL deduplication, authorization, rollback and isolation; parity and synthetic restore passed",
+    "API 245 passed, 25 PostgreSQL-only SQLite variants skipped; protected NVD read tenant isolation, viewer authorization, UTC collection timestamps and audit failure tested on migrated SQLite and PostgreSQL; schema parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -132,14 +133,14 @@
     "Entity title search is a bounded literal substring scan, not full-text search; performance and non-ASCII case behavior depend on database/collation; query strings may be logged by intermediaries",
     "Case title search is a literal substring scan; Unicode case behavior and production-scale performance are unverified and query strings may be logged by infrastructure",
     "ASGI conflicting framing rejection cannot resolve HTTP parsing disagreements before ASGI or replace proxy/server limits and request-smuggling review",
-    "NVD single-CVE lookup is fixture-tested only; no live verification, exposed NVD read/sync API, scheduler, UI, API key or deployment-wide rate limiting; checkpointed time budget is not hard cancellation",
+    "NVD single-CVE lookup is fixture-tested only; no live verification, NVD sync API, scheduler, UI, API key or deployment-wide rate limiting; checkpointed time budget is not hard cancellation",
     "Prior conversation commit objects are absent from this fresh checkout; preserved restored workspace as snapshot commit a822bab, not reconstructed historic Git commits",
     "NVD importer orders observations by caller collection timestamp, not source modification time; source assertions and collection provenance are unverified. NVD and CISA use separate source-specific entities and are not fused."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Expose tenant-scoped, audited NVD observation read via the experimental protected API, including isolation and invalid identifier tests, while preserving unverified status",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -i cisa apps/api/app/protected_api.py && cat apps/api/app/connectors/nvd_import.py",
-  "next_implementation_step": "Inspect existing CISA source read endpoints and model schemas; implement paginated/targeted NVD read with tenant isolation, role authorization, atomic audit and SQLite/PostgreSQL tests; no live calls."
+  "next_recommended_task": "Design an explicitly manual authorized NVD sync coordinator with durable attempt/failure state, tenant locks, bounded fetch and clear no-live-verification semantics",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/connectors/cisa_sync.py && cat apps/api/app/connectors/nvd_import.py",
+  "next_implementation_step": "Inspect CISA sync coordinator and CLI design; implement NVD manual orchestration without automatic live requests, protecting tenant authorization, concurrency and stale results; fixture/mock tests only."
 }

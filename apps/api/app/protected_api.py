@@ -19,7 +19,8 @@ from .audit import AuditType, record_event
 from .accounts import create_user, change_role, disable_user, revoke_user_sessions, change_own_password, PasswordChangeThrottled
 from .login_service import LoginStatus, login, logout
 from .connectors.cisa_sync import abandon_sync, get_status
-from .models import Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, User, AuthSession
+from .connectors.nvd_cve import _cve_id
+from .models import NvdCatalogRecord, Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, User, AuthSession
 from .security import Permission, Role, authorize
 from .sessions import authenticate_session, authenticate_session_locked, _digest
 
@@ -973,6 +974,30 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 authorize(principal, principal.tenant_id, Permission.MANAGE_USERS)
             except PermissionError:
                 raise HTTPException(status_code=403, detail='Access denied', headers={'Cache-Control':'no-store'}) from None
+
+    @router.get('/sources/nvd/cves/{cve_id}', dependencies=[Depends(require_tls)])
+    def nvd_observation(cve_id: str, token: str = Depends(bearer)):
+        with factory.begin() as db:
+            principal = authenticate_session_locked(db, token)
+            if principal is None:
+                raise HTTPException(status_code=401, detail='Authentication required', headers={'WWW-Authenticate':'Bearer', 'Cache-Control':'no-store'})
+            authorize(principal, principal.tenant_id, Permission.READ_INTELLIGENCE)
+            try:
+                _cve_id(cve_id)
+            except ValueError:
+                raise HTTPException(status_code=422, detail='Invalid request', headers={'Cache-Control':'no-store'}) from None
+            observation = db.scalar(select(NvdCatalogRecord).where(
+                NvdCatalogRecord.tenant_id == principal.tenant_id, NvdCatalogRecord.cve_id == cve_id))
+            if observation is None:
+                raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
+            record_event(db, principal.tenant_id, AuditType.NVD_RECORD_READ, principal.user_id, target_entity_id=observation.entity_id)
+            # SQLite removes timezone metadata from stored UTC values.
+            def utc_iso(value):
+                return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)).isoformat()
+            return {'entity_id': str(observation.entity_id), 'observation': observation.details,
+                'first_collected_at': utc_iso(observation.first_collected_at),
+                'last_collected_at': utc_iso(observation.last_collected_at), 'verification_status': 'unverified',
+                'notice': 'Source observation is not independently verified; imported timestamps do not indicate live source health.'}
 
     @router.get('/sources/cisa-kev/status', dependencies=[Depends(require_tls)])
     def cisa_status(token: str = Depends(bearer)):

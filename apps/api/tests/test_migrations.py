@@ -2671,3 +2671,51 @@ def test_nvd_revision_rollback(tmp_path, monkeypatch):
     assert 'nvd_catalog_records' not in inspect(engine).get_table_names()
     command.downgrade(config, 'base')
     engine.dispose()
+
+
+def test_migrated_nvd_read_scoped_authorized_and_atomic(migration_db, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors.nvd_import import import_record
+    from app.models import SecurityAuditEvent
+    from app.protected_api import protected_router
+    from app.security import Role
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    factory = sessionmaker(engine, expire_on_commit=False)
+    a, _ = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    b, _ = create_tenant_with_admin(factory, tenant_name='b', username='admin', password='a safe long password')
+    with factory.begin() as db:
+        admin = issue_session(db, a, 'admin', 'a safe long password')
+        other = issue_session(db, b, 'admin', 'a safe long password')
+    accounts.create_user(factory, admin_token=admin, username='viewer', password='a safe long password', role=Role.VIEWER)
+    with factory.begin() as db: viewer = issue_session(db, a, 'viewer', 'a safe long password')
+    imported = import_record(factory, admin_token=admin, record=nvd_fixture())
+    app = FastAPI(); app.include_router(protected_router(factory, b'x'*32))
+    headers = lambda t: {'Authorization':'Bearer '+t}
+    path = '/api/v1/secure/sources/nvd/cves/CVE-2099-0001'
+    with TestClient(app, base_url='https://testserver', raise_server_exceptions=False) as client:
+        assert client.get(path).status_code == 401
+        assert client.get(path, headers=headers(other)).status_code == 404
+        assert client.get('/api/v1/secure/sources/nvd/cves/not-a-cve', headers=headers(viewer)).status_code == 422
+        assert client.get('/api/v1/secure/sources/nvd/cves/CVE-2099-0002', headers=headers(viewer)).status_code == 404
+        def fail(*args, **kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api, 'record_event', fail)
+            assert client.get(path, headers=headers(viewer)).status_code == 500
+        response = client.get(path, headers=headers(viewer))
+        assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+        body = response.json()
+        assert body['entity_id'] == str(imported['entity_id']) and body['verification_status'] == 'unverified'
+        assert body['observation']['descriptions'][0]['text'] == 'Synthetic NVD fixture'
+        assert body['first_collected_at'] == '2026-01-02T00:00:00+00:00'
+        assert body['last_collected_at'] == '2026-01-02T00:00:00+00:00'
+        assert 'not independently verified' in body['notice']
+        audit = client.get('/api/v1/secure/audit', headers=headers(admin), params={'event_type':'nvd_record_read', 'entity_id':str(imported['entity_id'])})
+        assert len(audit.json()['items']) == 1
+    with factory() as db:
+        events = list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type == 'nvd_record_read')))
+        assert len(events) == 1 and events[0].tenant_id == a and events[0].target_entity_id == imported['entity_id']

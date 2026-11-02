@@ -36,6 +36,7 @@ class AuditType(str, Enum):
     RELATIONSHIP_READ = 'relationship_read'
     CISA_CATALOG_IMPORTED = 'cisa_catalog_imported'
     NVD_RECORD_IMPORTED = 'nvd_record_imported'
+    NVD_RECORD_READ = 'nvd_record_read'
     CISA_SYNC_STARTED = 'cisa_sync_started'
     CISA_SYNC_SUCCEEDED = 'cisa_sync_succeeded'
     CISA_SYNC_FAILED = 'cisa_sync_failed'

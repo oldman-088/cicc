@@ -99,3 +99,6 @@ Investigation list accepts `q` (2–100 characters after trimming) for a literal
 
 ### NVD internal import (experimental)
 `connectors/nvd_import.py` imports one structurally validated adapter observation for the authenticated administrator's tenant. It is an internal Python function, **not an HTTP API**, and does not fetch or schedule records. The source-specific observation and provenance are unverified; it orders by caller-supplied collection time and does not fuse records with CISA. Live NVD access and provider policy are unverified.
+
+### NVD observation read
+`GET /api/v1/secure/sources/nvd/cves/{cve_id}` returns the tenant's latest imported source-specific observation to authenticated readers. A successful read is transactionally audited against its entity. Missing or cross-tenant records return 404 and malformed identifiers return 422; responses are no-store. Data and timestamps are unverified, not evidence of current provider availability. No endpoint fetches or synchronizes NVD.
