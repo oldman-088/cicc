@@ -1,7 +1,7 @@
 # Blockers and limitations
 
 - Production release blocked: experimental authenticated APIs are disabled by default and lack comprehensive PostgreSQL isolation verification, real TLS/proxy configuration, security review, durable audit protections, retention and key management. The default dashboard remains an unauthenticated synthetic demo.
-- CISA KEV adapter, snapshot persistence and internal sync coordinator are tested only with synthetic fixtures; a new interactive admin-session CLI can invoke one sync, but they have no start-sync API, scheduler or UI and are not live-verified; an experimental admin-only status/recovery API exists. This environment restricts outbound access to package registries and GitHub. Other external connectors are not implemented.
+- CISA KEV adapter, snapshot persistence and internal sync coordinator are tested only with synthetic fixtures; a new interactive admin-session CLI can invoke one sync, but they have no start-sync API, scheduler or UI and are not live-verified; an experimental admin-only status/recovery API exists. This environment restricts outbound access to package registries and GitHub. NVD has an experimental fixture-only adapter and internal importer; other external connectors are not implemented.
 - Docker/Compose, PostgreSQL deployment hardening and broader isolation coverage, production restoration, comprehensive browser E2E, accessibility and GitHub CI are unverified (limited synthetic Chromium smoke tests pass locally).
 - Manual intelligence supports create/list, limited title/confidence edits and analyst-entered evidence references only. Limited provenance and analyst-authored relationship assertions exist for new manual writes only; no file upload, digest verification, complete provenance, complete investigation lifecycle, full editing, deduplication or connected UI exists.
 - Audit tamper resistance, retention, global audit for unknown tenants, automated rate-limit cleanup (a bounded manual command exists), bootstrap operator attribution, MFA and recovery are missing.
@@ -26,5 +26,7 @@
 
 - Experimental entity and investigation title search is a bounded literal substring scan; production performance, Unicode/collation semantics and intermediary URL-log privacy are unverified.
 
-- NVD adapter is fixture-tested only; real endpoint/schema/provider policy, API key handling and coordinated rate limits are unverified; no NVD persistence, scheduler, status API or UI. Its fetch budget is checkpointed, not a hard cancellation deadline.
+- NVD adapter is fixture-tested only; real endpoint/schema/provider policy, API key handling and coordinated rate limits are unverified; no NVD exposed read/sync API, scheduler, status API or UI. Its fetch budget is checkpointed, not a hard cancellation deadline.
 - This session checkout did not contain the prior conversation commit objects; restored workspace was preserved as snapshot commit `a822bab`, rather than claiming those historical commits exist locally.
+
+- NVD import accepts internal observations after structural validation but cannot establish their authenticity; collection time is caller-provided and ordering does not compare provider modification times. CISA and NVD currently create separate source-specific entities without fusion.

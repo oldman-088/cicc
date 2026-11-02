@@ -184,6 +184,21 @@ class CisaCatalogRecord(Base):
     first_collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
+class NvdCatalogRecord(Base):
+    """Latest imported NVD observation; separate from analyst-editable fields."""
+    __tablename__ = 'nvd_catalog_records'
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'cve_id'),
+        ForeignKeyConstraint(['tenant_id', 'entity_id'], ['intelligence_entities.tenant_id', 'intelligence_entities.id']),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False, index=True)
+    entity_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    cve_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    details: Mapped[dict] = mapped_column(json_type, nullable=False)
+    first_collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
 class CisaSyncAttempt(Base):
     """Operational history, including attempts that did not import a snapshot."""
     __tablename__ = 'cisa_sync_attempts'

@@ -33,7 +33,7 @@ Experimental manual entity update: `PATCH /api/v1/secure/entities/{id}` with exp
 
 Experimental graph relationship assertions: `Relationship` model and migration 0010, protected `POST /api/v1/secure/relationships` and `GET /api/v1/secure/entities/{id}/relationships`; tenant/role checks, audit and provenance, SQLite and disposable PostgreSQL tests. Inputs are analyst assertions, not verified correlations. No graph UI, relationship edit/validity, automated fusion or comprehensive provenance; P2-01 IN_PROGRESS.
 
-CISA KEV adapter: `apps/api/app/connectors/cisa_kev.py` and synthetic contract tests in `apps/api/tests/test_cisa_kev.py`. Fixed official URL, limited bytes, validation and bounded retries; no persistence, API, UI, synchronization health, actual feed verification or scheduler. P1-02 IN_PROGRESS; NVD not started.
+CISA KEV adapter: `apps/api/app/connectors/cisa_kev.py` and synthetic contract tests in `apps/api/tests/test_cisa_kev.py`. Fixed official URL, limited bytes, validation and bounded retries; no persistence, API, UI, synchronization health, actual feed verification or scheduler. P1-02 IN_PROGRESS; historical increment, see newer NVD entries below.
 
 CISA KEV internal snapshot persistence: migration 0011, tenant-scoped catalog state/records linked to unified entities, `connectors/cisa_import.py`; SQLite and PostgreSQL tests cover deduplication, authorization, stale rejection, rollback, concurrency and source provenance. No live fetch orchestration, attempt/failure status, external API, UI or scheduler; only synthetic fixtures have been imported in tests. P1-02 IN_PROGRESS.
 
@@ -67,4 +67,4 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 
 - P1-04 partial: tenant/entity-scoped evidence-reference detail and composite audit target tested; no file handling, integrity verification or chain of custody. Historical audit targets are not backfilled.
 
-- P1-02 partial NVD: fixed-URL single-CVE adapter with synthetic fixtures only; no tenant import, scheduler, coordinated rate limiting, UI or live verification.
+- P1-02 partial NVD: fixed-URL single-CVE adapter with synthetic fixtures only; internal tenant-scoped importer implemented with migration 0031, role checks, source-specific deduplication, provenance and audit; fixture-only SQLite/PostgreSQL tests including isolation and a concurrent import. No exposed NVD read/sync API, scheduler, coordinated rate limiting, UI or live verification.

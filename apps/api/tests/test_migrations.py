@@ -2544,3 +2544,130 @@ def test_migrated_investigation_search_is_literal_and_scope_checked(migration_db
         assert client.get(path,headers=h,params={'q':'  '}).status_code==422
         assert client.get(path,headers=h,params={'q':'a\nb'}).status_code==422
         assert client.get(path,headers=h,params={'q':'x'*101}).status_code==422
+
+
+def nvd_fixture(*, collected=None, text='Synthetic NVD fixture'):
+    import json
+    from datetime import datetime, timezone
+    from app.connectors.nvd_cve import parse_response
+    cve = {'id': 'CVE-2099-0001', 'published': '2026-01-01T10:00:00.000',
+           'lastModified': '2026-01-02T10:00:00.000', 'vulnStatus': 'Analyzed',
+           'descriptions': [{'lang': 'en', 'value': text}]}
+    return parse_response(json.dumps({'startIndex': 0, 'totalResults': 1,
+        'vulnerabilities': [{'cve': cve}]}).encode(), cve_id=cve['id'],
+        collected_at=collected or datetime(2026, 1, 2, tzinfo=timezone.utc))
+
+
+def test_migrated_nvd_import_isolation_history_and_rollback(migration_db, monkeypatch):
+    from dataclasses import replace
+    from datetime import datetime, timezone
+    from sqlalchemy.orm import sessionmaker
+    from app.connectors.nvd_import import import_record
+    from app.models import User, NvdCatalogRecord, ProvenanceEvent, SecurityAuditEvent
+    from app.security import hash_password
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    factory = sessionmaker(engine, expire_on_commit=False)
+    a, b = uuid4(), uuid4()
+    with factory.begin() as db:
+        db.add_all([Tenant(id=a, name='a'), Tenant(id=b, name='b')]); db.flush()
+        for tenant, role in ((a, 'admin'), (a, 'viewer'), (b, 'admin')):
+            db.add(User(tenant_id=tenant, username=role, role=role, active=True,
+                        password_hash=hash_password('a secure password')))
+    with factory.begin() as db:
+        admin = issue_session(db, a, 'admin', 'a secure password')
+        viewer = issue_session(db, a, 'viewer', 'a secure password')
+        other = issue_session(db, b, 'admin', 'a secure password')
+    record = nvd_fixture()
+    created = import_record(factory, admin_token=admin, record=record)
+    assert created['created'] and not created['changed']
+    assert not import_record(factory, admin_token=admin, record=record)['created']
+    assert import_record(factory, admin_token=other, record=record)['created']
+    with pytest.raises(PermissionError): import_record(factory, admin_token=viewer, record=record)
+    with pytest.raises(PermissionError): import_record(factory, admin_token='invalid', record=record)
+    with pytest.raises(ValueError, match='attribution'):
+        import_record(factory, admin_token=admin, record=replace(record, source_reference='https://evil.test/'))
+    with pytest.raises(ValueError, match='Invalid observation'):
+        import_record(factory, admin_token=admin, record=replace(record, status=''))
+    with factory.begin() as db:
+        rows = list(db.scalars(select(NvdCatalogRecord)))
+        assert len(rows) == 2 and {r.tenant_id for r in rows} == {a, b}
+        entity = db.get(Entity, created['entity_id'])
+        assert entity.confidence is None and entity.verification_status == 'unverified'
+        entity.title = 'Analyst title'
+    newer = nvd_fixture(collected=datetime(2026, 1, 3, tzinfo=timezone.utc), text='Updated synthetic fixture')
+    assert import_record(factory, admin_token=admin, record=newer)['changed']
+    with pytest.raises(ValueError, match='Older or conflicting'):
+        import_record(factory, admin_token=admin, record=record)
+    with pytest.raises(ValueError, match='Older or conflicting'):
+        import_record(factory, admin_token=admin, record=replace(newer, status='Different'))
+    with factory() as db:
+        row = db.scalar(select(NvdCatalogRecord).where(NvdCatalogRecord.tenant_id == a))
+        assert db.get(Entity, row.entity_id).title == 'Analyst title'
+        events = list(db.scalars(select(ProvenanceEvent).where(ProvenanceEvent.tenant_id == a)))
+        assert len(events) == 2
+        assert {e.details['observation']['descriptions'][0]['text'] for e in events} == {'Synthetic NVD fixture', 'Updated synthetic fixture'}
+        audits = list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type == 'nvd_record_imported', SecurityAuditEvent.tenant_id == a)))
+        assert len(audits) == 3 and all(e.target_entity_id == created['entity_id'] for e in audits)
+    def fail(*args, **kwargs): raise RuntimeError('audit unavailable')
+    monkeypatch.setattr('app.connectors.nvd_import.record_event', fail)
+    future = nvd_fixture(collected=datetime(2026, 1, 4, tzinfo=timezone.utc), text='Must roll back')
+    with pytest.raises(RuntimeError, match='audit unavailable'):
+        import_record(factory, admin_token=admin, record=future)
+    with factory() as db:
+        row = db.scalar(select(NvdCatalogRecord).where(NvdCatalogRecord.tenant_id == a))
+        assert row.details['descriptions'][0]['text'] == 'Updated synthetic fixture'
+        assert len(list(db.scalars(select(ProvenanceEvent).where(ProvenanceEvent.tenant_id == a)))) == 2
+
+
+def test_migrated_nvd_foreign_key_rejects_cross_tenant(migration_db):
+    from datetime import datetime, timezone
+    from app.models import NvdCatalogRecord
+    engine, _ = migration_db
+    a, b = uuid4(), uuid4()
+    with Session(engine) as db:
+        db.add_all([Tenant(id=a, name='a'), Tenant(id=b, name='b')]); db.flush()
+        entity = Entity(tenant_id=b, kind='vulnerability', title='fixture', source='fixture')
+        db.add(entity); db.flush()
+        db.add(NvdCatalogRecord(tenant_id=a, entity_id=entity.id, cve_id='CVE-2099-0001',
+            details={}, first_collected_at=datetime.now(timezone.utc), last_collected_at=datetime.now(timezone.utc)))
+        with pytest.raises(IntegrityError): db.flush()
+        db.rollback()
+
+
+def test_postgres_concurrent_nvd_import_is_deduplicated(migration_db):
+    from concurrent.futures import ThreadPoolExecutor
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors.nvd_import import import_record
+    from app.models import NvdCatalogRecord, ProvenanceEvent
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    if engine.dialect.name != 'postgresql': pytest.skip('PostgreSQL concurrency test')
+    factory = sessionmaker(engine, expire_on_commit=False)
+    tenant, _ = create_tenant_with_admin(factory, tenant_name='test', username='admin', password='a safe long password')
+    with factory.begin() as db: token = issue_session(db, tenant, 'admin', 'a safe long password')
+    record = nvd_fixture()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: import_record(factory, admin_token=token, record=record), range(2)))
+    assert sorted(r['created'] for r in results) == [False, True]
+    assert len({r['entity_id'] for r in results}) == 1
+    with factory() as db:
+        assert len(list(db.scalars(select(NvdCatalogRecord)))) == 1
+        assert len(list(db.scalars(select(Entity)))) == 1
+        assert len(list(db.scalars(select(ProvenanceEvent)))) == 1
+
+
+def test_nvd_revision_rollback(tmp_path, monkeypatch):
+    url = f'sqlite:///{tmp_path / "nvd-revision.db"}'
+    monkeypatch.setenv('DATABASE_URL', url)
+    config = Config(str(HERE / 'alembic.ini'))
+    command.upgrade(config, '0030_audit_user_index')
+    engine = create_engine(url)
+    assert 'nvd_catalog_records' not in inspect(engine).get_table_names()
+    command.upgrade(config, 'head')
+    assert 'nvd_catalog_records' in inspect(engine).get_table_names()
+    command.downgrade(config, '0030_audit_user_index')
+    assert 'nvd_catalog_records' not in inspect(engine).get_table_names()
+    command.downgrade(config, 'base')
+    engine.dispose()
