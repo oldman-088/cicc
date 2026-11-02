@@ -115,6 +115,8 @@ def get_status(factory: sessionmaker, *, admin_token: str) -> dict:
         last = db.scalar(select(NvdSyncAttempt).where(NvdSyncAttempt.tenant_id == principal.tenant_id)
                          .order_by(NvdSyncAttempt.started_at.desc(), NvdSyncAttempt.id.desc()).limit(1))
         record_event(db, principal.tenant_id, AuditType.NVD_STATUS_READ, principal.user_id)
+        def utc_iso(value):
+            return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)).isoformat()
         return {'last_attempt': None if last is None else {'id':str(last.id), 'cve_id':last.cve_id, 'status':last.status,
-            'started_at':last.started_at.isoformat(), 'finished_at':last.finished_at.isoformat() if last.finished_at else None,
+            'started_at':utc_iso(last.started_at), 'finished_at':utc_iso(last.finished_at) if last.finished_at else None,
             'error_code':last.error_code}}

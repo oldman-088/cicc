@@ -2869,3 +2869,55 @@ def test_nvd_running_attempt_unique_constraint(migration_db):
             db.add(NvdSyncAttempt(tenant_id=tenant, actor_id=actor, cve_id='CVE-2099-0001', status='running', started_at=datetime.now(timezone.utc)))
         with pytest.raises(IntegrityError): db.flush()
         db.rollback()
+
+
+def test_nvd_status_and_abandon_api_scope_auth_and_audit_rollback(migration_db, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors import nvd_sync
+    from app.models import NvdSyncAttempt, SecurityAuditEvent
+    from app.protected_api import protected_router
+    from app.security import Role
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    factory = sessionmaker(engine, expire_on_commit=False)
+    tenant, _ = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    foreign, _ = create_tenant_with_admin(factory, tenant_name='b', username='admin', password='a safe long password')
+    with factory.begin() as db:
+        admin = issue_session(db, tenant, 'admin', 'a safe long password')
+        other = issue_session(db, foreign, 'admin', 'a safe long password')
+    accounts.create_user(factory, admin_token=admin, username='viewer', password='a safe long password', role=Role.VIEWER)
+    with factory.begin() as db: viewer = issue_session(db, tenant, 'viewer', 'a safe long password')
+    attempt = nvd_sync.begin_sync(factory, admin_token=admin, cve_id='CVE-2099-0001')
+    app = FastAPI(); app.include_router(protected_router(factory, b'x'*32))
+    headers = lambda t: {'Authorization':'Bearer '+t}
+    status_path='/api/v1/secure/sources/nvd/status'
+    abandon_path=f'/api/v1/secure/sources/nvd/attempts/{attempt}/abandon'
+    with TestClient(app, base_url='https://testserver', raise_server_exceptions=False) as client:
+        assert client.get(status_path).status_code == 401
+        assert client.get(status_path,headers=headers(viewer)).status_code == 403
+        assert client.get(status_path,headers=headers(other)).json()['last_attempt'] is None
+        assert client.post(abandon_path,headers=headers(other)).status_code == 404
+        assert client.post(abandon_path,headers=headers(viewer)).status_code == 403
+        def fail(*args, **kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(nvd_sync, 'record_event', fail)
+            assert client.get(status_path,headers=headers(admin)).status_code == 500
+            assert client.post(abandon_path,headers=headers(admin)).status_code == 500
+        with factory() as db: assert db.get(NvdSyncAttempt,attempt).status == 'running'
+        result=client.get(status_path,headers=headers(admin))
+        assert result.status_code == 200 and result.headers['cache-control'] == 'no-store'
+        assert result.json()['integration'] == 'experimental_not_live_verified'
+        assert result.json()['last_attempt']['id'] == str(attempt)
+        assert result.json()['last_attempt']['started_at'].endswith('+00:00')
+        response=client.post(abandon_path,headers=headers(admin))
+        assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+        assert client.post(abandon_path,headers=headers(admin)).status_code == 404
+        assert client.get(status_path,headers=headers(admin)).json()['last_attempt']['status'] == 'abandoned'
+    with factory() as db:
+        audits=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant)))
+        assert sum(x.event_type=='nvd_sync_abandoned' for x in audits) == 1
+        assert sum(x.event_type=='nvd_status_read' for x in audits) == 2

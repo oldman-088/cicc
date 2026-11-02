@@ -19,6 +19,7 @@ from .audit import AuditType, record_event
 from .accounts import create_user, change_role, disable_user, revoke_user_sessions, change_own_password, PasswordChangeThrottled
 from .login_service import LoginStatus, login, logout
 from .connectors.cisa_sync import abandon_sync, get_status
+from .connectors.nvd_sync import abandon_sync as abandon_nvd_sync, get_status as get_nvd_status
 from .connectors.nvd_cve import _cve_id
 from .models import NvdCatalogRecord, Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, User, AuthSession
 from .security import Permission, Role, authorize
@@ -998,6 +999,27 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 'first_collected_at': utc_iso(observation.first_collected_at),
                 'last_collected_at': utc_iso(observation.last_collected_at), 'verification_status': 'unverified',
                 'notice': 'Source observation is not independently verified; imported timestamps do not indicate live source health.'}
+
+    @router.get('/sources/nvd/status', dependencies=[Depends(require_tls)])
+    def nvd_status(token: str = Depends(bearer)):
+        require_active_token(token)
+        try:
+            status = get_nvd_status(factory, admin_token=token)
+        except PermissionError:
+            raise HTTPException(status_code=403, detail='Access denied', headers={'Cache-Control':'no-store'}) from None
+        return {'source': 'NIST National Vulnerability Database', 'integration': 'experimental_not_live_verified', **status,
+                'notice': 'Attempt status reflects a single lookup, not live source health or absence of vulnerability.'}
+
+    @router.post('/sources/nvd/attempts/{attempt_id}/abandon', dependencies=[Depends(require_tls)])
+    def abandon_nvd_attempt(attempt_id: UUID, token: str = Depends(bearer)):
+        require_active_token(token)
+        try:
+            abandoned = abandon_nvd_sync(factory, admin_token=token, attempt_id=attempt_id)
+        except PermissionError:
+            raise HTTPException(status_code=403, detail='Access denied', headers={'Cache-Control':'no-store'}) from None
+        if not abandoned:
+            raise HTTPException(status_code=404, detail='Active attempt not found', headers={'Cache-Control':'no-store'})
+        return {'status':'abandoned', 'notice':'The worker may still run, but its result cannot be imported.'}
 
     @router.get('/sources/cisa-kev/status', dependencies=[Depends(require_tls)])
     def cisa_status(token: str = Depends(bearer)):
