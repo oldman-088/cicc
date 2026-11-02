@@ -25,3 +25,6 @@
 - Evidence-target audit is FK-constrained to tenant/entity/reference and is not historically backfilled; its FK can prevent deletion. Evidence records, supplied hashes and file contents remain unverified.
 
 - Experimental entity and investigation title search is a bounded literal substring scan; production performance, Unicode/collation semantics and intermediary URL-log privacy are unverified.
+
+- NVD adapter is fixture-tested only; real endpoint/schema/provider policy, API key handling and coordinated rate limits are unverified; no NVD persistence, scheduler, status API or UI. Its fetch budget is checkpointed, not a hard cancellation deadline.
+- This session checkout did not contain the prior conversation commit objects; restored workspace was preserved as snapshot commit `a822bab`, rather than claiming those historical commits exist locally.

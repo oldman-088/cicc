@@ -13,7 +13,7 @@
     "P0-05 request size guard and CI configured; CI not executed on GitHub",
     "P1-01 manual entity and evidence reference create/list/update; full lifecycle missing",
     "P2-01 limited provenance and analyst-authored relationships",
-    "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI",
+    "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI; standalone NVD single-CVE adapter fixture-tested only",
     "P1-05 partial EN/AR/FA selected demo labels and exact-match synthetic fixture text, preference and scoped RTL; remaining translations, RTL layout implemented but browser accessibility verification missing",
     "P1-04 experimental cases, versioned details/status/assignment and history; verified evidence lifecycle, reporting and UI missing"
   ],
@@ -93,7 +93,8 @@
     "API locked suite 221 passed, 24 SQLite PostgreSQL-only variants skipped; tenant user-target audit filter and cursor scope tested; migration 0030 parity and synthetic restore passed",
     "API locked suite 223 passed, 24 SQLite PostgreSQL-only variants skipped; literal tenant-scoped intelligence title search, wildcard escaping and filter-scoped pagination tested",
     "API locked suite 226 passed, 24 SQLite PostgreSQL-only variants skipped; case literal title search and deterministic fixed-window boundary tests passed",
-    "API suite 226 passed, 24 SQLite PostgreSQL-only variants skipped; secure-prefix ASGI rejects forwarded conflicting content-length/transfer-encoding, targeted request-limit tests pass"
+    "API suite 226 passed, 24 SQLite PostgreSQL-only variants skipped; secure-prefix ASGI rejects forwarded conflicting content-length/transfer-encoding, targeted request-limit tests pass",
+    "Restored workspace revalidated: API 237 passed, 24 SQLite PostgreSQL-only variants skipped; synthetic PostgreSQL restore, web 7 unit and 5 browser smoke tests, typecheck/build and npm audit passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -129,11 +130,13 @@
     "Entity-filtered audit omits historical events without entity targets; pagination is not snapshot-consistent and index performance on production-scale data is unmeasured",
     "Entity title search is a bounded literal substring scan, not full-text search; performance and non-ASCII case behavior depend on database/collation; query strings may be logged by intermediaries",
     "Case title search is a literal substring scan; Unicode case behavior and production-scale performance are unverified and query strings may be logged by infrastructure",
-    "ASGI conflicting framing rejection cannot resolve HTTP parsing disagreements before ASGI or replace proxy/server limits and request-smuggling review"
+    "ASGI conflicting framing rejection cannot resolve HTTP parsing disagreements before ASGI or replace proxy/server limits and request-smuggling review",
+    "NVD single-CVE lookup is fixture-tested only; no live verification, persistent import, scheduler, UI, API key or deployment-wide rate limiting; checkpointed time budget is not hard cancellation",
+    "Prior conversation commit objects are absent from this fresh checkout; preserved restored workspace as snapshot commit a822bab, not reconstructed historic Git commits"
   ],
   "active_branch": "arena/da631853-cicc",
-  "latest_commit": "46a5215 (see git log for latest)",
-  "last_updated": "2026-11-02T19:05:27.279363+00:00",
-  "next_recommended_task": "Continue defensive API hardening and tenant-scoped investigations; design verified evidence lifecycle and secure UI",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md; python scripts/check_python_locks.py && /tmp/cicc-lock-venv/bin/python scripts/test_postgres.py && /tmp/cicc-lock-venv/bin/python scripts/test_restore.py; inspect proxy/TLS deployment and next protected investigation or evidence task; test authorization and audit atomically; web: cd apps/web && npm run typecheck && npm test && npm run build && npm run test:browser."
+  "latest_commit": "a822bab (see git log for latest)",
+  "last_updated": "2026-11-02T19:15:09.675739+00:00",
+  "next_recommended_task": "Continue NVD source integration: design tenant-scoped import with explicit provenance, per-tenant isolation and audit; preserve truthful unverified/live-disabled status",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md; if /tmp/cicc-lock-venv is missing: python3 -m venv /tmp/cicc-lock-venv && /tmp/cicc-lock-venv/bin/pip install --require-hashes -r apps/api/requirements-dev.lock && /tmp/cicc-lock-venv/bin/pip install pgserver==0.1.4; python scripts/check_python_locks.py && /tmp/cicc-lock-venv/bin/python scripts/test_postgres.py && /tmp/cicc-lock-venv/bin/python scripts/test_restore.py; inspect apps/api/app/connectors/nvd_cve.py and cisa_import.py and implement a tenant-authorized transactional NVD importer with provenance and audit and migrated SQLite/PostgreSQL tests. No live request without confirmed network access and policy. Web: cd apps/web && npm ci && npm run typecheck && npm test && npm run build && npm run test:browser."
 }

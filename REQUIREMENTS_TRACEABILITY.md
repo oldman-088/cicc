@@ -66,3 +66,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P0-03 partial: experimental self session listing/revocation and session-target audit snapshot tested on migrated SQLite/PostgreSQL, including selected forced lock races. No production TLS, MFA, durable audit or secure operational UI is verified.
 
 - P1-04 partial: tenant/entity-scoped evidence-reference detail and composite audit target tested; no file handling, integrity verification or chain of custody. Historical audit targets are not backfilled.
+
+- P1-02 partial NVD: fixed-URL single-CVE adapter with synthetic fixtures only; no tenant import, scheduler, coordinated rate limiting, UI or live verification.
