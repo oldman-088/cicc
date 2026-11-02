@@ -103,7 +103,8 @@
     "API 263 passed, 27 PostgreSQL-only SQLite variants skipped; NVD manual CLI tested on disposable PostgreSQL with simulated TTY, synthetic fetch and admin preflight; schema parity and synthetic restore passed",
     "API 269 passed, 33 PostgreSQL-only SQLite variants skipped; forced PostgreSQL NVD sync authorization lock-wait interleavings cover demotion, disable and revocation for found and not-found fetches; no import or success committed; synthetic restore and parity passed",
     "API 271 passed, 33 PostgreSQL-only SQLite variants skipped; NVD attempt-history admin/tenant filters, scoped cursor, keyset traversal and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
-    "API 286 passed, 33 PostgreSQL-only SQLite variants skipped; bounded evidence stream SHA-256 comparison unit-tested for matching, mismatch, limits and read errors; synthetic restore and parity passed"
+    "API 286 passed, 33 PostgreSQL-only SQLite variants skipped; bounded evidence stream SHA-256 comparison unit-tested for matching, mismatch, limits and read errors; synthetic restore and parity passed",
+    "Web revalidation after NVD and evidence changes: typecheck, 7 unit tests, production build, 5 synthetic Chromium/proxy smoke tests and npm audit (0 findings) passed; not an accessibility or production deployment assessment."
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",

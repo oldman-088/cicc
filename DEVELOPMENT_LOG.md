@@ -491,3 +491,6 @@
 ## 2026-11-02 evidence digest comparison primitive
 - Added a bounded, blocking binary-stream SHA-256 comparison primitive with caller-supplied maximum (up to 100 MiB), strict digest validation, constant-time comparison and explicit oversized/read-error handling. Tests use synthetic bytes and cover short reads, exact limit, empty data, malformed inputs and over-limit detection. It is not wired to an API or storage. A match is only a comparison of bytes consumed against the supplied digest, not authenticity, safe content, source provenance, immutability or chain of custody. It does not close/rewind the stream or impose a hard I/O deadline.
 - API suite 286 passed, 33 SQLite PostgreSQL-only variants skipped, one upstream warning; synthetic restore and parity passed. Corrected stale SECURITY.md wording to distinguish default synthetic demo and optional experimental bearer API without implying production readiness.
+
+## 2026-11-02 web regression verification
+- Web typecheck, seven unit tests, production build, five synthetic Chromium/proxy smoke tests and full npm audit (zero findings) passed locally. Node emitted a module-type warning. This is not comprehensive accessibility testing or evidence of deployed production readiness.
