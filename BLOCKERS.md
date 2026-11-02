@@ -32,3 +32,5 @@
 - NVD import accepts internal observations after structural validation but cannot establish their authenticity; collection time is caller-provided and ordering does not compare provider modification times. CISA and NVD currently create separate source-specific entities without fusion.
 
 - NVD coordinator is internal and fixture-tested only: one active lookup per tenant, manual abandonment after crashes, no hard cancellation or cross-tenant provider rate coordination. Not-found means only that this lookup returned no record, not that the vulnerability is safe or absent globally.
+
+- NVD attempt-history traversal is not a snapshot; changing statuses can invalidate filtered cursors. Filtered production-scale performance is unmeasured.

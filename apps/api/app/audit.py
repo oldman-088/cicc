@@ -43,6 +43,7 @@ class AuditType(str, Enum):
     NVD_SYNC_FAILED = 'nvd_sync_failed'
     NVD_SYNC_ABANDONED = 'nvd_sync_abandoned'
     NVD_STATUS_READ = 'nvd_status_read'
+    NVD_ATTEMPTS_READ = 'nvd_attempts_read'
     CISA_SYNC_STARTED = 'cisa_sync_started'
     CISA_SYNC_SUCCEEDED = 'cisa_sync_succeeded'
     CISA_SYNC_FAILED = 'cisa_sync_failed'

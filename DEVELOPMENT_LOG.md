@@ -483,3 +483,7 @@
 ## 2026-11-02 forced NVD authorization interleavings
 - Added six forced PostgreSQL lock-wait cases: admin demotion, disable or session revocation during an in-flight mocked fetch, for both found and missing responses. Pending import/not-found completion is denied, no NVD record/success/not-found audit commits and the attempt records sanitized import failure. This exercises selected races, not comprehensive concurrency or deployment security.
 - Full API suite 269 passed, 33 intentionally skipped SQLite variants for PostgreSQL-only tests, one upstream TestClient warning. Schema parity and disposable synthetic restore passed; no live requests.
+
+## 2026-11-02 NVD attempt history
+- Added admin-only audited `GET /api/v1/secure/sources/nvd/attempts` with status/CVE filters, bounded 100-item descending time/UUID keyset traversal and tenant/filter-scoped cursor, plus migration 0033 index. Results are attempt history, not source health; cursor traversal is not a consistent snapshot, and status changes may invalidate filter-matched cursors. Filtered production-scale performance unmeasured.
+- Migrated SQLite/PostgreSQL tests cover RBAC, scoped/mismatched anchors, ties across 101 results, output UTC timestamps and atomic audit failure. API suite 271 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; schema parity and synthetic restore passed. No live provider call.

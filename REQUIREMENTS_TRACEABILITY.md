@@ -70,3 +70,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-02 partial NVD: fixed-URL single-CVE adapter with synthetic fixtures only; internal tenant-scoped importer implemented with migration 0031, role checks, source-specific deduplication, provenance and audit; fixture-only SQLite/PostgreSQL tests including isolation and a concurrent import. Protected tenant-scoped observation read is tested; no exposed NVD sync API, scheduler, coordinated rate limiting, UI or live verification.
 
 - P1-02 partial NVD manual sync coordinator: migration 0032, tenant/admin authorization and audit, one running attempt per tenant, distinct not-found/failure/abandonment, atomic import and synthetic SQLite/PostgreSQL tests. No live verification, public start API, scheduler, shared provider-wide rate limiting or UI.
+
+- P1-02 partial: admin NVD attempt history with tenant/filter-scoped cursor, transactional audit and index (migration 0033), tested on migrated SQLite/PostgreSQL with synthetic attempts; no live health inference or snapshot consistency.

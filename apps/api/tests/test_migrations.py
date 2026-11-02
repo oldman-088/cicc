@@ -3008,3 +3008,53 @@ def test_postgres_nvd_sync_rechecks_authorization_after_fetch(migration_db, chan
         assert attempt.status == 'failed' and attempt.error_code == 'import_failed'
         kinds = list(db.scalars(select(SecurityAuditEvent.event_type).where(SecurityAuditEvent.tenant_id == tenant)))
         assert 'nvd_sync_succeeded' not in kinds and 'nvd_sync_not_found' not in kinds
+
+
+def test_nvd_attempt_list_scoped_filters_pagination_and_audit(migration_db, monkeypatch):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import NvdSyncAttempt, SecurityAuditEvent
+    from app.protected_api import protected_router
+    from app.security import Role
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    factory = sessionmaker(engine, expire_on_commit=False)
+    tenant, actor = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    other, other_actor = create_tenant_with_admin(factory, tenant_name='b', username='admin', password='a safe long password')
+    with factory.begin() as db:
+        token = issue_session(db, tenant, 'admin', 'a safe long password')
+    accounts.create_user(factory, admin_token=token, username='viewer', password='a safe long password', role=Role.VIEWER)
+    with factory.begin() as db:
+        viewer = issue_session(db, tenant, 'viewer', 'a safe long password')
+        now = datetime(2026,1,1,tzinfo=timezone.utc)
+        rows = [NvdSyncAttempt(tenant_id=tenant, actor_id=actor, cve_id='CVE-2099-0001', status='failed', started_at=now, finished_at=now, error_code='fetch_failed') for _ in range(101)]
+        foreign = NvdSyncAttempt(tenant_id=other, actor_id=other_actor, cve_id='CVE-2099-0001', status='failed', started_at=now)
+        mismatch = NvdSyncAttempt(tenant_id=tenant, actor_id=actor, cve_id='CVE-2099-0002', status='succeeded', started_at=now)
+        db.add_all([*rows,foreign,mismatch]); db.flush(); foreign_id, mismatch_id = foreign.id, mismatch.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    headers=lambda t:{'Authorization':'Bearer '+t}
+    path='/api/v1/secure/sources/nvd/attempts'
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        assert client.get(path).status_code==401
+        assert client.get(path,headers=headers(viewer)).status_code==403
+        assert client.get(path,headers=headers(token),params={'status':'invalid'}).status_code==422
+        assert client.get(path,headers=headers(token),params={'cve_id':'invalid'}).status_code==422
+        filters={'status':'failed','cve_id':'CVE-2099-0001'}
+        assert client.get(path,headers=headers(token),params={**filters,'before':str(foreign_id)}).status_code==404
+        assert client.get(path,headers=headers(token),params={**filters,'before':str(mismatch_id)}).status_code==404
+        def fail(*args, **kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.get(path,headers=headers(token),params=filters).status_code==500
+        first=client.get(path,headers=headers(token),params=filters)
+        assert first.status_code==200 and first.headers['cache-control']=='no-store'
+        second=client.get(path,headers=headers(token),params={**filters,'before':first.json()['next_cursor']})
+        results=first.json()['items']+second.json()['items']
+        assert len(results)==101 and len({item['id'] for item in results})==101 and second.json()['next_cursor'] is None
+        assert all(item['status']=='failed' and item['cve_id']=='CVE-2099-0001' and item['started_at'].endswith('+00:00') for item in results)
+    with factory() as db:
+        assert len(list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant,SecurityAuditEvent.event_type=='nvd_attempts_read'))))==2

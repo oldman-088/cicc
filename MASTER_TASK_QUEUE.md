@@ -21,3 +21,5 @@ Statuses: NOT_STARTED, IN_PROGRESS, IMPLEMENTED, TESTED, VERIFIED, BLOCKED, DEFE
 | P3-02 | AI governance, federated sharing, benchmark and compliance | P0-03, P2-02 | explicit authorization, provenance, measured metrics, audit | NOT_STARTED |
 | P3-03 | Deployment, monitoring, backups and disaster recovery | P0-04, P0-05 | reproducible deployment and verified restoration | IN_PROGRESS; synthetic disposable PostgreSQL logical restore drill passed; no deployed backup system, encryption, RPO/RTO or real restore validated |
 | P4-01 | Performance, accessibility, polish, production readiness | P1-05, P3-03 | load and accessibility tests, all release gates met | NOT_STARTED |
+
+NVD admin status/abandon and bounded attempt history are experimental and fixture-tested; no source health or live verification is implied.

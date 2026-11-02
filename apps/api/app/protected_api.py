@@ -21,9 +21,16 @@ from .login_service import LoginStatus, login, logout
 from .connectors.cisa_sync import abandon_sync, get_status
 from .connectors.nvd_sync import abandon_sync as abandon_nvd_sync, get_status as get_nvd_status
 from .connectors.nvd_cve import _cve_id
-from .models import NvdCatalogRecord, Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, User, AuthSession
+from .models import NvdCatalogRecord, NvdSyncAttempt, Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, User, AuthSession
 from .security import Permission, Role, authorize
 from .sessions import authenticate_session, authenticate_session_locked, _digest
+
+class NvdAttemptStatus(str, Enum):
+    RUNNING = 'running'
+    SUCCEEDED = 'succeeded'
+    NOT_FOUND = 'not_found'
+    FAILED = 'failed'
+    ABANDONED = 'abandoned'
 
 class LoginInput(BaseModel):
     tenant_id: UUID
@@ -999,6 +1006,43 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 'first_collected_at': utc_iso(observation.first_collected_at),
                 'last_collected_at': utc_iso(observation.last_collected_at), 'verification_status': 'unverified',
                 'notice': 'Source observation is not independently verified; imported timestamps do not indicate live source health.'}
+
+    @router.get('/sources/nvd/attempts', dependencies=[Depends(require_tls)])
+    def nvd_attempts(before: UUID | None = None, status: NvdAttemptStatus | None = None,
+                     cve_id: str | None = Query(default=None, min_length=1, max_length=32),
+                     token: str = Depends(bearer)):
+        with factory.begin() as db:
+            principal = authenticate_session_locked(db, token)
+            if principal is None:
+                raise HTTPException(status_code=401, detail='Authentication required', headers={'WWW-Authenticate':'Bearer', 'Cache-Control':'no-store'})
+            try:
+                authorize(principal, principal.tenant_id, Permission.MANAGE_USERS)
+            except PermissionError:
+                raise HTTPException(status_code=403, detail='Access denied', headers={'Cache-Control':'no-store'}) from None
+            if cve_id is not None:
+                try:
+                    _cve_id(cve_id)
+                except ValueError:
+                    raise HTTPException(status_code=422, detail='Invalid request', headers={'Cache-Control':'no-store'}) from None
+            query = select(NvdSyncAttempt).where(NvdSyncAttempt.tenant_id == principal.tenant_id)
+            if status is not None: query = query.where(NvdSyncAttempt.status == status.value)
+            if cve_id is not None: query = query.where(NvdSyncAttempt.cve_id == cve_id)
+            if before is not None:
+                anchor = db.scalar(query.where(NvdSyncAttempt.id == before))
+                if anchor is None:
+                    raise HTTPException(status_code=404, detail='Cursor not found', headers={'Cache-Control':'no-store'})
+                query = query.where(or_(NvdSyncAttempt.started_at < anchor.started_at,
+                    and_(NvdSyncAttempt.started_at == anchor.started_at, NvdSyncAttempt.id < anchor.id)))
+            attempts = list(db.scalars(query.order_by(NvdSyncAttempt.started_at.desc(), NvdSyncAttempt.id.desc()).limit(101)))
+            record_event(db, principal.tenant_id, AuditType.NVD_ATTEMPTS_READ, principal.user_id)
+            def utc_iso(value):
+                return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)).isoformat()
+            return {'items': [{'id': str(x.id), 'actor_id': str(x.actor_id), 'cve_id': x.cve_id,
+                'status': x.status, 'started_at': utc_iso(x.started_at),
+                'finished_at': utc_iso(x.finished_at) if x.finished_at else None, 'error_code': x.error_code}
+                for x in attempts[:100]], 'limit': 100,
+                'next_cursor': str(attempts[99].id) if len(attempts) > 100 else None,
+                'notice': 'Attempt history is not a consistent snapshot or evidence of live source health.'}
 
     @router.get('/sources/nvd/status', dependencies=[Depends(require_tls)])
     def nvd_status(token: str = Depends(bearer)):

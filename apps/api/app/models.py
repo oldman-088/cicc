@@ -206,6 +206,7 @@ class NvdSyncAttempt(Base):
         ForeignKeyConstraint(['tenant_id', 'actor_id'], ['users.tenant_id', 'users.id']),
         CheckConstraint("status IN ('running', 'succeeded', 'not_found', 'failed', 'abandoned')", name='ck_nvd_sync_status'),
         Index('uq_nvd_sync_running_tenant', 'tenant_id', unique=True, postgresql_where=text("status = 'running'"), sqlite_where=text("status = 'running'")),
+        Index('ix_nvd_sync_tenant_started_id', 'tenant_id', 'started_at', 'id'),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False, index=True)
