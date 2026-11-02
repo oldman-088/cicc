@@ -2719,3 +2719,153 @@ def test_migrated_nvd_read_scoped_authorized_and_atomic(migration_db, monkeypatc
     with factory() as db:
         events = list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type == 'nvd_record_read')))
         assert len(events) == 1 and events[0].tenant_id == a and events[0].target_entity_id == imported['entity_id']
+
+
+def test_nvd_sync_migrated_success_missing_failure_and_recovery(migration_db, monkeypatch):
+    from uuid import UUID
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors.nvd_cve import NvdError
+    from app.connectors import nvd_sync, nvd_import
+    from app.models import NvdCatalogRecord, NvdSyncAttempt, SecurityAuditEvent
+    from app.security import Role
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    factory = sessionmaker(engine, expire_on_commit=False)
+    a, _ = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    b, _ = create_tenant_with_admin(factory, tenant_name='b', username='admin', password='a safe long password')
+    with factory.begin() as db:
+        admin = issue_session(db, a, 'admin', 'a safe long password')
+        other = issue_session(db, b, 'admin', 'a safe long password')
+    accounts.create_user(factory, admin_token=admin, username='viewer', password='a safe long password', role=Role.VIEWER)
+    with factory.begin() as db: viewer = issue_session(db, a, 'viewer', 'a safe long password')
+    called = []
+    def fetch(cve_id): called.append(cve_id); return nvd_fixture()
+    with pytest.raises(PermissionError): nvd_sync.synchronize(factory, admin_token=viewer, cve_id='CVE-2099-0001', fetch=fetch)
+    with pytest.raises(ValueError): nvd_sync.begin_sync(factory, admin_token=admin, cve_id='invalid')
+    assert not called
+    assert nvd_sync.get_status(factory, admin_token=admin)['last_attempt'] is None
+    result = nvd_sync.synchronize(factory, admin_token=admin, cve_id='CVE-2099-0001', fetch=fetch)
+    assert result['status'] == 'succeeded' and result['created'] and called == ['CVE-2099-0001']
+    with factory() as db:
+        attempt = db.get(NvdSyncAttempt, UUID(result['attempt_id']))
+        assert attempt.status == 'succeeded' and attempt.finished_at is not None
+        assert db.scalar(select(NvdCatalogRecord).where(NvdCatalogRecord.tenant_id == a)) is not None
+    missing = nvd_sync.synchronize(factory, admin_token=admin, cve_id='CVE-2099-0002', fetch=lambda _: None)
+    assert missing['status'] == 'not_found'
+    with factory() as db:
+        assert db.scalar(select(NvdCatalogRecord).where(NvdCatalogRecord.tenant_id == a)) is not None
+    def bad_fetch(_): raise NvdError('secret upstream text')
+    failed = nvd_sync.synchronize(factory, admin_token=admin, cve_id='CVE-2099-0002', fetch=bad_fetch)
+    assert failed['status'] == 'failed' and failed['error_code'] == 'fetch_failed'
+    assert 'secret' not in str(nvd_sync.get_status(factory, admin_token=admin))
+    running = nvd_sync.begin_sync(factory, admin_token=admin, cve_id='CVE-2099-0001')
+    with pytest.raises(nvd_sync.SyncBusy): nvd_sync.begin_sync(factory, admin_token=admin, cve_id='CVE-2099-0002')
+    assert not nvd_sync.abandon_sync(factory, admin_token=other, attempt_id=running)
+    with pytest.raises(PermissionError): nvd_sync.abandon_sync(factory, admin_token=viewer, attempt_id=running)
+    assert nvd_sync.abandon_sync(factory, admin_token=admin, attempt_id=running)
+    assert not nvd_sync.abandon_sync(factory, admin_token=admin, attempt_id=running)
+    with pytest.raises(ValueError, match='not active'):
+        nvd_import.import_record(factory, admin_token=admin, record=nvd_fixture(), attempt_id=running)
+    assert not nvd_sync._fail(factory, running, a, db_actor(factory, a), 'fetch_failed')
+    assert not nvd_sync._not_found(factory, admin_token=admin, attempt_id=running)
+    with factory() as db:
+        events = list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id == a)))
+        kinds = {e.event_type for e in events}
+        assert {'nvd_sync_started', 'nvd_sync_succeeded', 'nvd_sync_not_found', 'nvd_sync_failed', 'nvd_sync_abandoned', 'nvd_status_read'} <= kinds
+
+
+def db_actor(factory, tenant):
+    from app.models import User
+    with factory() as db:
+        return db.scalar(select(User.id).where(User.tenant_id == tenant, User.username == 'admin'))
+
+
+def test_nvd_sync_rolls_back_completion_and_rejects_wrong_cve(migration_db, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors import nvd_sync, nvd_import
+    from app.models import NvdSyncAttempt, NvdCatalogRecord, ProvenanceEvent
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    factory = sessionmaker(engine, expire_on_commit=False)
+    tenant, _ = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    with factory.begin() as db: token = issue_session(db, tenant, 'admin', 'a safe long password')
+    attempt = nvd_sync.begin_sync(factory, admin_token=token, cve_id='CVE-2099-0002')
+    with pytest.raises(ValueError, match='not active'):
+        nvd_import.import_record(factory, admin_token=token, record=nvd_fixture(), attempt_id=attempt)
+    nvd_sync.abandon_sync(factory, admin_token=token, attempt_id=attempt)
+    def fail(*args, **kwargs): raise RuntimeError('audit unavailable')
+    # Import+success audit must roll back all data, then coordinator marks failure.
+    with monkeypatch.context() as patch:
+        patch.setattr(nvd_import, 'record_event', fail)
+        with pytest.raises(RuntimeError, match='audit unavailable'):
+            nvd_sync.synchronize(factory, admin_token=token, cve_id='CVE-2099-0001', fetch=lambda _:nvd_fixture())
+    with factory() as db:
+        assert db.scalar(select(NvdCatalogRecord)) is None
+        assert db.scalar(select(ProvenanceEvent)) is None
+        failed = db.scalar(select(NvdSyncAttempt).where(NvdSyncAttempt.status == 'failed'))
+        assert failed.error_code == 'import_failed'
+
+
+def test_postgres_nvd_concurrent_starts_serialized(migration_db):
+    from concurrent.futures import ThreadPoolExecutor
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors import nvd_sync
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    if engine.dialect.name != 'postgresql': pytest.skip('PostgreSQL concurrency test')
+    factory = sessionmaker(engine, expire_on_commit=False)
+    tenant, _ = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    with factory.begin() as db: token = issue_session(db, tenant, 'admin', 'a safe long password')
+    def start(_):
+        try:
+            nvd_sync.begin_sync(factory, admin_token=token, cve_id='CVE-2099-0001')
+            return 'started'
+        except nvd_sync.SyncBusy: return 'busy'
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(start, range(2))) == ['busy', 'started']
+
+
+@pytest.mark.parametrize('outcome', ['found', 'missing', 'fetch_error'])
+def test_nvd_sync_abandoned_during_fetch_never_completes(migration_db, outcome):
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors import nvd_sync
+    from app.connectors.nvd_cve import NvdError
+    from app.models import NvdSyncAttempt, NvdCatalogRecord
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    factory = sessionmaker(engine, expire_on_commit=False)
+    tenant, _ = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    with factory.begin() as db: token = issue_session(db, tenant, 'admin', 'a safe long password')
+    def fetch(_):
+        with factory() as db:
+            attempt_id = db.scalar(select(NvdSyncAttempt.id).where(NvdSyncAttempt.tenant_id == tenant, NvdSyncAttempt.status == 'running'))
+        assert nvd_sync.abandon_sync(factory, admin_token=token, attempt_id=attempt_id)
+        if outcome == 'fetch_error': raise NvdError('synthetic')
+        return nvd_fixture() if outcome == 'found' else None
+    if outcome == 'found':
+        with pytest.raises(ValueError, match='not active'):
+            nvd_sync.synchronize(factory, admin_token=token, cve_id='CVE-2099-0001', fetch=fetch)
+    else:
+        assert nvd_sync.synchronize(factory, admin_token=token, cve_id='CVE-2099-0001', fetch=fetch)['status'] == 'inactive'
+    with factory() as db:
+        assert db.scalar(select(NvdSyncAttempt.status)) == 'abandoned'
+        assert db.scalar(select(NvdCatalogRecord)) is None
+
+
+def test_nvd_running_attempt_unique_constraint(migration_db):
+    from datetime import datetime, timezone
+    from app.models import NvdSyncAttempt, User
+    engine, _ = migration_db
+    tenant, actor = uuid4(), uuid4()
+    with Session(engine) as db:
+        db.add(Tenant(id=tenant, name='fixture')); db.flush()
+        db.add(User(id=actor, tenant_id=tenant, username='admin', role='admin', active=True, password_hash='invalid-fixture')); db.flush()
+        for _ in range(2):
+            db.add(NvdSyncAttempt(tenant_id=tenant, actor_id=actor, cve_id='CVE-2099-0001', status='running', started_at=datetime.now(timezone.utc)))
+        with pytest.raises(IntegrityError): db.flush()
+        db.rollback()

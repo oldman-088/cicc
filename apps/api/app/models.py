@@ -1,7 +1,7 @@
 """Experimental tenant-scoped database schema; not yet production validated."""
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, JSON, String, UniqueConstraint, Uuid
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, JSON, String, UniqueConstraint, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -198,6 +198,23 @@ class NvdCatalogRecord(Base):
     details: Mapped[dict] = mapped_column(json_type, nullable=False)
     first_collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+class NvdSyncAttempt(Base):
+    """One manually requested CVE lookup, not a source-health indicator."""
+    __tablename__ = 'nvd_sync_attempts'
+    __table_args__ = (
+        ForeignKeyConstraint(['tenant_id', 'actor_id'], ['users.tenant_id', 'users.id']),
+        CheckConstraint("status IN ('running', 'succeeded', 'not_found', 'failed', 'abandoned')", name='ck_nvd_sync_status'),
+        Index('uq_nvd_sync_running_tenant', 'tenant_id', unique=True, postgresql_where=text("status = 'running'"), sqlite_where=text("status = 'running'")),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False, index=True)
+    actor_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    cve_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 class CisaSyncAttempt(Base):
     """Operational history, including attempts that did not import a snapshot."""

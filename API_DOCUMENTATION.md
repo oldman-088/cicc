@@ -102,3 +102,6 @@ Investigation list accepts `q` (2–100 characters after trimming) for a literal
 
 ### NVD observation read
 `GET /api/v1/secure/sources/nvd/cves/{cve_id}` returns the tenant's latest imported source-specific observation to authenticated readers. A successful read is transactionally audited against its entity. Missing or cross-tenant records return 404 and malformed identifiers return 422; responses are no-store. Data and timestamps are unverified, not evidence of current provider availability. No endpoint fetches or synchronizes NVD.
+
+### Internal NVD synchronization
+`connectors/nvd_sync.py` coordinates an explicitly invoked single-CVE lookup; it is not an HTTP endpoint or scheduler. It records running, succeeded, not_found, failed, and abandoned attempts per tenant. Successful import and attempt completion are atomic. Operators may abandon a running attempt through internal functions; abandonment prevents late imports but does not stop a network call. A crash can leave a running attempt; SQLite lacks concurrency guarantees. Tests use mocked synthetic data only. Provider access/terms, deployment-wide rate controls and live compatibility are not verified.

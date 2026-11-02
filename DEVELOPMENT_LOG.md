@@ -467,3 +467,7 @@
 
 ## 2026-11-02 synthetic NVD restore coverage
 - Expanded disposable PostgreSQL logical restore drill with a synthetic NVD observation, checked its entity link, JSON and collection timestamps after restore, and verified the restored NVD composite tenant/entity FK rejects a foreign entity. Drill and Alembic parity passed locally. This does not verify real data recovery, backups, encryption, off-site durability, PITR or RPO/RTO.
+
+## 2026-11-02 NVD manual synchronization coordinator
+- Added migration 0032 and internal manual single-CVE coordination with authorized admin preflight/recheck, one running attempt per tenant (tenant lock plus partial unique DB index), persisted sanitized success/not-found/failure/abandonment and audited status. Import, provenance, success status and audit commit atomically. Fetch outside transactions; explicitly abandoned work cannot later import or update status. A no-result response does not delete records or prove safety.
+- Synthetic/mock fetch tests only: migrated SQLite/PostgreSQL tests include role and tenant scoping, rollback, concurrent PostgreSQL starts, uniqueness, errors and late completion after abandonment. Locked API 258 passed, 26 intentional SQLite PostgreSQL-only skips, one upstream warning; schema parity and synthetic restore passed. Provider terms/schema/live availability unverified, no shared provider-wide limiter, scheduler, CLI, public sync or status API, UI or hard cancellation; crashed attempts require explicit abandonment.

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 from .nvd_cve import NvdRecord, NvdDescription, NvdError, DETAIL_URL, parse_response
 from ..audit import AuditType, record_event
-from ..models import Entity, NvdCatalogRecord, ProvenanceEvent, Tenant
+from ..models import Entity, NvdCatalogRecord, NvdSyncAttempt, ProvenanceEvent, Tenant
 from ..security import Permission, authorize
 from ..sessions import authenticate_session, authenticate_session_locked
 
@@ -23,7 +23,7 @@ def _aware(value):
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def import_record(factory: sessionmaker, *, admin_token: str, record: NvdRecord) -> dict:
+def import_record(factory: sessionmaker, *, admin_token: str, record: NvdRecord, attempt_id=None) -> dict:
     if (not isinstance(record, NvdRecord) or not isinstance(record.collected_at, datetime)
         or not isinstance(record.cve_id, str) or not isinstance(record.descriptions, tuple)
         or not all(isinstance(d, NvdDescription) for d in record.descriptions)):
@@ -57,6 +57,12 @@ def import_record(factory: sessionmaker, *, admin_token: str, record: NvdRecord)
         if refreshed is None or refreshed.user_id != principal.user_id:
             raise PermissionError('Access denied')
         authorize(refreshed, tenant.id, Permission.MANAGE_USERS)
+        attempt = None
+        if attempt_id is not None:
+            attempt = db.scalar(select(NvdSyncAttempt).where(NvdSyncAttempt.id == attempt_id,
+                NvdSyncAttempt.tenant_id == tenant.id, NvdSyncAttempt.actor_id == principal.user_id).with_for_update())
+            if attempt is None or attempt.status != 'running' or attempt.cve_id != record.cve_id:
+                raise ValueError('Sync attempt is not active for this CVE')
         existing = db.scalar(select(NvdCatalogRecord).where(NvdCatalogRecord.tenant_id == tenant.id,
                                                             NvdCatalogRecord.cve_id == record.cve_id))
         if existing is not None:
@@ -85,4 +91,8 @@ def import_record(factory: sessionmaker, *, admin_token: str, record: NvdRecord)
                 details={'source': SOURCE, 'source_reference': record.source_reference, 'cve_id': record.cve_id,
                          'collected_at': record.collected_at.isoformat(), 'observation': details}))
         record_event(db, tenant.id, AuditType.NVD_RECORD_IMPORTED, principal.user_id, target_entity_id=entity_id)
+        if attempt is not None:
+            attempt.status = 'succeeded'
+            attempt.finished_at = datetime.now(timezone.utc)
+            record_event(db, tenant.id, AuditType.NVD_SYNC_SUCCEEDED, principal.user_id, target_entity_id=entity_id)
         return {'created': created, 'changed': changed, 'entity_id': entity_id}
