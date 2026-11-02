@@ -15,7 +15,7 @@
     "P2-01 limited provenance and analyst-authored relationships",
     "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI; NVD single-CVE adapter, internal tenant-scoped importer, manual sync coordinator/CLI, protected observation read and admin status/abandon/attempt-history APIs tested with fixtures",
     "P1-05 partial EN/AR/FA selected demo labels and exact-match synthetic fixture text, preference and scoped RTL; remaining translations, RTL layout implemented but browser accessibility verification missing",
-    "P1-04 experimental cases, versioned details/status/assignment and history; verified evidence lifecycle, reporting and UI missing"
+    "P1-04 experimental cases, versioned details/status/assignment and history; verified evidence lifecycle, reporting and UI missing; standalone bounded digest-comparison primitive unit-tested but not connected to storage or APIs"
   ],
   "pending_tasks": [
     "P0-03 authenticated sessions, API enforcement and audit",
@@ -102,7 +102,8 @@
     "API 260 passed, 26 PostgreSQL-only SQLite variants skipped; NVD admin status/abandon RBAC, tenant isolation and audit failure tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "API 263 passed, 27 PostgreSQL-only SQLite variants skipped; NVD manual CLI tested on disposable PostgreSQL with simulated TTY, synthetic fetch and admin preflight; schema parity and synthetic restore passed",
     "API 269 passed, 33 PostgreSQL-only SQLite variants skipped; forced PostgreSQL NVD sync authorization lock-wait interleavings cover demotion, disable and revocation for found and not-found fetches; no import or success committed; synthetic restore and parity passed",
-    "API 271 passed, 33 PostgreSQL-only SQLite variants skipped; NVD attempt-history admin/tenant filters, scoped cursor, keyset traversal and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
+    "API 271 passed, 33 PostgreSQL-only SQLite variants skipped; NVD attempt-history admin/tenant filters, scoped cursor, keyset traversal and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
+    "API 286 passed, 33 PostgreSQL-only SQLite variants skipped; bounded evidence stream SHA-256 comparison unit-tested for matching, mismatch, limits and read errors; synthetic restore and parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -144,12 +145,13 @@
     "NVD importer orders observations by caller collection timestamp, not source modification time; source assertions and collection provenance are unverified. NVD and CISA use separate source-specific entities and are not fused.",
     "NVD manual coordinator uses one running attempt per tenant with explicit abandonment and has no hard cancellation, shared provider-wide rate limit, start-sync endpoint or live/provider-policy verification; a crash may leave a running attempt. Not-found is only the source response for one lookup, not proof of safety.",
     "NVD CLI has only simulated TTY and fixture fetch tests; real terminal/provider behavior unverified. It does not implement a deployment-wide provider rate limiter or hard deadline.",
-    "NVD attempt-history pagination is not a consistent snapshot; status filters can change as attempts finish, filter/tenant-mismatched anchors fail, and production-scale filtered scan performance is unmeasured."
+    "NVD attempt-history pagination is not a consistent snapshot; status filters can change as attempts finish, filter/tenant-mismatched anchors fail, and production-scale filtered scan performance is unmeasured.",
+    "Evidence digest comparison primitive only compares bytes read to a caller-supplied digest; no upload/storage/quarantine, authenticity, chain of custody, scanning or ongoing integrity verification is implemented. Blocking reads have no hard deadline."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Continue independent security and evidence work: design bounded verified evidence file handling with quarantine and integrity checks before exposing uploads",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -i evidence apps/api/app/models.py apps/api/app/protected_api.py && cat SECURITY_THREAT_MODEL.md",
-  "next_implementation_step": "Inspect existing evidence reference schema and security threat model; implement a narrowly scoped storage-neutral digest verification primitive and tests before any upload API, using bounded streaming and no live data; document remaining chain-of-custody and deployment gaps."
+  "next_recommended_task": "Design and implement a safe isolated evidence quarantine storage primitive before any upload endpoint",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat SECURITY.md && cat apps/api/app/evidence_integrity.py && sed -n \"120,160p\" apps/api/app/models.py",
+  "next_implementation_step": "Inspect security requirements and existing evidence model; implement and test storage-neutral quarantine staging with strict size limits and cleanup, immutable/atomic publication and no user-controlled paths, or document the blockers and choose another independent task. Do not expose uploads until security controls are in place."
 }

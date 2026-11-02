@@ -34,3 +34,5 @@
 - NVD coordinator is internal and fixture-tested only: one active lookup per tenant, manual abandonment after crashes, no hard cancellation or cross-tenant provider rate coordination. Not-found means only that this lookup returned no record, not that the vulnerability is safe or absent globally.
 
 - NVD attempt-history traversal is not a snapshot; changing statuses can invalidate filtered cursors. Filtered production-scale performance is unmeasured.
+
+- Evidence SHA-256 comparison is a standalone bounded primitive only: no upload, quarantine, malware scanning, trusted reference digest, file storage, authenticity, chain of custody or persistent integrity checks. It can block on the underlying stream and is not exposed through an API.
