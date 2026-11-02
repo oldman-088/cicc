@@ -135,8 +135,9 @@
     "Prior conversation commit objects are absent from this fresh checkout; preserved restored workspace as snapshot commit a822bab, not reconstructed historic Git commits"
   ],
   "active_branch": "arena/da631853-cicc",
-  "latest_commit": "a822bab (see git log for latest)",
+  "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
   "next_recommended_task": "Continue NVD source integration: design tenant-scoped import with explicit provenance, per-tenant isolation and audit; preserve truthful unverified/live-disabled status",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md; if /tmp/cicc-lock-venv is missing: python3 -m venv /tmp/cicc-lock-venv && /tmp/cicc-lock-venv/bin/pip install --require-hashes -r apps/api/requirements-dev.lock && /tmp/cicc-lock-venv/bin/pip install pgserver==0.1.4; python scripts/check_python_locks.py && /tmp/cicc-lock-venv/bin/python scripts/test_postgres.py && /tmp/cicc-lock-venv/bin/python scripts/test_restore.py; inspect apps/api/app/connectors/nvd_cve.py and cisa_import.py and implement a tenant-authorized transactional NVD importer with provenance and audit and migrated SQLite/PostgreSQL tests. No live request without confirmed network access and policy. Web: cd apps/web && npm ci && npm run typecheck && npm test && npm run build && npm run test:browser."
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && sed -n \"1,220p\" apps/api/app/connectors/nvd_cve.py && sed -n \"1,220p\" apps/api/app/connectors/cisa_import.py",
+  "next_implementation_step": "Implement tenant-authorized transactional NVD import with explicit provenance and audit, source-specific deduplication, and migrated SQLite/PostgreSQL isolation and rollback tests. Do not claim live verification."
 }
