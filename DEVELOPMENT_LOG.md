@@ -464,3 +464,6 @@
 ## 2026-11-02 protected NVD observation read
 - Added `GET /api/v1/secure/sources/nvd/cves/{cve_id}` to the default-off experimental API. It requires an authenticated reader, scopes lookup by tenant, audits successful reads against the entity atomically, emits no-store, and explicitly labels observations unverified and timestamps not proof of live health. Invalid IDs return generic 422; missing and cross-tenant observations return 404. Collection timestamps are normalized to UTC; source timestamps are left as received.
 - Migrated SQLite/PostgreSQL tests cover viewer access, unauthenticated and foreign-tenant denial, invalid/missing IDs, audit failure and targeted audit filter. API suite 245 passed, 25 intentional SQLite skips of PostgreSQL-only cases; synthetic PostgreSQL restore and schema parity passed, one upstream warning. No NVD sync API, CLI, UI, scheduler, global rate limit or live verification.
+
+## 2026-11-02 synthetic NVD restore coverage
+- Expanded disposable PostgreSQL logical restore drill with a synthetic NVD observation, checked its entity link, JSON and collection timestamps after restore, and verified the restored NVD composite tenant/entity FK rejects a foreign entity. Drill and Alembic parity passed locally. This does not verify real data recovery, backups, encryption, off-site durability, PITR or RPO/RTO.

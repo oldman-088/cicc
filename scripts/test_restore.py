@@ -7,6 +7,7 @@ on a trusted machine. No supplied URLs, real records or persistent backup files
 are accepted. This is not a production backup, recovery procedure or RTO test.
 """
 from pathlib import Path
+from datetime import datetime, timezone
 import os
 import subprocess
 import sys
@@ -25,7 +26,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / 'apps/api'
 sys.path.insert(0, str(API))
-from app.models import Tenant, User, Entity, Investigation, InvestigationEvent, InvestigationEntityLink
+from app.models import Tenant, User, Entity, Investigation, InvestigationEvent, InvestigationEntityLink, NvdCatalogRecord
 
 
 def main():
@@ -52,6 +53,7 @@ def main():
                     db.add(Investigation(id=case_id, tenant_id=tenant_id, created_by=actor_id, title='synthetic case', description='synthetic only')); db.flush()
                     db.add(InvestigationEntityLink(tenant_id=tenant_id, investigation_id=case_id, entity_id=entity_id, created_by=actor_id))
                     db.add(InvestigationEvent(tenant_id=tenant_id, investigation_id=case_id, actor_id=actor_id, event_type='fixture', details={'synthetic':True}))
+                    db.add(NvdCatalogRecord(tenant_id=tenant_id, entity_id=entity_id, cve_id='CVE-2099-0001', details={'synthetic':True, 'description':'restore fixture only'}, first_collected_at=datetime(2026,1,1,tzinfo=timezone.utc), last_collected_at=datetime(2026,1,2,tzinfo=timezone.utc)))
             finally:
                 engine.dispose()
             archive = Path(directory) / 'synthetic.dump'
@@ -67,6 +69,9 @@ def main():
                     assert db.get(Investigation,case_id).title == 'synthetic case'
                     assert db.scalar(select(InvestigationEntityLink).where(InvestigationEntityLink.investigation_id == case_id)).entity_id == entity_id
                     assert db.scalar(select(InvestigationEvent).where(InvestigationEvent.investigation_id == case_id)).details == {'synthetic':True}
+                    observation = db.scalar(select(NvdCatalogRecord).where(NvdCatalogRecord.tenant_id == tenant_id, NvdCatalogRecord.cve_id == 'CVE-2099-0001'))
+                    assert observation.entity_id == entity_id and observation.details == {'synthetic':True, 'description':'restore fixture only'}
+                    assert observation.first_collected_at == datetime(2026,1,1,tzinfo=timezone.utc) and observation.last_collected_at == datetime(2026,1,2,tzinfo=timezone.utc)
                 # Check that a restored composite tenant constraint still rejects a cross-tenant link.
                 with factory.begin() as db:
                     other = Tenant(id=uuid4(), name='other synthetic tenant'); db.add(other); db.flush()
@@ -78,6 +83,18 @@ def main():
                         db.rollback()
                     else:
                         raise AssertionError('Restored tenant constraint did not reject mismatched link')
+                # The NVD observation's tenant/entity FK must also survive restore.
+                with factory.begin() as db:
+                    other = Tenant(id=uuid4(), name='nvd foreign synthetic tenant'); db.add(other); db.flush()
+                    foreign = Entity(id=uuid4(), tenant_id=other.id, kind='vulnerability', title='foreign', source='fixture'); db.add(foreign); db.flush()
+                    now = datetime.now(timezone.utc)
+                    db.add(NvdCatalogRecord(tenant_id=tenant_id, entity_id=foreign.id, cve_id='CVE-2099-0002', details={'synthetic':True}, first_collected_at=now, last_collected_at=now))
+                    try:
+                        db.flush()
+                    except IntegrityError:
+                        db.rollback()
+                    else:
+                        raise AssertionError('Restored NVD tenant constraint did not reject mismatched entity')
             finally:
                 engine.dispose()
             print('Synthetic logical dump and isolated restore drill passed; not a production recovery validation.')

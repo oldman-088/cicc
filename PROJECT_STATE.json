@@ -96,7 +96,8 @@
     "API suite 226 passed, 24 SQLite PostgreSQL-only variants skipped; secure-prefix ASGI rejects forwarded conflicting content-length/transfer-encoding, targeted request-limit tests pass",
     "Restored workspace revalidated: API 237 passed, 24 SQLite PostgreSQL-only variants skipped; synthetic PostgreSQL restore, web 7 unit and 5 browser smoke tests, typecheck/build and npm audit passed",
     "API 243 passed, 25 PostgreSQL-only SQLite variants skipped; NVD import tested with migrated SQLite/PostgreSQL, concurrent PostgreSQL deduplication, authorization, rollback and isolation; parity and synthetic restore passed",
-    "API 245 passed, 25 PostgreSQL-only SQLite variants skipped; protected NVD read tenant isolation, viewer authorization, UTC collection timestamps and audit failure tested on migrated SQLite and PostgreSQL; schema parity and synthetic restore passed"
+    "API 245 passed, 25 PostgreSQL-only SQLite variants skipped; protected NVD read tenant isolation, viewer authorization, UTC collection timestamps and audit failure tested on migrated SQLite and PostgreSQL; schema parity and synthetic restore passed",
+    "Synthetic disposable PostgreSQL restore checked NVD observation data, timestamps and restored cross-tenant entity foreign key, in addition to prior selected rows and schema parity"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
