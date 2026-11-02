@@ -3,7 +3,7 @@
 | Source | Status | Last attempt | Last success | Notes |
 |---|---|---|---|---|
 | CISA KEV | IN_PROGRESS | never | never | Fixed-URL fetch, internal tenant-scoped import and sync coordinator tested with synthetic fixtures; no scheduled or live-verified sync |
-| NIST NVD | IN_PROGRESS | never | never | Single-CVE fixed-URL adapter, internal tenant-scoped importer and manual sync coordinator tested only with synthetic fixtures; no exposed sync-start API, CLI, scheduler, shared rate limiting or live verification; provider policy unverified |
+| NIST NVD | IN_PROGRESS | never | never | Single-CVE fixed-URL adapter, internal tenant-scoped importer, manual sync coordinator and interactive CLI tested only with synthetic fixtures; no exposed sync-start API or scheduler, shared rate limiting or live verification; provider policy unverified |
 | MITRE ATT&CK | NOT_STARTED | never | never | Planned; distribution/versioning need validation |
 | Synthetic exercise | TESTED | n/a | n/a | Hardcoded illustrative examples, not real intelligence |
 

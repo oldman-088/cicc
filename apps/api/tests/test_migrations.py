@@ -2921,3 +2921,37 @@ def test_nvd_status_and_abandon_api_scope_auth_and_audit_rollback(migration_db, 
         audits=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant)))
         assert sum(x.event_type=='nvd_sync_abandoned' for x in audits) == 1
         assert sum(x.event_type=='nvd_status_read' for x in audits) == 2
+
+
+def test_postgres_nvd_cli_synthetic_fetch_and_admin_preflight(migration_db, monkeypatch, capsys):
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors import nvd_cli, nvd_sync
+    from app.security import Role
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    if engine.dialect.name != 'postgresql': pytest.skip('CLI requires PostgreSQL')
+    factory = sessionmaker(engine, expire_on_commit=False)
+    tenant, _ = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    with factory.begin() as db: admin = issue_session(db, tenant, 'admin', 'a safe long password')
+    accounts.create_user(factory, admin_token=admin, username='viewer', password='a safe long password', role=Role.VIEWER)
+    with factory.begin() as db: viewer = issue_session(db, tenant, 'viewer', 'a safe long password')
+    monkeypatch.setattr(nvd_cli.sys.stdin, 'isatty', lambda: True)
+    monkeypatch.setattr(nvd_cli.sys.stderr, 'isatty', lambda: True)
+    calls=[]
+    def sync(factory, *, admin_token, cve_id):
+        return nvd_sync.synchronize(factory, admin_token=admin_token, cve_id=cve_id,
+            fetch=lambda cve: (calls.append(cve), nvd_fixture())[1])
+    with monkeypatch.context() as patch:
+        patch.setattr(nvd_cli, 'create_engine', lambda *a, **k: engine)
+        patch.setattr(engine, 'dispose', lambda: None)
+        patch.setattr(nvd_cli, 'synchronize', sync)
+        patch.setattr(nvd_cli.getpass, 'getpass', lambda _: viewer)
+        assert nvd_cli.main(['CVE-2099-0001','--confirm-live-fetch']) == 1
+        assert calls == []
+        patch.setattr(nvd_cli.getpass, 'getpass', lambda _: admin)
+        assert nvd_cli.main(['CVE-2099-0001','--confirm-live-fetch']) == 0
+        output=capsys.readouterr()
+        assert admin not in output.out+output.err and viewer not in output.out+output.err
+        assert 'unverified' in output.out and calls == ['CVE-2099-0001']

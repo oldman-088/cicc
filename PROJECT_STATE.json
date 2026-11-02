@@ -13,7 +13,7 @@
     "P0-05 request size guard and CI configured; CI not executed on GitHub",
     "P1-01 manual entity and evidence reference create/list/update; full lifecycle missing",
     "P2-01 limited provenance and analyst-authored relationships",
-    "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI; NVD single-CVE adapter, internal tenant-scoped importer, manual sync coordinator, protected observation read and admin status/abandon APIs tested with fixtures",
+    "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI; NVD single-CVE adapter, internal tenant-scoped importer, manual sync coordinator/CLI, protected observation read and admin status/abandon APIs tested with fixtures",
     "P1-05 partial EN/AR/FA selected demo labels and exact-match synthetic fixture text, preference and scoped RTL; remaining translations, RTL layout implemented but browser accessibility verification missing",
     "P1-04 experimental cases, versioned details/status/assignment and history; verified evidence lifecycle, reporting and UI missing"
   ],
@@ -99,7 +99,8 @@
     "API 245 passed, 25 PostgreSQL-only SQLite variants skipped; protected NVD read tenant isolation, viewer authorization, UTC collection timestamps and audit failure tested on migrated SQLite and PostgreSQL; schema parity and synthetic restore passed",
     "Synthetic disposable PostgreSQL restore checked NVD observation data, timestamps and restored cross-tenant entity foreign key, in addition to prior selected rows and schema parity",
     "API 258 passed, 26 PostgreSQL-only SQLite variants skipped; NVD manual coordinator tested using synthetic mock fetch on migrated SQLite/PostgreSQL, including concurrent starts, abandoned late fetch, scoped recovery, partial unique constraint, failures and audit rollback; schema parity and synthetic restore passed",
-    "API 260 passed, 26 PostgreSQL-only SQLite variants skipped; NVD admin status/abandon RBAC, tenant isolation and audit failure tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
+    "API 260 passed, 26 PostgreSQL-only SQLite variants skipped; NVD admin status/abandon RBAC, tenant isolation and audit failure tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
+    "API 263 passed, 27 PostgreSQL-only SQLite variants skipped; NVD manual CLI tested on disposable PostgreSQL with simulated TTY, synthetic fetch and admin preflight; schema parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -139,12 +140,13 @@
     "NVD single-CVE lookup is fixture-tested only; no live verification, NVD sync API, scheduler, UI, API key or deployment-wide rate limiting; checkpointed time budget is not hard cancellation",
     "Prior conversation commit objects are absent from this fresh checkout; preserved restored workspace as snapshot commit a822bab, not reconstructed historic Git commits",
     "NVD importer orders observations by caller collection timestamp, not source modification time; source assertions and collection provenance are unverified. NVD and CISA use separate source-specific entities and are not fused.",
-    "NVD manual coordinator uses one running attempt per tenant with explicit abandonment and has no hard cancellation, shared provider-wide rate limit, start-sync endpoint/CLI or live/provider-policy verification; a crash may leave a running attempt. Not-found is only the source response for one lookup, not proof of safety."
+    "NVD manual coordinator uses one running attempt per tenant with explicit abandonment and has no hard cancellation, shared provider-wide rate limit, start-sync endpoint or live/provider-policy verification; a crash may leave a running attempt. Not-found is only the source response for one lookup, not proof of safety.",
+    "NVD CLI has only simulated TTY and fixture fetch tests; real terminal/provider behavior unverified. It does not implement a deployment-wide provider rate limiter or hard deadline."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Add an explicitly confirmed interactive manual NVD CLI with admin session and PostgreSQL-only guard, fixture-only tests and sanitized errors",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/connectors/cisa_cli.py && cat apps/api/app/connectors/nvd_sync.py",
-  "next_implementation_step": "Mirror CISA CLI boundaries: fixed CVE input validation, no token argument, TTY and confirmation required, PostgreSQL only, call NVD coordinator and test synthetic mocked fetch plus preflight failures; no live requests."
+  "next_recommended_task": "Harden NVD coordinator against authorization changes during fetch with forced PostgreSQL interleaving tests; keep live access disabled and operational limits explicit",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/connectors/nvd_sync.py && cat apps/api/app/connectors/nvd_import.py",
+  "next_implementation_step": "Test forced role demotion or token revocation after fetch begins before import/not-found completion on migrated PostgreSQL, proving no record and no success/not-found commit; fix any failure, update docs and push."
 }

@@ -108,3 +108,6 @@ Investigation list accepts `q` (2–100 characters after trimming) for a literal
 
 ### NVD status and recovery
 Administrators can inspect the latest tenant attempt with `GET /api/v1/secure/sources/nvd/status` and abandon a running attempt with `POST /api/v1/secure/sources/nvd/attempts/{attempt_id}/abandon`. Both require the experimental authenticated HTTPS API and are audited; foreign/non-running attempts return 404. A null attempt or successful/not-found attempt is not proof of current source health or vulnerability safety. Abandoning prevents late import but does not cancel network I/O. No start-sync API or scheduler exists.
+
+### Interactive NVD CLI
+From `apps/api`, an operator can run `python -m app.connectors.nvd_cli CVE-YYYY-NNNN --confirm-live-fetch` after setting `DATABASE_URL` for PostgreSQL and obtaining an administrator session. It requires a terminal and prompts for the token; it never accepts a token or endpoint URL as an argument. This triggers a real request to the fixed NVD endpoint, so do not run without authorization and verification of provider terms/rate policy. Tests use synthetic data and a simulated TTY only; live compatibility and actual terminal behavior are unverified. There is no scheduler, deployment-wide rate limiter or hard cancellation deadline.
