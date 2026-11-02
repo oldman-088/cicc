@@ -100,7 +100,8 @@
     "Synthetic disposable PostgreSQL restore checked NVD observation data, timestamps and restored cross-tenant entity foreign key, in addition to prior selected rows and schema parity",
     "API 258 passed, 26 PostgreSQL-only SQLite variants skipped; NVD manual coordinator tested using synthetic mock fetch on migrated SQLite/PostgreSQL, including concurrent starts, abandoned late fetch, scoped recovery, partial unique constraint, failures and audit rollback; schema parity and synthetic restore passed",
     "API 260 passed, 26 PostgreSQL-only SQLite variants skipped; NVD admin status/abandon RBAC, tenant isolation and audit failure tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
-    "API 263 passed, 27 PostgreSQL-only SQLite variants skipped; NVD manual CLI tested on disposable PostgreSQL with simulated TTY, synthetic fetch and admin preflight; schema parity and synthetic restore passed"
+    "API 263 passed, 27 PostgreSQL-only SQLite variants skipped; NVD manual CLI tested on disposable PostgreSQL with simulated TTY, synthetic fetch and admin preflight; schema parity and synthetic restore passed",
+    "API 269 passed, 33 PostgreSQL-only SQLite variants skipped; forced PostgreSQL NVD sync authorization lock-wait interleavings cover demotion, disable and revocation for found and not-found fetches; no import or success committed; synthetic restore and parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -146,7 +147,7 @@
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Harden NVD coordinator against authorization changes during fetch with forced PostgreSQL interleaving tests; keep live access disabled and operational limits explicit",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/connectors/nvd_sync.py && cat apps/api/app/connectors/nvd_import.py",
-  "next_implementation_step": "Test forced role demotion or token revocation after fetch begins before import/not-found completion on migrated PostgreSQL, proving no record and no success/not-found commit; fix any failure, update docs and push."
+  "next_recommended_task": "Improve NVD manual sync recovery with a bounded tenant-scoped attempt history API and filtered cursor semantics",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && sed -n \"900,1040p\" apps/api/app/protected_api.py && cat apps/api/app/connectors/nvd_sync.py",
+  "next_implementation_step": "Inspect existing keyset pagination and admin audit endpoints; implement bounded NVD attempt history with tenant-scoped cursor validation and audited reads; test SQLite/PostgreSQL authorization, foreign cursors, ordering and rollback."
 }

@@ -479,3 +479,7 @@
 ## 2026-11-02 interactive manual NVD CLI
 - Added an explicit single-CVE manual CLI requiring fixed CVE validation, configured PostgreSQL, explicit live-fetch confirmation, interactive token input, and admin authorization before fetch. It does not accept URLs or bearer tokens as arguments; output distinguishes imported unverified, no-record and failure, and redacts exceptions. No network request was made in tests.
 - Initial full test run exposed a test teardown bug: the test changed DATABASE_URL beyond the scoped monkeypatch, so Alembic used a non-existent test URL. Removed the override and reran successfully. API 263 passed, 27 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed. CLI uses simulated TTY/mock fetch on disposable PostgreSQL, not verified with a real terminal or NVD; no scheduler, shared provider rate limiter, start-sync API or hard deadline.
+
+## 2026-11-02 forced NVD authorization interleavings
+- Added six forced PostgreSQL lock-wait cases: admin demotion, disable or session revocation during an in-flight mocked fetch, for both found and missing responses. Pending import/not-found completion is denied, no NVD record/success/not-found audit commits and the attempt records sanitized import failure. This exercises selected races, not comprehensive concurrency or deployment security.
+- Full API suite 269 passed, 33 intentionally skipped SQLite variants for PostgreSQL-only tests, one upstream TestClient warning. Schema parity and disposable synthetic restore passed; no live requests.

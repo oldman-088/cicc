@@ -2955,3 +2955,56 @@ def test_postgres_nvd_cli_synthetic_fetch_and_admin_preflight(migration_db, monk
         output=capsys.readouterr()
         assert admin not in output.out+output.err and viewer not in output.out+output.err
         assert 'unverified' in output.out and calls == ['CVE-2099-0001']
+
+
+@pytest.mark.parametrize('change', ['demote', 'disable', 'revoke'])
+@pytest.mark.parametrize('outcome', ['found', 'missing'])
+def test_postgres_nvd_sync_rechecks_authorization_after_fetch(migration_db, change, outcome):
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import datetime, timezone
+    from threading import Event
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors import nvd_sync
+    from app.models import User, AuthSession, NvdCatalogRecord, NvdSyncAttempt, SecurityAuditEvent
+    from app.sessions import issue_session, _digest
+    engine, _ = migration_db
+    if engine.dialect.name != 'postgresql': pytest.skip('PostgreSQL row locks required')
+    factory = sessionmaker(engine, expire_on_commit=False)
+    tenant, actor = create_tenant_with_admin(factory, tenant_name='a', username='admin', password='a safe long password')
+    with factory.begin() as db: token = issue_session(db, tenant, 'admin', 'a safe long password')
+    fetch_started, allow_fetch, lock_waiting = Event(), Event(), Event()
+    def fetch(_):
+        fetch_started.set()
+        assert allow_fetch.wait(10)
+        return nvd_fixture() if outcome == 'found' else None
+    def observe(conn, cursor, statement, parameters, context, executemany):
+        if 'FROM users' in statement and 'FOR UPDATE' in statement:
+            lock_waiting.set()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(nvd_sync.synchronize, factory, admin_token=token, cve_id='CVE-2099-0001', fetch=fetch)
+        try:
+            assert fetch_started.wait(10)
+            with factory.begin() as blocker:
+                user = blocker.scalar(select(User).where(User.id == actor).with_for_update())
+                if change == 'demote': user.role = 'viewer'
+                elif change == 'disable': user.active = False
+                else:
+                    session = blocker.scalar(select(AuthSession).where(AuthSession.token_digest == _digest(token)).with_for_update())
+                    session.revoked_at = datetime.now(timezone.utc)
+                blocker.flush()
+                event.listen(engine, 'before_cursor_execute', observe)
+                try:
+                    allow_fetch.set()
+                    assert lock_waiting.wait(10)
+                finally:
+                    event.remove(engine, 'before_cursor_execute', observe)
+            with pytest.raises(PermissionError): future.result(timeout=10)
+        finally:
+            allow_fetch.set()
+    with factory() as db:
+        assert db.scalar(select(NvdCatalogRecord)) is None
+        attempt = db.scalar(select(NvdSyncAttempt).where(NvdSyncAttempt.tenant_id == tenant))
+        assert attempt.status == 'failed' and attempt.error_code == 'import_failed'
+        kinds = list(db.scalars(select(SecurityAuditEvent.event_type).where(SecurityAuditEvent.tenant_id == tenant)))
+        assert 'nvd_sync_succeeded' not in kinds and 'nvd_sync_not_found' not in kinds
