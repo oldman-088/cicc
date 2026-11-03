@@ -120,4 +120,6 @@ From `apps/api`, an operator can run `python -m app.connectors.nvd_cli CVE-YYYY-
 
 Report sections are independently bounded: an evidence item can refer to an entity not present in the entity section. Use the case link endpoints to retrieve further data; concurrent modifications can yield mixed-time results.
 
-`GET /api/v1/secure/investigations/{case_id}/events/{event_id}` returns one case-scoped history event to authorized readers and records a case-targeted transactional audit event. It does not record the individual event ID in audit. History is not tamper-resistant and recorded assertions can be unverified.
+`GET /api/v1/secure/investigations/{case_id}/events/{event_id}` returns one case-scoped history event to authorized readers and records a case-targeted transactional audit event. It records the individual event ID in audit using a tenant/case/event-constrained target. Earlier audit records are not backfilled. History is not tamper-resistant and recorded assertions can be unverified.
+
+Admin audit supports `investigation_event_id` to filter events with a matching targeted case-history event; older untargeted records are omitted. The composite FK can prevent history deletion; cursor traversal is not a snapshot.

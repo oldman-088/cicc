@@ -3235,6 +3235,33 @@ def test_investigation_event_detail_scope_and_case_audit(migration_db, monkeypat
         response=client.get(path,headers=headers(viewer))
         assert response.status_code==200 and response.headers['cache-control']=='no-store'
         assert response.json()['details']=={'synthetic':True} and 'not tamper-resistant' in response.json()['notice']
+        audit=client.get('/api/v1/secure/audit',headers=headers(admin),params={'investigation_event_id':str(eid)})
+        assert audit.status_code==200 and len(audit.json()['items'])==1
+        assert audit.json()['items'][0]['target_investigation_event_id']==str(eid)
+        assert client.get('/api/v1/secure/audit',headers=headers(admin),params={'investigation_event_id':str(foreign_eid)}).json()['items']==[]
     with factory() as db:
         events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='investigation_event_read')))
-        assert len(events)==1 and events[0].tenant_id==tenant and events[0].target_investigation_id==c1
+        assert len(events)==1 and events[0].tenant_id==tenant and events[0].target_investigation_id==c1 and events[0].target_investigation_event_id==eid
+
+
+def test_investigation_event_audit_target_constraints(migration_db):
+    from app.models import Investigation, InvestigationEvent, SecurityAuditEvent, User
+    engine,_=migration_db
+    a,b,actor_a,actor_b=uuid4(),uuid4(),uuid4(),uuid4()
+    with Session(engine) as db:
+        db.add_all([Tenant(id=a,name='a'),Tenant(id=b,name='b')]); db.flush()
+        db.add_all([User(id=actor_a,tenant_id=a,username='a',role='admin',active=True,password_hash='fixture'),
+                    User(id=actor_b,tenant_id=b,username='b',role='admin',active=True,password_hash='fixture')]); db.flush()
+        c1=Investigation(tenant_id=a,created_by=actor_a,title='a1',description='fixture')
+        c2=Investigation(tenant_id=a,created_by=actor_a,title='a2',description='fixture')
+        c3=Investigation(tenant_id=b,created_by=actor_b,title='b',description='fixture')
+        db.add_all([c1,c2,c3]); db.flush()
+        e1=InvestigationEvent(tenant_id=a,investigation_id=c1.id,actor_id=actor_a,event_type='fixture',details={})
+        e2=InvestigationEvent(tenant_id=b,investigation_id=c3.id,actor_id=actor_b,event_type='fixture',details={})
+        db.add_all([e1,e2]); db.commit()
+        for kwargs in (dict(target_investigation_event_id=e1.id),
+                       dict(target_investigation_id=c2.id,target_investigation_event_id=e1.id),
+                       dict(target_investigation_id=c1.id,target_investigation_event_id=e2.id)):
+            db.add(SecurityAuditEvent(tenant_id=a,actor_id=actor_a,event_type='fixture',**kwargs))
+            with pytest.raises(IntegrityError): db.flush()
+            db.rollback()

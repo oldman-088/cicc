@@ -519,3 +519,7 @@
 ## 2026-11-03 investigation event detail
 - Added default-off `GET /api/v1/secure/investigations/{case}/events/{event}` with authenticated reader permission, tenant/case scoping, 404 for foreign and wrong-case IDs, no-store and atomic case-targeted audit. History remains unverified and not tamper-resistant; the audit records the case but does not yet retain the individual event ID.
 - Migrated SQLite/PostgreSQL tests cover viewer access, isolation and audit failure; API 307 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning. Synthetic PostgreSQL restore and schema parity passed.
+
+## 2026-11-03 case-event audit target
+- Migration 0035 adds tenant/case/event-scoped audit target and index; individual event detail now records the exact event ID atomically. Admin audit accepts an `investigation_event_id` filter and uses existing filter-scoped cursor semantics. Existing audit rows have null event targets (no backfill); the FK may prevent event deletion. Audit/history remain mutable and are not tamper-resistant.
+- Migrated SQLite/PostgreSQL tests cover filtered read, cross-tenant/wrong-case/missing-case FK rejection, detail access and audit rollback. API 309 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed. Further filtered cursor and preservation tests remain.

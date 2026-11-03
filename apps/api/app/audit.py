@@ -63,7 +63,7 @@ class AuditType(str, Enum):
     INVESTIGATION_EVIDENCE_LINKED = 'investigation_evidence_linked'
     INVESTIGATION_EVIDENCE_UNLINKED = 'investigation_evidence_unlinked'
 
-def record_event(db: Session, tenant_id: UUID, event_type: AuditType, actor_id: UUID | None = None, target_user_id: UUID | None = None, previous_role: Role | None = None, new_role: Role | None = None, target_entity_id: UUID | None = None, target_investigation_id: UUID | None = None, target_note_id: UUID | None = None, target_session_id: UUID | None = None, target_evidence_id: UUID | None = None) -> None:
+def record_event(db: Session, tenant_id: UUID, event_type: AuditType, actor_id: UUID | None = None, target_user_id: UUID | None = None, previous_role: Role | None = None, new_role: Role | None = None, target_entity_id: UUID | None = None, target_investigation_id: UUID | None = None, target_note_id: UUID | None = None, target_session_id: UUID | None = None, target_evidence_id: UUID | None = None, target_investigation_event_id: UUID | None = None) -> None:
     if not isinstance(event_type, AuditType):
         raise ValueError('Unknown audit event')
     if previous_role is not None and not isinstance(previous_role, Role):
@@ -75,7 +75,7 @@ def record_event(db: Session, tenant_id: UUID, event_type: AuditType, actor_id: 
     if target_session_id is not None and (event_type != AuditType.SESSION_SINGLE_REVOKED or target_user_id is None):
         raise ValueError('Session target requires a user and a single-session revocation')
     db.add(SecurityAuditEvent(tenant_id=tenant_id, actor_id=actor_id, event_type=event_type.value, target_user_id=target_user_id, target_entity_id=target_entity_id,
-                              previous_role=previous_role.value if previous_role else None, new_role=new_role.value if new_role else None, target_investigation_id=target_investigation_id, target_note_id=target_note_id, target_session_id=target_session_id, target_evidence_id=target_evidence_id))
+                              previous_role=previous_role.value if previous_role else None, new_role=new_role.value if new_role else None, target_investigation_id=target_investigation_id, target_note_id=target_note_id, target_session_id=target_session_id, target_evidence_id=target_evidence_id, target_investigation_event_id=target_investigation_event_id))
     db.flush()
 
 def list_events(db: Session, principal: Principal, tenant_id: UUID, limit: int = 100):

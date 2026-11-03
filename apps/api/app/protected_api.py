@@ -988,14 +988,14 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 InvestigationEvent.investigation_id == investigation_id, InvestigationEvent.id == event_id))
             if event is None:
                 raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
-            # Audit currently targets the investigation, not the individual event.
-            record_event(db, principal.tenant_id, AuditType.INVESTIGATION_EVENT_READ, principal.user_id, target_investigation_id=investigation_id)
+            record_event(db, principal.tenant_id, AuditType.INVESTIGATION_EVENT_READ, principal.user_id,
+                         target_investigation_id=investigation_id, target_investigation_event_id=event.id)
             return {'id':str(event.id), 'actor_id':str(event.actor_id), 'event_type':event.event_type,
                 'details':event.details, 'occurred_at':event.occurred_at.isoformat(),
                 'notice':'History is not tamper-resistant; recorded assertions may be unverified.'}
 
     @router.get('/audit', dependencies=[Depends(require_tls)])
-    def audit_events(before: UUID | None = None, investigation_id: UUID | None = None, entity_id: UUID | None = None, evidence_id: UUID | None = None, user_id: UUID | None = None, event_type: AuditType | None = None, token: str = Depends(bearer)):
+    def audit_events(before: UUID | None = None, investigation_id: UUID | None = None, investigation_event_id: UUID | None = None, entity_id: UUID | None = None, evidence_id: UUID | None = None, user_id: UUID | None = None, event_type: AuditType | None = None, token: str = Depends(bearer)):
         with factory.begin() as db:
             principal = authenticate_session_locked(db, token)
             if principal is None:
@@ -1006,6 +1006,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 raise HTTPException(status_code=403, detail='Access denied', headers={'Cache-Control':'no-store'}) from None
             query = select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id == principal.tenant_id)
             if investigation_id is not None: query = query.where(SecurityAuditEvent.target_investigation_id == investigation_id)
+            if investigation_event_id is not None: query = query.where(SecurityAuditEvent.target_investigation_event_id == investigation_event_id)
             if user_id is not None: query = query.where(SecurityAuditEvent.target_user_id == user_id)
             if entity_id is not None: query = query.where(SecurityAuditEvent.target_entity_id == entity_id)
             if evidence_id is not None: query = query.where(SecurityAuditEvent.target_evidence_id == evidence_id)
@@ -1025,6 +1026,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                                'target_evidence_id': str(e.target_evidence_id) if e.target_evidence_id else None,
                                'target_investigation_id': str(e.target_investigation_id) if e.target_investigation_id else None,
                                'target_note_id': str(e.target_note_id) if e.target_note_id else None,
+                               'target_investigation_event_id': str(e.target_investigation_event_id) if e.target_investigation_event_id else None,
                                'target_session_id': str(e.target_session_id) if e.target_session_id else None,
                                'previous_role': e.previous_role, 'new_role': e.new_role,
                                'occurred_at': e.occurred_at.isoformat()} for e in events[:100]],

@@ -93,12 +93,15 @@ class SecurityAuditEvent(Base):
                       Index('ix_audit_tenant_evidence_time_id', 'tenant_id', 'target_evidence_id', 'occurred_at', 'id'),
                       Index('ix_audit_tenant_entity_time_id', 'tenant_id', 'target_entity_id', 'occurred_at', 'id'),
                       Index('ix_audit_tenant_user_time_id', 'tenant_id', 'target_user_id', 'occurred_at', 'id'),
+                      Index('ix_audit_tenant_event_time_id', 'tenant_id', 'target_investigation_event_id', 'occurred_at', 'id'),
                       ForeignKeyConstraint(['tenant_id', 'actor_id'], ['users.tenant_id', 'users.id']),
                       ForeignKeyConstraint(['tenant_id', 'target_user_id'], ['users.tenant_id', 'users.id']),
                       ForeignKeyConstraint(['tenant_id', 'target_entity_id'], ['intelligence_entities.tenant_id', 'intelligence_entities.id']),
                       ForeignKeyConstraint(['tenant_id', 'target_entity_id', 'target_evidence_id'], ['evidence_references.tenant_id', 'evidence_references.entity_id', 'evidence_references.id'], name='fk_audit_evidence_scope'),
                       ForeignKeyConstraint(['tenant_id', 'target_investigation_id'], ['investigations.tenant_id', 'investigations.id']),
                       ForeignKeyConstraint(['tenant_id', 'target_investigation_id', 'target_note_id'], ['investigation_notes.tenant_id', 'investigation_notes.investigation_id', 'investigation_notes.id']),
+                      ForeignKeyConstraint(['tenant_id', 'target_investigation_id', 'target_investigation_event_id'], ['investigation_events.tenant_id', 'investigation_events.investigation_id', 'investigation_events.id'], name='fk_audit_event_scope'),
+                      CheckConstraint('target_investigation_event_id IS NULL OR target_investigation_id IS NOT NULL', name='ck_audit_event_has_case'),
                       CheckConstraint('target_note_id IS NULL OR target_investigation_id IS NOT NULL', name='ck_audit_note_has_case'),
                       CheckConstraint('target_session_id IS NULL OR target_user_id IS NOT NULL', name='ck_audit_session_has_user'),
                       CheckConstraint('target_evidence_id IS NULL OR target_entity_id IS NOT NULL', name='ck_audit_evidence_has_entity'))
@@ -110,6 +113,7 @@ class SecurityAuditEvent(Base):
     target_evidence_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     target_investigation_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     target_note_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    target_investigation_event_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     # Snapshot identifier: intentionally no FK, so session cleanup can retain audit.
     target_session_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -258,6 +262,7 @@ class InvestigationEvent(Base):
     """Case history, not tamper-resistant and not a substitute for audit retention."""
     __tablename__ = 'investigation_events'
     __table_args__ = (
+        UniqueConstraint('tenant_id', 'investigation_id', 'id', name='uq_investigation_event_scope'),
         ForeignKeyConstraint(['tenant_id', 'investigation_id'], ['investigations.tenant_id', 'investigations.id']),
         ForeignKeyConstraint(['tenant_id', 'actor_id'], ['users.tenant_id', 'users.id']),
         Index('ix_investigation_events_scope_time_id', 'tenant_id', 'investigation_id', 'occurred_at', 'id'),

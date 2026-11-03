@@ -46,4 +46,4 @@
 
 - Investigation report is bounded to 50 items per section, not a consistent snapshot, complete report, tamper-resistant record or verified evidence/custody; it includes user-supplied references and hashes without verification. Export rendering and operational UI remain absent.
 
-- Investigation event detail audit targets the case only; it does not retain or constrain the individual event ID. Case history is not tamper-resistant.
+- Investigation event detail audit has a tenant/case/event FK target; older audit records are not backfilled and the FK may prevent event deletion. Case history remains mutable and not tamper-resistant.

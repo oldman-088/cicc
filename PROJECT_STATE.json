@@ -110,7 +110,8 @@
     "API 301 passed, 33 PostgreSQL-only SQLite variants skipped; CISA attempt history RBAC, scoped filter cursors, ties and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "API 303 passed, 33 PostgreSQL-only SQLite variants skipped; bounded investigation report tests cover viewer access, foreign tenant denial, 50-note truncation, unverified labels and atomic audit on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "API 305 passed, 33 SQLite PostgreSQL-only variants skipped; report tests cover entity/evidence 51-item truncation and unverified hash labels on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
-    "API 307 passed, 33 PostgreSQL-only SQLite variants skipped; investigation event detail viewer access, cross-case/tenant denial and case-targeted audit failure tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
+    "API 307 passed, 33 PostgreSQL-only SQLite variants skipped; investigation event detail viewer access, cross-case/tenant denial and case-targeted audit failure tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
+    "API 309 passed, 33 PostgreSQL-only SQLite variants skipped; investigation event audit target tenant/case composite constraints and audit filtering tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -160,12 +161,12 @@
     "Connecting quarantine to tenant metadata is deferred until filesystem/database reconciliation, storage and ACL trust, crash recovery, malware scanning and authenticated custody are designed; no API or production evidence storage exists.",
     "Investigation report is a bounded JSON summary, not snapshot-consistent, comprehensive, tamper-resistant or proof of verified evidence; each section returns at most 50 items and explicit truncation flags.",
     "Report sections are independently bounded and queried; an evidence item may refer to an entity omitted from the entity section, and concurrent changes may produce mixed-time results.",
-    "Individual investigation event reads are audited against the case only; audit does not retain or FK-enforce the event ID, and historical event content is not tamper-resistant."
+    "Investigation event read audit targets are tenant/case/event constrained but old audit records are not backfilled; the foreign key may prevent event deletion and history remains mutable."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Add tenant/case/event-scoped audit targets for investigation event detail if retention policy permits",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n \"target_note_id\\|class InvestigationEvent\" apps/api/app/models.py apps/api/app/audit.py apps/api/app/protected_api.py && ls apps/api/migrations/versions",
-  "next_implementation_step": "Inspect investigation note audit target migration and event schema; add event-target composite FK and audit filter/index with backward-compatible migration, ensure case/tenant matching, audit rollback and migrated SQLite/PostgreSQL tests; document retention constraints and historical null targets."
+  "next_recommended_task": "Strengthen investigation event audit filtering cursor and migration preservation coverage",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/migrations/versions/0035_audit_event_target.py && grep -n -A55 \"def audit_events\" apps/api/app/protected_api.py",
+  "next_implementation_step": "Add migrated SQLite/PostgreSQL tests for 101 event-targeted audit rows, tenant/filter-scoped cursor anchors and migration 0035 preservation/downgrade with historical null targets; run full suite and synthetic restore."
 }
