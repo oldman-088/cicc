@@ -111,7 +111,8 @@
     "API 303 passed, 33 PostgreSQL-only SQLite variants skipped; bounded investigation report tests cover viewer access, foreign tenant denial, 50-note truncation, unverified labels and atomic audit on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "API 305 passed, 33 SQLite PostgreSQL-only variants skipped; report tests cover entity/evidence 51-item truncation and unverified hash labels on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "API 307 passed, 33 PostgreSQL-only SQLite variants skipped; investigation event detail viewer access, cross-case/tenant denial and case-targeted audit failure tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
-    "API 309 passed, 33 PostgreSQL-only SQLite variants skipped; investigation event audit target tenant/case composite constraints and audit filtering tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed"
+    "API 309 passed, 33 PostgreSQL-only SQLite variants skipped; investigation event audit target tenant/case composite constraints and audit filtering tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed",
+    "API 312 passed, 33 PostgreSQL-only SQLite variants skipped; event-target audit filter cursor scope and tied 101-item traversal tested on migrated SQLite/PostgreSQL, legacy audit preservation/downgrade tested on SQLite; synthetic restore and parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -166,7 +167,7 @@
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Strengthen investigation event audit filtering cursor and migration preservation coverage",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/migrations/versions/0035_audit_event_target.py && grep -n -A55 \"def audit_events\" apps/api/app/protected_api.py",
-  "next_implementation_step": "Add migrated SQLite/PostgreSQL tests for 101 event-targeted audit rows, tenant/filter-scoped cursor anchors and migration 0035 preservation/downgrade with historical null targets; run full suite and synthetic restore."
+  "next_recommended_task": "Extend synthetic PostgreSQL restore drill to cover case-event targeted audit data and restored tenant/case/event constraint",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat scripts/test_restore.py",
+  "next_implementation_step": "Add synthetic investigation event and targeted security audit data to scripts/test_restore.py; verify restored data, target and rejection of a cross-case or cross-tenant event; run restore and document non-production limitations."
 }

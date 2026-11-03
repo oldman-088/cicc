@@ -523,3 +523,6 @@
 ## 2026-11-03 case-event audit target
 - Migration 0035 adds tenant/case/event-scoped audit target and index; individual event detail now records the exact event ID atomically. Admin audit accepts an `investigation_event_id` filter and uses existing filter-scoped cursor semantics. Existing audit rows have null event targets (no backfill); the FK may prevent event deletion. Audit/history remain mutable and are not tamper-resistant.
 - Migrated SQLite/PostgreSQL tests cover filtered read, cross-tenant/wrong-case/missing-case FK rejection, detail access and audit rollback. API 309 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed. Further filtered cursor and preservation tests remain.
+
+## 2026-11-03 event audit cursor and migration preservation
+- Added migrated SQLite/PostgreSQL tests for 101 tied event-targeted audit rows, tenant/filter scoped cursors and foreign/mismatched anchors; SQLite migration 0035 upgrade/downgrade preserves historical untargeted audit rows. API suite 312 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed. Pagination remains non-snapshot and existing audit targets are not backfilled.

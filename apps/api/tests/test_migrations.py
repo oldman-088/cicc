@@ -3265,3 +3265,56 @@ def test_investigation_event_audit_target_constraints(migration_db):
             db.add(SecurityAuditEvent(tenant_id=a,actor_id=actor_a,event_type='fixture',**kwargs))
             with pytest.raises(IntegrityError): db.flush()
             db.rollback()
+
+
+def test_investigation_event_audit_filter_cursor_scope(migration_db):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationEvent, SecurityAuditEvent
+    from app.protected_api import protected_router
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        token=issue_session(db,tenant,'admin','a safe long password')
+        c1=Investigation(tenant_id=tenant,created_by=actor,title='fixture a',description='fixture')
+        c2=Investigation(tenant_id=other,created_by=other_actor,title='fixture b',description='fixture')
+        db.add_all([c1,c2]); db.flush()
+        event=InvestigationEvent(tenant_id=tenant,investigation_id=c1.id,actor_id=actor,event_type='fixture',details={})
+        foreign=InvestigationEvent(tenant_id=other,investigation_id=c2.id,actor_id=other_actor,event_type='fixture',details={})
+        db.add_all([event,foreign]); db.flush()
+        now=datetime(2026,1,1,tzinfo=timezone.utc)
+        db.add_all([SecurityAuditEvent(tenant_id=tenant,actor_id=actor,target_investigation_id=c1.id,target_investigation_event_id=event.id,event_type='investigation_event_read',occurred_at=now) for _ in range(101)])
+        mismatch=SecurityAuditEvent(tenant_id=tenant,actor_id=actor,event_type='fixture',occurred_at=now)
+        outside=SecurityAuditEvent(tenant_id=other,actor_id=other_actor,target_investigation_id=c2.id,target_investigation_event_id=foreign.id,event_type='investigation_event_read',occurred_at=now)
+        db.add_all([mismatch,outside]); db.flush(); eid,foreign_id,mismatch_id,outside_id=event.id,foreign.id,mismatch.id,outside.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    with TestClient(app,base_url='https://testserver') as client:
+        path='/api/v1/secure/audit'; headers={'Authorization':'Bearer '+token}; filters={'investigation_event_id':str(eid),'event_type':'investigation_event_read'}
+        assert client.get(path,headers=headers,params={'investigation_event_id':str(foreign_id)}).json()['items']==[]
+        assert client.get(path,headers=headers,params={**filters,'before':str(mismatch_id)}).status_code==404
+        assert client.get(path,headers=headers,params={**filters,'before':str(outside_id)}).status_code==404
+        first=client.get(path,headers=headers,params=filters).json()
+        second=client.get(path,headers=headers,params={**filters,'before':first['next_cursor']}).json()
+        rows=first['items']+second['items']
+        assert len(rows)==101 and len({row['id'] for row in rows})==101 and second['next_cursor'] is None
+        assert all(row['target_investigation_event_id']==str(eid) for row in rows)
+
+
+def test_investigation_event_audit_revision_preserves_existing_rows(tmp_path, monkeypatch):
+    url=f'sqlite:///{tmp_path / "event-audit.db"}'
+    monkeypatch.setenv('DATABASE_URL',url)
+    config=Config(str(HERE/'alembic.ini')); command.upgrade(config,'0034_cisa_attempt_index')
+    engine=create_engine(url); tenant,audit=uuid4(),uuid4()
+    with engine.begin() as conn:
+        conn.exec_driver_sql('INSERT INTO tenants (id,name) VALUES (?,?)',(tenant.hex,'fixture'))
+        conn.exec_driver_sql('INSERT INTO security_audit_events (id,tenant_id,event_type,occurred_at) VALUES (?,?,?,?)',(audit.hex,tenant.hex,'fixture','2026-01-01 00:00:00'))
+    command.upgrade(config,'head')
+    with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type,target_investigation_event_id FROM security_audit_events').all()==[('fixture',None)]
+    command.downgrade(config,'0034_cisa_attempt_index')
+    with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type FROM security_audit_events').all()==[('fixture',)]
+    command.downgrade(config,'base'); engine.dispose()
