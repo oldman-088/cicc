@@ -977,6 +977,23 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 'next_cursor':str(events[99].id) if len(events) > 100 else None,
                 'notice':'History is not tamper-resistant; traversal is not a consistent snapshot.'}
 
+    @router.get('/investigations/{investigation_id}/events/{event_id}', dependencies=[Depends(require_tls)])
+    def get_investigation_event(investigation_id: UUID, event_id: UUID, token: str = Depends(bearer)):
+        with factory.begin() as db:
+            principal = authenticate_session_locked(db, token)
+            if principal is None:
+                raise HTTPException(status_code=401, detail='Authentication required', headers={'WWW-Authenticate':'Bearer', 'Cache-Control':'no-store'})
+            authorize(principal, principal.tenant_id, Permission.READ_INTELLIGENCE)
+            event = db.scalar(select(InvestigationEvent).where(InvestigationEvent.tenant_id == principal.tenant_id,
+                InvestigationEvent.investigation_id == investigation_id, InvestigationEvent.id == event_id))
+            if event is None:
+                raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
+            # Audit currently targets the investigation, not the individual event.
+            record_event(db, principal.tenant_id, AuditType.INVESTIGATION_EVENT_READ, principal.user_id, target_investigation_id=investigation_id)
+            return {'id':str(event.id), 'actor_id':str(event.actor_id), 'event_type':event.event_type,
+                'details':event.details, 'occurred_at':event.occurred_at.isoformat(),
+                'notice':'History is not tamper-resistant; recorded assertions may be unverified.'}
+
     @router.get('/audit', dependencies=[Depends(require_tls)])
     def audit_events(before: UUID | None = None, investigation_id: UUID | None = None, entity_id: UUID | None = None, evidence_id: UUID | None = None, user_id: UUID | None = None, event_type: AuditType | None = None, token: str = Depends(bearer)):
         with factory.begin() as db:

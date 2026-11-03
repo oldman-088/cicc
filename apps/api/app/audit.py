@@ -54,6 +54,7 @@ class AuditType(str, Enum):
     INVESTIGATION_CREATED = 'investigation_created'
     INVESTIGATION_READ = 'investigation_read'
     INVESTIGATION_REPORT_READ = 'investigation_report_read'
+    INVESTIGATION_EVENT_READ = 'investigation_event_read'
     INVESTIGATION_UPDATED = 'investigation_updated'
     INVESTIGATION_ASSIGNED = 'investigation_assigned'
     INVESTIGATION_NOTE_CREATED = 'investigation_note_created'

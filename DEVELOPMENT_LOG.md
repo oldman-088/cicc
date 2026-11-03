@@ -515,3 +515,7 @@
 
 ## 2026-11-03 report section bounds
 - Added migrated SQLite/PostgreSQL tests with 51 linked entities and evidence references; each report section is capped at 50 and marked truncated, with supplied hashes explicitly unverified. Sections are independent and an evidence link can reference an entity omitted from the bounded entity section; report queries are not a snapshot. API 305 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed.
+
+## 2026-11-03 investigation event detail
+- Added default-off `GET /api/v1/secure/investigations/{case}/events/{event}` with authenticated reader permission, tenant/case scoping, 404 for foreign and wrong-case IDs, no-store and atomic case-targeted audit. History remains unverified and not tamper-resistant; the audit records the case but does not yet retain the individual event ID.
+- Migrated SQLite/PostgreSQL tests cover viewer access, isolation and audit failure; API 307 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning. Synthetic PostgreSQL restore and schema parity passed.

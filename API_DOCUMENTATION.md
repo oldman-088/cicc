@@ -119,3 +119,5 @@ From `apps/api`, an operator can run `python -m app.connectors.nvd_cli CVE-YYYY-
 `GET /api/v1/secure/investigations/{id}/report` returns an audited, tenant-scoped JSON analytical summary for authorized readers. Each of the linked-entity, evidence-reference and note sections is capped at 50 items with an explicit truncation flag; use the corresponding paginated case endpoints to traverse more. Results may reflect concurrent changes and are not a consistent snapshot or complete history. Associations, notes, references and supplied hashes are unverified; this is not a custody or tamper-resistant report.
 
 Report sections are independently bounded: an evidence item can refer to an entity not present in the entity section. Use the case link endpoints to retrieve further data; concurrent modifications can yield mixed-time results.
+
+`GET /api/v1/secure/investigations/{case_id}/events/{event_id}` returns one case-scoped history event to authorized readers and records a case-targeted transactional audit event. It does not record the individual event ID in audit. History is not tamper-resistant and recorded assertions can be unverified.

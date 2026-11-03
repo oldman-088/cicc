@@ -82,3 +82,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-02 partial: CISA admin attempt history with tenant/filter-scoped cursor, transactional audit and index (migration 0034), tested on migrated SQLite/PostgreSQL using synthetic attempts; no live health or snapshot consistency implied.
 
 - P1-04 partial reporting: bounded tenant-scoped JSON investigation summary with targeted transactional audit, explicit truncation and unverified-data/snapshot disclaimers; migrated SQLite/PostgreSQL synthetic tests. Full reporting, export, UI and verified chain of custody remain incomplete.
+
+- P1-04 partial case-event detail: tenant/case-scoped read with transactional case-targeted audit, migrated SQLite/PostgreSQL tests; individual event target and tamper resistance remain missing.
