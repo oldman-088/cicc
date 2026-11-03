@@ -122,7 +122,8 @@
     "API 324 passed, 34 PostgreSQL-only SQLite variants skipped; relationship-target audit integrity, subject/object access, cross-tenant and wrong-endpoint rejection, filtered cursor pagination, historical SQLite migration preservation and synthetic restored constraints passed; schema parity passed",
     "API 326 passed, 34 PostgreSQL-only SQLite variants skipped; relationship kind filtering, subject/object and filter-scoped cursors, RBAC and audit rollback tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed",
     "API 328 passed, 34 PostgreSQL-only SQLite variants skipped; relationship direction + kind filtering and scoped cursors, 101-item pagination and audit rollback tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed",
-    "API 330 passed, 34 PostgreSQL-only SQLite variants skipped; provenance event-type filtering, viewer access, scoped pagination and audit failure tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed"
+    "API 330 passed, 34 PostgreSQL-only SQLite variants skipped; provenance event-type filtering, viewer access, scoped pagination and audit failure tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed",
+    "API 335 passed, 34 PostgreSQL-only SQLite variants skipped; provenance event detail, scoped audit FK, audit cursor and historical SQLite migration preservation tested on migrated SQLite/PostgreSQL; synthetic PostgreSQL restore checks provenance target and entity constraint; schema parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -179,12 +180,13 @@
     "This session checkout was restored at c6ef133 with an untracked workspace exactly matching historical 30d5327; fetched remote descendant 5af2b1f and fast-forwarded without losing workspace changes.",
     "Relationship kind-filter pagination is not a consistent snapshot; filters accept supported current kinds, and production-scale OR-query/index performance is unmeasured.",
     "Relationship direction/kind pagination is not a snapshot; filters are exact and cursor anchors must continue matching; query performance at production scale is unmeasured.",
-    "Provenance event-type filter is exact, pagination is not snapshot-consistent, and production-scale index performance is unmeasured; earlier provenance remains incomplete and assertions unverified."
+    "Provenance event-type filter is exact, pagination is not snapshot-consistent, and production-scale index performance is unmeasured; earlier provenance remains incomplete and assertions unverified.",
+    "Provenance detail audit FK can prevent deleting provenance events; older audit events lack provenance targets, audit remains mutable and event assertions remain unverified."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace matched 30d5327 and was fast-forwarded to remote 5af2b1f before current changes",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Add tenant/entity-scoped provenance event detail with atomic targeted audit if database integrity and retention are enforceable",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && sed -n \"150,180p\" apps/api/app/models.py && cat apps/api/migrations/versions/0035_audit_event_target.py && grep -n -A30 \"def list_provenance\" apps/api/app/protected_api.py",
-  "next_implementation_step": "Inspect provenance schema and investigation event audit migration. Add provenance-event-scoped FK and targeted audit filter with historical null targets, detail endpoint, SQLite/PostgreSQL isolation and rollback tests; document deletion restrictions and lack of tamper resistance."
+  "next_recommended_task": "Extend provenance audit targeting to creation paths where source event IDs are available, without falsely targeting incomplete older events",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -R -n \"ProvenanceEvent(\" apps/api/app && cat apps/api/app/audit.py",
+  "next_implementation_step": "Inspect all ProvenanceEvent creation sites and their transactional audit ordering; add tenant/entity/provenance targets only where exactly one newly inserted event maps to a corresponding audit event. Test rollback, tenant scoping, old rows and PostgreSQL/SQLite migration parity; otherwise document ambiguity."
 }

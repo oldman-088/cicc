@@ -137,3 +137,5 @@ Admin audit accepts `relationship_id` to filter relationship-targeted events. Hi
 The relationship list also accepts `direction=subject` or `direction=object`, optionally combined with `kind`. Without direction it returns both. An `after` anchor must match all active filters and the requested tenant/entity; traversal is not snapshot-consistent.
 
 `GET /api/v1/secure/entities/{entity_id}/provenance` optionally accepts exact `event_type` (1–64 lowercase letters, digits or underscores, starting with a letter). `after` must identify an event in the same tenant/entity matching the filter. Unknown valid types return no items; provenance is incomplete, mutable and not a consistent snapshot.
+
+`GET /api/v1/secure/entities/{entity_id}/provenance/{provenance_id}` returns one tenant/entity-scoped event to an authorized reader and transactionally audits the exact event. Admin audit accepts `provenance_id`; prior records are not backfilled. The FK may prevent provenance deletion; provenance assertions are unverified, history incomplete and audit not tamper-resistant.

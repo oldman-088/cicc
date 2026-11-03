@@ -26,7 +26,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / 'apps/api'
 sys.path.insert(0, str(API))
-from app.models import Tenant, User, Entity, Investigation, InvestigationEvent, InvestigationEntityLink, NvdCatalogRecord, SecurityAuditEvent, Relationship
+from app.models import Tenant, User, Entity, Investigation, InvestigationEvent, InvestigationEntityLink, NvdCatalogRecord, SecurityAuditEvent, Relationship, ProvenanceEvent
 
 
 def main():
@@ -45,7 +45,7 @@ def main():
             engine = create_engine(source_db)
             try:
                 factory = sessionmaker(engine, expire_on_commit=False)
-                tenant_id, actor_id, entity_id, case_id, event_id, audit_id, other_entity_id, relation_id, relation_audit_id = (uuid4() for _ in range(9))
+                tenant_id, actor_id, entity_id, case_id, event_id, audit_id, other_entity_id, relation_id, relation_audit_id, provenance_id, provenance_audit_id = (uuid4() for _ in range(11))
                 with factory.begin() as db:
                     db.add(Tenant(id=tenant_id, name='synthetic restore tenant')); db.flush()
                     db.add(User(id=actor_id, tenant_id=tenant_id, username='fixture', role='admin', active=True, password_hash='synthetic-invalid-hash')); db.flush()
@@ -54,6 +54,8 @@ def main():
                     db.add(Investigation(id=case_id, tenant_id=tenant_id, created_by=actor_id, title='synthetic case', description='synthetic only')); db.flush()
                     db.add(InvestigationEntityLink(tenant_id=tenant_id, investigation_id=case_id, entity_id=entity_id, created_by=actor_id))
                     db.add(InvestigationEvent(id=event_id, tenant_id=tenant_id, investigation_id=case_id, actor_id=actor_id, event_type='fixture', details={'synthetic':True})); db.flush()
+                    db.add(ProvenanceEvent(id=provenance_id,tenant_id=tenant_id,entity_id=entity_id,actor_id=actor_id,event_type='fixture',details={'synthetic':True})); db.flush()
+                    db.add(SecurityAuditEvent(id=provenance_audit_id,tenant_id=tenant_id,actor_id=actor_id,event_type='provenance_event_read',target_entity_id=entity_id,target_provenance_id=provenance_id))
                     db.add(Relationship(id=relation_id,tenant_id=tenant_id,subject_id=entity_id,object_id=other_entity_id,kind='RELATED_TO',source='fixture')); db.flush()
                     db.add(SecurityAuditEvent(id=relation_audit_id,tenant_id=tenant_id,actor_id=actor_id,event_type='relationship_read',target_entity_id=other_entity_id,target_relationship_id=relation_id,relationship_subject_id=entity_id,relationship_object_id=other_entity_id))
                     db.add(SecurityAuditEvent(id=audit_id, tenant_id=tenant_id, actor_id=actor_id, event_type='investigation_event_read', target_investigation_id=case_id, target_investigation_event_id=event_id))
@@ -75,6 +77,9 @@ def main():
                     assert db.scalar(select(InvestigationEvent).where(InvestigationEvent.investigation_id == case_id)).details == {'synthetic':True}
                     audit = db.get(SecurityAuditEvent, audit_id)
                     assert audit.tenant_id == tenant_id and audit.target_investigation_id == case_id and audit.target_investigation_event_id == event_id
+                    provenance_audit = db.get(SecurityAuditEvent, provenance_audit_id)
+                    assert provenance_audit.target_entity_id == entity_id and provenance_audit.target_provenance_id == provenance_id
+                    assert db.get(ProvenanceEvent, provenance_id).details == {'synthetic':True}
                     relation_audit = db.get(SecurityAuditEvent, relation_audit_id)
                     assert relation_audit.target_relationship_id == relation_id and relation_audit.target_entity_id == other_entity_id
                     assert relation_audit.relationship_subject_id == entity_id and relation_audit.relationship_object_id == other_entity_id
@@ -104,6 +109,16 @@ def main():
                         db.rollback()
                     else:
                         raise AssertionError('Restored audit event constraint did not reject mismatched case')
+                # Provenance audit targets must match the referenced event's entity.
+                with factory.begin() as db:
+                    db.add(SecurityAuditEvent(tenant_id=tenant_id,actor_id=actor_id,event_type='fixture',
+                        target_entity_id=other_entity_id,target_provenance_id=provenance_id))
+                    try:
+                        db.flush()
+                    except IntegrityError:
+                        db.rollback()
+                    else:
+                        raise AssertionError('Restored provenance audit constraint did not reject mismatched entity')
                 # Audit targets must use an actual endpoint of the referenced relationship.
                 with factory.begin() as db:
                     unrelated = Entity(id=uuid4(),tenant_id=tenant_id,kind='indicator',title='unrelated',source='fixture'); db.add(unrelated); db.flush()

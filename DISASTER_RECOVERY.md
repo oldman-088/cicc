@@ -19,3 +19,5 @@ The synthetic drill also checks an NVD observation's data and timestamps plus th
 The synthetic drill checks a case-event audit target after restore and rejects an audit target referencing an event from the wrong case. This does not establish production recovery capability or immutable audit.
 
 The synthetic drill also verifies a relationship-targeted audit record and rejects an unrelated endpoint after restore; this is not a production recovery validation.
+
+The synthetic drill also checks provenance-targeted audit and rejection of a mismatched entity after restore; this remains a disposable synthetic drill, not production backup verification.

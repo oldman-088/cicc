@@ -3753,3 +3753,108 @@ def test_provenance_event_type_filter_and_cursor_scope(migration_db,monkeypatch)
     with factory() as db:
         events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant,SecurityAuditEvent.event_type=='provenance_read')))
         assert len(events)==3 and all(event.target_entity_id==xid for event in events)
+
+
+def test_provenance_detail_scope_targeted_audit_and_fk(migration_db,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import ProvenanceEvent, SecurityAuditEvent
+    from app.security import Role
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        admin=issue_session(db,tenant,'admin','a safe long password')
+        foreign=issue_session(db,other,'admin','a safe long password')
+    accounts.create_user(factory,admin_token=admin,username='viewer',password='a safe long password',role=Role.VIEWER)
+    with factory.begin() as db:
+        viewer=issue_session(db,tenant,'viewer','a safe long password')
+        x=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='x',source='fixture')
+        y=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='y',source='fixture')
+        f=Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='f',source='fixture')
+        db.add_all([x,y,f]); db.flush(); xid,yid,fid=x.id,y.id,f.id
+        item=ProvenanceEvent(tenant_id=tenant,entity_id=xid,actor_id=actor,event_type='fixture_event',details={'synthetic':True})
+        foreign_item=ProvenanceEvent(tenant_id=other,entity_id=fid,actor_id=other_actor,event_type='fixture_event',details={'synthetic':True})
+        db.add_all([item,foreign_item]); db.flush(); pid,fpid=item.id,foreign_item.id
+    app=FastAPI(); app.include_router(protected_api.protected_router(factory,b'x'*32))
+    h=lambda t:{'Authorization':'Bearer '+t}; path=f'/api/v1/secure/entities/{xid}/provenance/{pid}'
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        assert client.get(path).status_code==401
+        assert client.get(path,headers=h(foreign)).status_code==404
+        assert client.get(f'/api/v1/secure/entities/{yid}/provenance/{pid}',headers=h(viewer)).status_code==404
+        assert client.get(f'/api/v1/secure/entities/{xid}/provenance/{fpid}',headers=h(viewer)).status_code==404
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.get(path,headers=h(viewer)).status_code==500
+        result=client.get(path,headers=h(viewer))
+        assert result.status_code==200 and result.headers['cache-control']=='no-store'
+        assert result.json()['details']=={'synthetic':True} and 'unverified' in result.json()['notice']
+        audit=client.get('/api/v1/secure/audit',headers=h(admin),params={'provenance_id':str(pid)}).json()['items']
+        assert len(audit)==1 and audit[0]['target_entity_id']==str(xid) and audit[0]['target_provenance_id']==str(pid)
+        assert client.get('/api/v1/secure/audit',headers=h(foreign),params={'provenance_id':str(pid)}).json()['items']==[]
+    for eid,pvid in [(None,pid),(yid,pid),(xid,fpid)]:
+        with factory() as db:
+            db.add(SecurityAuditEvent(tenant_id=tenant,actor_id=actor,event_type='fixture',target_entity_id=eid,target_provenance_id=pvid))
+            with pytest.raises(IntegrityError): db.flush()
+            db.rollback()
+    with factory() as db:
+        db.delete(db.get(ProvenanceEvent,pid))
+        with pytest.raises(IntegrityError): db.flush()
+        db.rollback()
+
+
+def test_provenance_target_audit_filter_cursor_scope(migration_db):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import ProvenanceEvent, SecurityAuditEvent
+    from app.protected_api import protected_router
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        token=issue_session(db,tenant,'admin','a safe long password')
+        x=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='x',source='fixture')
+        f=Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='f',source='fixture')
+        db.add_all([x,f]); db.flush(); xid,fid=x.id,f.id
+        event=ProvenanceEvent(tenant_id=tenant,entity_id=xid,actor_id=actor,event_type='fixture',details={})
+        foreign=ProvenanceEvent(tenant_id=other,entity_id=fid,actor_id=other_actor,event_type='fixture',details={})
+        db.add_all([event,foreign]); db.flush(); pid,fpid=event.id,foreign.id
+        now=datetime(2026,1,1,tzinfo=timezone.utc)
+        db.add_all([SecurityAuditEvent(tenant_id=tenant,actor_id=actor,event_type='provenance_event_read',occurred_at=now,target_entity_id=xid,target_provenance_id=pid) for _ in range(101)])
+        mismatch=SecurityAuditEvent(tenant_id=tenant,actor_id=actor,event_type='provenance_read',occurred_at=now,target_entity_id=xid)
+        foreign_audit=SecurityAuditEvent(tenant_id=other,actor_id=other_actor,event_type='provenance_event_read',occurred_at=now,target_entity_id=fid,target_provenance_id=fpid)
+        db.add_all([mismatch,foreign_audit]); db.flush(); mid,fid= mismatch.id,foreign_audit.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    h={'Authorization':'Bearer '+token}; path='/api/v1/secure/audit'; filters={'provenance_id':str(pid),'event_type':'provenance_event_read'}
+    with TestClient(app,base_url='https://testserver') as client:
+        for anchor in (mid,fid,uuid4()):
+            assert client.get(path,headers=h,params={**filters,'before':str(anchor)}).status_code==404
+        first=client.get(path,headers=h,params=filters).json()
+        second=client.get(path,headers=h,params={**filters,'before':first['next_cursor']}).json()
+        items=first['items']+second['items']
+        assert len(items)==101 and len({i['id'] for i in items})==101 and second['next_cursor'] is None
+        assert all(i['target_provenance_id']==str(pid) for i in items)
+
+
+def test_provenance_audit_revision_preserves_historical_rows(tmp_path,monkeypatch):
+    url=f'sqlite:///{tmp_path / "provenance-audit.db"}'
+    monkeypatch.setenv('DATABASE_URL',url)
+    config=Config(str(HERE/'alembic.ini')); command.upgrade(config,'0040_provenance_type_index')
+    engine=create_engine(url); tenant,audit=uuid4(),uuid4()
+    with engine.begin() as conn:
+        conn.exec_driver_sql('INSERT INTO tenants (id,name) VALUES (?,?)',(tenant.hex,'fixture'))
+        conn.exec_driver_sql('INSERT INTO security_audit_events (id,tenant_id,event_type,occurred_at) VALUES (?,?,?,?)',(audit.hex,tenant.hex,'fixture','2026-01-01 00:00:00'))
+    command.upgrade(config,'head')
+    with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type,target_provenance_id FROM security_audit_events').all()==[('fixture',None)]
+    command.downgrade(config,'0040_provenance_type_index')
+    with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type FROM security_audit_events').all()==[('fixture',)]
+    command.downgrade(config,'base'); engine.dispose()

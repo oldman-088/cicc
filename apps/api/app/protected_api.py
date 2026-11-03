@@ -439,6 +439,24 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                     'next_cursor': str(events[99].id) if len(events) > 100 else None,
                     'notice': 'History covers supported operations after provenance tracking was introduced; earlier history may be missing.'}
 
+    @router.get('/entities/{entity_id}/provenance/{provenance_id}', dependencies=[Depends(require_tls)])
+    def get_provenance_event(entity_id: UUID, provenance_id: UUID, token: str = Depends(bearer)):
+        with factory.begin() as db:
+            principal = authenticate_session_locked(db, token)
+            if principal is None:
+                raise HTTPException(status_code=401, detail='Authentication required', headers={'WWW-Authenticate':'Bearer', 'Cache-Control':'no-store'})
+            authorize(principal, principal.tenant_id, Permission.READ_INTELLIGENCE)
+            item = db.scalar(select(ProvenanceEvent).where(ProvenanceEvent.tenant_id == principal.tenant_id,
+                ProvenanceEvent.entity_id == entity_id, ProvenanceEvent.id == provenance_id))
+            if item is None:
+                raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
+            record_event(db, principal.tenant_id, AuditType.PROVENANCE_EVENT_READ, principal.user_id,
+                         target_entity_id=entity_id, target_provenance_id=item.id)
+            return {'id':str(item.id), 'event_type':item.event_type, 'actor_id':str(item.actor_id),
+                    'evidence_id':str(item.evidence_id) if item.evidence_id else None,
+                    'details':item.details, 'occurred_at':item.occurred_at.isoformat(),
+                    'notice':'Provenance history may be incomplete, is not tamper-resistant, and recorded assertions are unverified.'}
+
     @router.post('/relationships', status_code=201, dependencies=[Depends(require_tls)])
     def create_relationship(payload: RelationshipInput, token: str = Depends(bearer)):
         with factory.begin() as db:
@@ -1025,7 +1043,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 'notice':'History is not tamper-resistant; recorded assertions may be unverified.'}
 
     @router.get('/audit', dependencies=[Depends(require_tls)])
-    def audit_events(before: UUID | None = None, investigation_id: UUID | None = None, investigation_event_id: UUID | None = None, entity_id: UUID | None = None, relationship_id: UUID | None = None, evidence_id: UUID | None = None, user_id: UUID | None = None, event_type: AuditType | None = None, token: str = Depends(bearer)):
+    def audit_events(before: UUID | None = None, investigation_id: UUID | None = None, investigation_event_id: UUID | None = None, entity_id: UUID | None = None, relationship_id: UUID | None = None, provenance_id: UUID | None = None, evidence_id: UUID | None = None, user_id: UUID | None = None, event_type: AuditType | None = None, token: str = Depends(bearer)):
         with factory.begin() as db:
             principal = authenticate_session_locked(db, token)
             if principal is None:
@@ -1040,6 +1058,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             if user_id is not None: query = query.where(SecurityAuditEvent.target_user_id == user_id)
             if entity_id is not None: query = query.where(SecurityAuditEvent.target_entity_id == entity_id)
             if relationship_id is not None: query = query.where(SecurityAuditEvent.target_relationship_id == relationship_id)
+            if provenance_id is not None: query = query.where(SecurityAuditEvent.target_provenance_id == provenance_id)
             if evidence_id is not None: query = query.where(SecurityAuditEvent.target_evidence_id == evidence_id)
             if event_type is not None: query = query.where(SecurityAuditEvent.event_type == event_type.value)
             if before is not None:
@@ -1055,6 +1074,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                                'target_user_id': str(e.target_user_id) if e.target_user_id else None,
                                'target_entity_id': str(e.target_entity_id) if e.target_entity_id else None,
                                'target_relationship_id': str(e.target_relationship_id) if e.target_relationship_id else None,
+                               'target_provenance_id': str(e.target_provenance_id) if e.target_provenance_id else None,
                                'target_evidence_id': str(e.target_evidence_id) if e.target_evidence_id else None,
                                'target_investigation_id': str(e.target_investigation_id) if e.target_investigation_id else None,
                                'target_note_id': str(e.target_note_id) if e.target_note_id else None,

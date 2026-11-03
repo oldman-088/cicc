@@ -61,3 +61,5 @@
 - Relationship direction/kind filtering and cursor traversal are not snapshot-consistent; current supporting index performance at production scale is unmeasured.
 
 - Provenance event-type filtering and pagination are not snapshot-consistent; earlier history is incomplete, assertions unverified and index performance is unmeasured at production scale.
+
+- Provenance-target audit FK may prevent deleting provenance events; historical audit rows have null targets, retention is unresolved and recorded history and audit remain mutable/unverified.
