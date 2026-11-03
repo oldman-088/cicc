@@ -53,3 +53,5 @@ The demo stylesheet no longer imports third-party hosted fonts; it uses system f
 - Experimental secure-prefix body guard also rejects forwarded Content-Length plus Transfer-Encoding; this is defense in depth only and cannot resolve upstream HTTP parser discrepancies. Trusted proxy framing, request-size limits and real TLS remain unverified.
 
 Experimental local quarantine staging and SHA-256 utilities are standalone and synthetic-tested only. They do not implement tenant isolation, trusted custody, malware scanning, encryption, crash cleanup or upload APIs and must not be used for real evidence. Directory ancestor trust, ACLs and same-UID threats require deployment-specific design and review.
+
+2026-11-03: pip check passed; pip-audit `--disable-pip --no-deps` reported no known vulnerabilities for runtime and dev lock entries, and npm audit reported zero findings. These time-dependent advisory checks do not assess code, configuration, or separately installed optional test/audit tools.

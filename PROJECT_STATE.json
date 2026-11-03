@@ -116,7 +116,8 @@
     "Synthetic disposable PostgreSQL restore checked case-event targeted audit data and verified restored composite constraint rejects a wrong-case event; this is not production recovery verification",
     "API 313 passed, 34 PostgreSQL-only SQLite variants skipped; forced PostgreSQL interleaving confirms documented mixed-time report behavior; deterministic fixed-window throttle test fixed; synthetic restore and parity passed",
     "API 315 passed, 34 PostgreSQL-only SQLite variants skipped; case history event_type exact filter, tenant/filter cursor scoping and tied 101-item traversal tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
-    "API 317 passed, 34 PostgreSQL-only SQLite variants skipped; case note author filter, tenant/filter cursor scope, 101 tied notes and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
+    "API 317 passed, 34 PostgreSQL-only SQLite variants skipped; case note author filter, tenant/filter cursor scope, 101 tied notes and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
+    "2026-11-03: pip check passed and pip-audit --disable-pip --no-deps reported no known vulnerabilities for pinned runtime and dev lock entries; npm ci/audit zero findings, web typecheck, 7 unit, build and 5 synthetic browser smoke tests passed. Audits are time-dependent, not security reviews."
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -173,7 +174,7 @@
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Continue independent security and maintenance: inspect dependency and audit status, and rerun available locked dependency vulnerability checks",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat .github/workflows/ci.yml",
-  "next_implementation_step": "Inspect CI dependency audit commands; if pip-audit is available run both Python lockfile audits and npm audit, record date and results without implying full security review; otherwise install only in ephemeral environment or document restriction."
+  "next_recommended_task": "Continue product functionality: expose authorized, scoped relationship detail with transactional audit",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A45 \"def list_relationships\" apps/api/app/protected_api.py && sed -n \"35,70p\" apps/api/app/models.py",
+  "next_implementation_step": "Inspect relationship listing and model constraints, implement GET entity-scoped relationship detail with tenant and subject/object scope, targeted audit and unverified-evidence notice; test viewer access, cross-tenant/parent mismatch, rollback on audit failure and SQLite/PostgreSQL migrations."
 }
