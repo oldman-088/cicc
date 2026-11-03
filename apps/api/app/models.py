@@ -319,6 +319,7 @@ class InvestigationNote(Base):
         ForeignKeyConstraint(['tenant_id','investigation_id'], ['investigations.tenant_id','investigations.id']),
         ForeignKeyConstraint(['tenant_id','author_id'], ['users.tenant_id','users.id']),
         Index('ix_investigation_notes_scope_time_id', 'tenant_id','investigation_id','created_at','id'),
+        Index('ix_investigation_notes_author_time_id', 'tenant_id','investigation_id','author_id','created_at','id'),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False)

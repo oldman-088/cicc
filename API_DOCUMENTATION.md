@@ -125,3 +125,5 @@ Report sections are independently bounded: an evidence item can refer to an enti
 Admin audit supports `investigation_event_id` to filter events with a matching targeted case-history event; older untargeted records are omitted. The composite FK can prevent history deletion; cursor traversal is not a snapshot.
 
 `GET /api/v1/secure/investigations/{case_id}/events` optionally accepts an exact `event_type` consisting of lowercase letters, digits and underscores, starting with a letter (1–64 characters). An `after` cursor must belong to the same tenant/case and match the active filter. Unknown valid types return no items; traversal is not a snapshot.
+
+`GET /api/v1/secure/investigations/{case_id}/notes` optionally accepts `author_id` (UUID). `after` must identify a note in the same tenant/case matching the filter. Unknown or foreign authors return an empty list; traversal is not a snapshot, and query strings may be logged by intermediaries.

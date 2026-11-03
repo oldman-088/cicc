@@ -912,7 +912,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             return {'id':str(note.id), 'status':'analyst_entered_unverified'}
 
     @router.get('/investigations/{investigation_id}/notes', dependencies=[Depends(require_tls)])
-    def list_investigation_notes(investigation_id: UUID, after: UUID | None = None, token: str = Depends(bearer)):
+    def list_investigation_notes(investigation_id: UUID, after: UUID | None = None, author_id: UUID | None = None, token: str = Depends(bearer)):
         with factory.begin() as db:
             principal = authenticate_session_locked(db, token)
             if principal is None:
@@ -922,9 +922,9 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
             query = select(InvestigationNote).where(InvestigationNote.tenant_id == principal.tenant_id,
                 InvestigationNote.investigation_id == investigation_id)
+            if author_id is not None: query = query.where(InvestigationNote.author_id == author_id)
             if after is not None:
-                anchor = db.scalar(select(InvestigationNote).where(InvestigationNote.tenant_id == principal.tenant_id,
-                    InvestigationNote.investigation_id == investigation_id, InvestigationNote.id == after))
+                anchor = db.scalar(query.where(InvestigationNote.id == after))
                 if anchor is None:
                     raise HTTPException(status_code=404, detail='Cursor not found', headers={'Cache-Control':'no-store'})
                 query = query.where(or_(InvestigationNote.created_at > anchor.created_at,

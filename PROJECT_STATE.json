@@ -115,7 +115,8 @@
     "API 312 passed, 33 PostgreSQL-only SQLite variants skipped; event-target audit filter cursor scope and tied 101-item traversal tested on migrated SQLite/PostgreSQL, legacy audit preservation/downgrade tested on SQLite; synthetic restore and parity passed",
     "Synthetic disposable PostgreSQL restore checked case-event targeted audit data and verified restored composite constraint rejects a wrong-case event; this is not production recovery verification",
     "API 313 passed, 34 PostgreSQL-only SQLite variants skipped; forced PostgreSQL interleaving confirms documented mixed-time report behavior; deterministic fixed-window throttle test fixed; synthetic restore and parity passed",
-    "API 315 passed, 34 PostgreSQL-only SQLite variants skipped; case history event_type exact filter, tenant/filter cursor scoping and tied 101-item traversal tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
+    "API 315 passed, 34 PostgreSQL-only SQLite variants skipped; case history event_type exact filter, tenant/filter cursor scoping and tied 101-item traversal tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
+    "API 317 passed, 34 PostgreSQL-only SQLite variants skipped; case note author filter, tenant/filter cursor scope, 101 tied notes and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -166,12 +167,13 @@
     "Investigation report is a bounded JSON summary, not snapshot-consistent, comprehensive, tamper-resistant or proof of verified evidence; each section returns at most 50 items and explicit truncation flags.",
     "Report sections are independently bounded and queried; an evidence item may refer to an entity omitted from the entity section, and concurrent changes may produce mixed-time results.",
     "Investigation event read audit targets are tenant/case/event constrained but old audit records are not backfilled; the foreign key may prevent event deletion and history remains mutable.",
-    "Investigation history event-type filtering is exact and cursor traversal is not a snapshot; production-scale query performance is unmeasured despite the supporting index."
+    "Investigation history event-type filtering is exact and cursor traversal is not a snapshot; production-scale query performance is unmeasured despite the supporting index.",
+    "Case note author filtering is not snapshot-consistent; author identifiers in query strings can appear in intermediary logs and production-scale query performance is unmeasured."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Continue independent investigation usability and security work: add authorized case-note author filtering with scoped cursors",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A40 \"def list_investigation_notes\" apps/api/app/protected_api.py",
-  "next_implementation_step": "Inspect case note listing and note schema; add optional exact author_id filter with tenant/case/filter-scoped cursor and supporting index, then test RBAC, ties, foreign/filter-mismatched anchors and audit rollback on migrated SQLite/PostgreSQL."
+  "next_recommended_task": "Continue independent security and maintenance: inspect dependency and audit status, and rerun available locked dependency vulnerability checks",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat .github/workflows/ci.yml",
+  "next_implementation_step": "Inspect CI dependency audit commands; if pip-audit is available run both Python lockfile audits and npm audit, record date and results without implying full security review; otherwise install only in ephemeral environment or document restriction."
 }

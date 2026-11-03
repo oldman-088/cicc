@@ -3400,3 +3400,49 @@ def test_investigation_history_type_filter_and_cursor_scope(migration_db):
         assert len(rows)==101 and len({r['id'] for r in rows})==101 and second['next_cursor'] is None
         assert all(r['event_type']=='note_added' for r in rows)
         assert client.get(path,headers=h,params={'event_type':'unknown'}).json()['items']==[]
+
+
+def test_investigation_notes_author_filter_scope_pagination_and_audit(migration_db, monkeypatch):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationNote, SecurityAuditEvent
+    from app.security import Role
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db: admin=issue_session(db,tenant,'admin','a safe long password')
+    viewer_id=accounts.create_user(factory,admin_token=admin,username='viewer',password='a safe long password',role=Role.VIEWER)
+    with factory.begin() as db:
+        viewer=issue_session(db,tenant,'viewer','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='a',description='fixture')
+        foreign=Investigation(tenant_id=other,created_by=other_actor,title='b',description='fixture')
+        db.add_all([case,foreign]); db.flush(); now=datetime(2026,1,1,tzinfo=timezone.utc)
+        db.add_all([InvestigationNote(tenant_id=tenant,investigation_id=case.id,author_id=actor,body='fixture',created_at=now) for _ in range(101)])
+        mismatch=InvestigationNote(tenant_id=tenant,investigation_id=case.id,author_id=viewer_id,body='fixture',created_at=now)
+        outside=InvestigationNote(tenant_id=other,investigation_id=foreign.id,author_id=other_actor,body='fixture',created_at=now)
+        db.add_all([mismatch,outside]); db.flush(); cid,mid,oid=case.id,mismatch.id,outside.id
+    app=FastAPI(); app.include_router(protected_api.protected_router(factory,b'x'*32))
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        path=f'/api/v1/secure/investigations/{cid}/notes'; h={'Authorization':'Bearer '+viewer}; params={'author_id':str(actor)}
+        assert client.get(path).status_code==401
+        assert client.get(path,headers=h,params={'author_id':'not-a-uuid'}).status_code==422
+        assert client.get(path,headers=h,params={'author_id':str(other_actor)}).json()['items']==[]
+        assert client.get(path,headers=h,params={**params,'after':str(mid)}).status_code==404
+        assert client.get(path,headers=h,params={**params,'after':str(oid)}).status_code==404
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.get(path,headers=h,params=params).status_code==500
+        first=client.get(path,headers=h,params=params).json()
+        second=client.get(path,headers=h,params={**params,'after':first['next_cursor']}).json()
+        rows=first['items']+second['items']
+        assert len(rows)==101 and len({r['id'] for r in rows})==101 and second['next_cursor'] is None
+        assert all(r['author_id']==str(actor) and r['status']=='analyst_entered_unverified' for r in rows)
+    with factory() as db:
+        events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='investigation_read',SecurityAuditEvent.target_investigation_id==cid)))
+        assert len(events)==3

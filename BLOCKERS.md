@@ -49,3 +49,5 @@
 - Investigation event detail audit has a tenant/case/event FK target; older audit records are not backfilled and the FK may prevent event deletion. Case history remains mutable and not tamper-resistant.
 
 - Case history event-type filtering uses a supporting index but production-scale performance is unmeasured; cursor pagination is not a snapshot.
+
+- Case note author filtering is not snapshot-consistent; author identifiers in query strings may be logged and supporting index performance at scale is unmeasured.

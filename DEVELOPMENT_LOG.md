@@ -537,3 +537,7 @@
 ## 2026-11-03 investigation history event-type filtering
 - Added optional bounded exact `event_type` filter to case history with tenant/case/filter-scoped cursor validation and migration 0036 index. Unknown syntactically valid types return an empty list; traversal is not snapshot-consistent.
 - Migrated SQLite/PostgreSQL tests cover validation, filter/cross-tenant cursors and 101 tied events. API 315 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed. No production-scale performance claims.
+
+## 2026-11-03 case note author filter
+- Added optional author UUID filter to case notes with tenant/case/filter-scoped cursor validation and migration 0037 index. Authorized readers can see analyst assertions, not verified facts; the list remains non-snapshot. Query identifiers may be logged by intermediaries and production-scale index performance is unmeasured.
+- Migrated SQLite/PostgreSQL tests cover viewer access, invalid/foreign author filters, mismatched cursors, 101 tied notes and audit failure. API 317 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and parity passed.
