@@ -3365,3 +3365,38 @@ def test_postgres_report_discloses_mixed_time_reads(migration_db):
             assert 'not a consistent snapshot' in response.json()['notice']
     finally:
         event.remove(engine,'after_cursor_execute',observe)
+
+
+def test_investigation_history_type_filter_and_cursor_scope(migration_db):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationEvent
+    from app.protected_api import protected_router
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        token=issue_session(db,tenant,'admin','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='a',description='fixture')
+        foreign=Investigation(tenant_id=other,created_by=other_actor,title='b',description='fixture')
+        db.add_all([case,foreign]); db.flush(); now=datetime(2026,1,1,tzinfo=timezone.utc)
+        db.add_all([InvestigationEvent(tenant_id=tenant,investigation_id=case.id,actor_id=actor,event_type='note_added',details={'synthetic':True},occurred_at=now) for _ in range(101)])
+        different=InvestigationEvent(tenant_id=tenant,investigation_id=case.id,actor_id=actor,event_type='created',details={},occurred_at=now)
+        outside=InvestigationEvent(tenant_id=other,investigation_id=foreign.id,actor_id=other_actor,event_type='note_added',details={},occurred_at=now)
+        db.add_all([different,outside]); db.flush(); cid,did,oid=case.id,different.id,outside.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    with TestClient(app,base_url='https://testserver') as client:
+        path=f'/api/v1/secure/investigations/{cid}/events'; h={'Authorization':'Bearer '+token}; params={'event_type':'note_added'}
+        assert client.get(path,headers=h,params={'event_type':'invalid%'}).status_code==422
+        assert client.get(path,headers=h,params={**params,'after':str(did)}).status_code==404
+        assert client.get(path,headers=h,params={**params,'after':str(oid)}).status_code==404
+        first=client.get(path,headers=h,params=params).json()
+        second=client.get(path,headers=h,params={**params,'after':first['next_cursor']}).json()
+        rows=first['items']+second['items']
+        assert len(rows)==101 and len({r['id'] for r in rows})==101 and second['next_cursor'] is None
+        assert all(r['event_type']=='note_added' for r in rows)
+        assert client.get(path,headers=h,params={'event_type':'unknown'}).json()['items']==[]

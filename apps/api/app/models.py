@@ -266,6 +266,7 @@ class InvestigationEvent(Base):
         ForeignKeyConstraint(['tenant_id', 'investigation_id'], ['investigations.tenant_id', 'investigations.id']),
         ForeignKeyConstraint(['tenant_id', 'actor_id'], ['users.tenant_id', 'users.id']),
         Index('ix_investigation_events_scope_time_id', 'tenant_id', 'investigation_id', 'occurred_at', 'id'),
+        Index('ix_investigation_events_scope_type_time_id', 'tenant_id', 'investigation_id', 'event_type', 'occurred_at', 'id'),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False)

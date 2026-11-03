@@ -533,3 +533,7 @@
 ## 2026-11-03 report concurrency and throttle test stability
 - Forced PostgreSQL interleaving verifies a note committed after report generation starts can appear in the report, consistent with its explicit non-snapshot disclaimer. This demonstrates one interleaving, not comprehensive concurrency behavior. Initial test attempt blocked because inserted note referenced the same actor row locked by the report; using a separate same-tenant author made the interleaving deterministic.
 - Full suite initially also exposed another real-time fixed-window throttle test crossing a boundary; fixed its test-only rate-limit clock to a constant without changing production policy. Rerun: 313 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and parity passed.
+
+## 2026-11-03 investigation history event-type filtering
+- Added optional bounded exact `event_type` filter to case history with tenant/case/filter-scoped cursor validation and migration 0036 index. Unknown syntactically valid types return an empty list; traversal is not snapshot-consistent.
+- Migrated SQLite/PostgreSQL tests cover validation, filter/cross-tenant cursors and 101 tied events. API 315 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed. No production-scale performance claims.

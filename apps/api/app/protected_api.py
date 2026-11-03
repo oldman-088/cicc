@@ -954,7 +954,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 'notice':'Analyst assertion, not verified or tamper-resistant.'}
 
     @router.get('/investigations/{investigation_id}/events', dependencies=[Depends(require_tls)])
-    def list_investigation_events(investigation_id: UUID, after: UUID | None = None, token: str = Depends(bearer)):
+    def list_investigation_events(investigation_id: UUID, after: UUID | None = None, event_type: str | None = Query(default=None, min_length=1, max_length=64, pattern=r'^[a-z][a-z0-9_]*$'), token: str = Depends(bearer)):
         with factory.begin() as db:
             principal = authenticate_session_locked(db, token)
             if principal is None:
@@ -963,9 +963,9 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             if db.scalar(select(Investigation.id).where(Investigation.tenant_id == principal.tenant_id, Investigation.id == investigation_id)) is None:
                 raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
             query = select(InvestigationEvent).where(InvestigationEvent.tenant_id == principal.tenant_id, InvestigationEvent.investigation_id == investigation_id)
+            if event_type is not None: query = query.where(InvestigationEvent.event_type == event_type)
             if after is not None:
-                anchor = db.scalar(select(InvestigationEvent).where(InvestigationEvent.tenant_id == principal.tenant_id,
-                    InvestigationEvent.investigation_id == investigation_id, InvestigationEvent.id == after))
+                anchor = db.scalar(query.where(InvestigationEvent.id == after))
                 if anchor is None:
                     raise HTTPException(status_code=404, detail='Cursor not found', headers={'Cache-Control':'no-store'})
                 query = query.where(or_(InvestigationEvent.occurred_at > anchor.occurred_at,
