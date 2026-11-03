@@ -160,6 +160,7 @@ class ProvenanceEvent(Base):
     """Immutable through the API; database-level tamper protection is not implemented."""
     __tablename__ = 'provenance_events'
     __table_args__ = (
+        Index('ix_provenance_entity_type_time_id', 'tenant_id', 'entity_id', 'event_type', 'occurred_at', 'id'),
         Index('ix_provenance_tenant_entity_time_id', 'tenant_id', 'entity_id', 'occurred_at', 'id'),
         ForeignKeyConstraint(['tenant_id', 'entity_id'], ['intelligence_entities.tenant_id', 'intelligence_entities.id']),
         ForeignKeyConstraint(['tenant_id', 'actor_id'], ['users.tenant_id', 'users.id']),

@@ -3699,3 +3699,57 @@ def test_relationship_direction_and_kind_filters_scoped(migration_db,monkeypatch
     with factory() as db:
         events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='relationship_read',SecurityAuditEvent.tenant_id==tenant)))
         assert len(events)==4 and {e.target_entity_id for e in events}=={xid,yid}
+
+
+def test_provenance_event_type_filter_and_cursor_scope(migration_db,monkeypatch):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import ProvenanceEvent, SecurityAuditEvent
+    from app.security import Role
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        admin=issue_session(db,tenant,'admin','a safe long password')
+        foreign=issue_session(db,other,'admin','a safe long password')
+    accounts.create_user(factory,admin_token=admin,username='viewer',password='a safe long password',role=Role.VIEWER)
+    with factory.begin() as db:
+        viewer=issue_session(db,tenant,'viewer','a safe long password')
+        x=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='x',source='fixture')
+        y=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='y',source='fixture')
+        f=Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='f',source='fixture')
+        db.add_all([x,y,f]); db.flush(); xid,yid,fid=x.id,y.id,f.id
+        now=datetime(2026,1,1,tzinfo=timezone.utc)
+        rows=[ProvenanceEvent(tenant_id=tenant,entity_id=xid,actor_id=actor,event_type='fixture_event',details={'synthetic':True},occurred_at=now) for _ in range(101)]
+        mismatch=ProvenanceEvent(tenant_id=tenant,entity_id=xid,actor_id=actor,event_type='another_event',details={},occurred_at=now)
+        other_entity=ProvenanceEvent(tenant_id=tenant,entity_id=yid,actor_id=actor,event_type='fixture_event',details={},occurred_at=now)
+        foreign_event=ProvenanceEvent(tenant_id=other,entity_id=fid,actor_id=other_actor,event_type='fixture_event',details={},occurred_at=now)
+        db.add_all([*rows,mismatch,other_entity,foreign_event]); db.flush(); mid,oid,fvid=mismatch.id,other_entity.id,foreign_event.id
+    app=FastAPI(); app.include_router(protected_api.protected_router(factory,b'x'*32))
+    h=lambda t:{'Authorization':'Bearer '+t}; path=f'/api/v1/secure/entities/{xid}/provenance'
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        assert client.get(path).status_code==401
+        assert client.get(path,headers=h(foreign),params={'event_type':'fixture_event'}).status_code==404
+        for invalid in ('UPPER', 'bad-type', 'a'*65):
+            assert client.get(path,headers=h(viewer),params={'event_type':invalid}).status_code==422
+        filters={'event_type':'fixture_event'}
+        for anchor in (mid,oid,fvid,uuid4()):
+            assert client.get(path,headers=h(viewer),params={**filters,'after':str(anchor)}).status_code==404
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.get(path,headers=h(viewer),params=filters).status_code==500
+        first=client.get(path,headers=h(viewer),params=filters).json()
+        second=client.get(path,headers=h(viewer),params={**filters,'after':first['next_cursor']}).json()
+        items=first['items']+second['items']
+        assert len(items)==101 and len({item['id'] for item in items})==101 and second['next_cursor'] is None
+        assert all(item['event_type']=='fixture_event' and item['details']=={'synthetic':True} for item in items)
+        assert client.get(path,headers=h(viewer),params={'event_type':'not_known'}).json()['items']==[]
+    with factory() as db:
+        events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant,SecurityAuditEvent.event_type=='provenance_read')))
+        assert len(events)==3 and all(event.target_entity_id==xid for event in events)

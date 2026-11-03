@@ -135,3 +135,5 @@ Admin audit accepts `relationship_id` to filter relationship-targeted events. Hi
 `GET /api/v1/secure/entities/{entity_id}/relationships` accepts an optional supported `kind` filter. `after` must identify a relationship in the same tenant involving that entity and matching the kind; otherwise 404. Without the filter, historical kinds remain visible. The list is not a consistent snapshot; OR-query/index performance at production scale is unmeasured.
 
 The relationship list also accepts `direction=subject` or `direction=object`, optionally combined with `kind`. Without direction it returns both. An `after` anchor must match all active filters and the requested tenant/entity; traversal is not snapshot-consistent.
+
+`GET /api/v1/secure/entities/{entity_id}/provenance` optionally accepts exact `event_type` (1–64 lowercase letters, digits or underscores, starting with a letter). `after` must identify an event in the same tenant/entity matching the filter. Unknown valid types return no items; provenance is incomplete, mutable and not a consistent snapshot.

@@ -90,3 +90,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-01/P2-01 partial: relationship list kind filtering and endpoint/kind-scoped cursor, audited and tested on SQLite/PostgreSQL, migration 0039 indexes; no snapshot or production-scale performance guarantee.
 
 - P1-01/P2-01 partial: relationship subject/object direction filtering composable with kind, scoped keyset anchors and audit; synthetic migrated SQLite/PostgreSQL tests, no snapshot guarantee.
+
+- P1-01/P2-01 partial: entity provenance type filtering and tenant/entity/filter-scoped cursor with atomic read audit, migration 0040 index and migrated SQLite/PostgreSQL tests; no snapshot or tamper-resistance.

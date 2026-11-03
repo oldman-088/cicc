@@ -413,7 +413,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 'notice':'This is an analyst-entered reference; no file or hash has been verified.'}
 
     @router.get('/entities/{entity_id}/provenance', dependencies=[Depends(require_tls)])
-    def list_provenance(entity_id: UUID, after: UUID | None = None, token: str = Depends(bearer)):
+    def list_provenance(entity_id: UUID, after: UUID | None = None, event_type: str | None = Query(default=None, min_length=1, max_length=64, pattern=r'^[a-z][a-z0-9_]*$'), token: str = Depends(bearer)):
         with factory.begin() as db:
             principal = authenticate_session_locked(db, token)
             if principal is None:
@@ -423,9 +423,9 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             if entity is None:
                 raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
             query = select(ProvenanceEvent).where(ProvenanceEvent.tenant_id == principal.tenant_id, ProvenanceEvent.entity_id == entity.id)
+            if event_type is not None: query = query.where(ProvenanceEvent.event_type == event_type)
             if after is not None:
-                anchor = db.scalar(select(ProvenanceEvent).where(ProvenanceEvent.tenant_id == principal.tenant_id,
-                    ProvenanceEvent.entity_id == entity.id, ProvenanceEvent.id == after))
+                anchor = db.scalar(query.where(ProvenanceEvent.id == after))
                 if anchor is None:
                     raise HTTPException(status_code=404, detail='Cursor not found', headers={'Cache-Control':'no-store'})
                 query = query.where(or_(ProvenanceEvent.occurred_at > anchor.occurred_at,

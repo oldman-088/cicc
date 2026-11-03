@@ -562,3 +562,7 @@
 ## 2026-11-03 directional relationship traversal
 - Experimental relationship list accepts optional `direction=subject|object`, combinable with `kind`. Anchors must match the tenant, requested endpoint and all active filters; omitting direction retains both sides. Existing traversal indexes apply; pagination is not a snapshot and production-scale performance is not measured.
 - Migrated SQLite/PostgreSQL synthetic tests verify 101 ties, both directions, combined filters, foreign/wrong-direction/wrong-kind anchors and audit rollback. API suite 328 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; schema parity and disposable synthetic restore passed.
+
+## 2026-11-03 provenance event-type filtering
+- Added optional bounded exact `event_type` filter to entity provenance history, with tenant/entity/filter-scoped cursor validation and migration 0040 index. Unknown syntactically valid values return an empty list; older provenance may be missing, assertions are unverified, history is mutable and traversal is not a snapshot. Production-scale index performance is unmeasured.
+- Migrated SQLite/PostgreSQL tests cover viewer authorization, wrong entity/tenant/filter cursors, validation, 101 tied events and audit rollback. API 330 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; schema parity and synthetic restore passed.
