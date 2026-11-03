@@ -40,3 +40,6 @@
 - Local quarantine staging is a synthetic-tested standalone primitive only; no tenant authorization, metadata binding, malware scanning, API, durable or immutable custody, encryption, retention, ACL verification or crash reconciliation. It trusts configured ancestor paths and processes under the same UID; blocking I/O has no hard deadline. Do not use it for real evidence.
 
 - Quarantine inspection detects selected metadata changes during bounded digest comparison, but cannot prove an atomic snapshot, authenticity, ACL safety, immutability or protection from same-UID/hostile-filesystem changes. No tenant metadata, audit binding, scanning, retention or API exists.
+
+- Tenant-bound quarantine integration is deferred pending filesystem/database reconciliation, crash recovery, storage/ACL trust, malware scanning and authenticated custody. Existing primitives cannot safely be represented as verified evidence or exposed as a production upload flow.
+- CISA attempt history is not snapshot-consistent; changing statuses can invalidate filtered cursors, and filtered production-scale performance is unmeasured.

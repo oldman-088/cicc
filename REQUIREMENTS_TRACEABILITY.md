@@ -78,3 +78,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-04 partial: bounded local quarantine staging with generated names, no-clobber publication and best-effort cleanup (`evidence_quarantine.py`), synthetic-only tests. No upload API, tenant binding, scanning, immutable or verified chain of custody.
 
 - P1-04 partial: standalone quarantine reinspection by opaque ID rejects unsafe file types, links and permissions and compares a bounded digest; synthetic tests only, no authenticated evidence lifecycle or immutable custody.
+
+- P1-02 partial: CISA admin attempt history with tenant/filter-scoped cursor, transactional audit and index (migration 0034), tested on migrated SQLite/PostgreSQL using synthetic attempts; no live health or snapshot consistency implied.

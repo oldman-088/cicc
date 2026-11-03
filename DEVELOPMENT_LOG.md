@@ -503,3 +503,8 @@
 ## 2026-11-03 quarantine object inspection primitive
 - Added standalone bounded inspection by generated opaque ID, directory-relative no-follow/nonblocking open, private owned regular single-link file checks, SHA-256 comparison and before/after metadata checks. Synthetic tests cover mismatch, invalid IDs, unsafe symlinks/hardlinks/directories/FIFOs, permissions, size and selected concurrent mutation. This is not an atomic content snapshot, authenticity proof, ACL validation, tenant-bound custody or protection from same-UID/hostile-filesystem tampering; bytes can change later. No API or live evidence used.
 - API suite 299 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic PostgreSQL restore and schema parity passed.
+
+## 2026-11-03 CISA attempt history; evidence integration deferred
+- Added admin-only audited `GET /api/v1/secure/sources/cisa-kev/attempts`, status filtering, tenant/filter-scoped cursor and bounded descending time/UUID traversal, plus migration 0034 index. Tests on migrated SQLite/PostgreSQL cover RBAC, foreign/filter-mismatched cursors, 101 tied results, UTC output and audit rollback. Traversal is not a snapshot and does not indicate live health.
+- Tenant-bound quarantine integration remains deferred: filesystem and database transactions need explicit reconciliation/crash recovery, trusted storage and ACL policy, scanning and custody design. Do not expose uploads or label evidence verified based on digest comparison. Selected independent CISA history work instead.
+- API 301 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic PostgreSQL restore and schema parity passed. No live CISA fetch.

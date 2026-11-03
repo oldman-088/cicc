@@ -13,7 +13,7 @@
     "P0-05 request size guard and CI configured; CI not executed on GitHub",
     "P1-01 manual entity and evidence reference create/list/update; full lifecycle missing",
     "P2-01 limited provenance and analyst-authored relationships",
-    "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI; NVD single-CVE adapter, internal tenant-scoped importer, manual sync coordinator/CLI, protected observation read and admin status/abandon/attempt-history APIs tested with fixtures",
+    "P1-02 CISA KEV adapter, import, admin status/recovery/attempt history and manual CLI tested with fixtures; no live verification, start-sync API or UI; NVD single-CVE adapter, internal tenant-scoped importer, manual sync coordinator/CLI, protected observation read and admin status/abandon/attempt-history APIs tested with fixtures",
     "P1-05 partial EN/AR/FA selected demo labels and exact-match synthetic fixture text, preference and scoped RTL; remaining translations, RTL layout implemented but browser accessibility verification missing",
     "P1-04 experimental cases, versioned details/status/assignment and history; verified evidence lifecycle, reporting and UI missing; bounded digest comparison and experimental local quarantine staging/inspection primitives tested with synthetic data, not connected to APIs"
   ],
@@ -106,7 +106,8 @@
     "API 286 passed, 33 PostgreSQL-only SQLite variants skipped; bounded evidence stream SHA-256 comparison unit-tested for matching, mismatch, limits and read errors; synthetic restore and parity passed",
     "Web revalidation after NVD and evidence changes: typecheck, 7 unit tests, production build, 5 synthetic Chromium/proxy smoke tests and npm audit (0 findings) passed; not an accessibility or production deployment assessment.",
     "API 295 passed, 33 PostgreSQL-only SQLite variants skipped; synthetic local quarantine staging tests include no-clobber collisions, symlink and permission rejection, size bounds, short writes, and error cleanup; schema parity and synthetic restore passed",
-    "API 299 passed, 33 PostgreSQL-only SQLite variants skipped; standalone quarantine inspection tested for digest mismatch, unsafe symlinks/hardlinks/directories/FIFOs, permissions, size and selected concurrent mutation; schema parity and synthetic restore passed"
+    "API 299 passed, 33 PostgreSQL-only SQLite variants skipped; standalone quarantine inspection tested for digest mismatch, unsafe symlinks/hardlinks/directories/FIFOs, permissions, size and selected concurrent mutation; schema parity and synthetic restore passed",
+    "API 301 passed, 33 PostgreSQL-only SQLite variants skipped; CISA attempt history RBAC, scoped filter cursors, ties and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -152,12 +153,13 @@
     "Evidence digest comparison primitive only compares bytes read to a caller-supplied digest; no upload/storage/quarantine, authenticity, chain of custody, scanning or ongoing integrity verification is implemented. Blocking reads have no hard deadline.",
     "Experimental local quarantine staging is not tenant-integrated, immutable, scanned, API-exposed or production ready. It trusts configured ancestor paths and same-UID processes, does not inspect ACLs, and cannot guarantee cleanup after crashes or filesystem errors; blocking I/O has no deadline.",
     "New session restored workspace at c6ef133 with project files untracked; fetched active remote branch and fast-forwarded local Git metadata with a mixed reset, preserving workspace content; status clean before new work.",
-    "Quarantine inspection compares bytes against a supplied digest and detects selected metadata changes only; it cannot prove authenticity, atomic snapshot or protection against same-UID tampering, ACLs, hostile filesystems or later modifications."
+    "Quarantine inspection compares bytes against a supplied digest and detects selected metadata changes only; it cannot prove authenticity, atomic snapshot or protection against same-UID tampering, ACLs, hostile filesystems or later modifications.",
+    "Connecting quarantine to tenant metadata is deferred until filesystem/database reconciliation, storage and ACL trust, crash recovery, malware scanning and authenticated custody are designed; no API or production evidence storage exists."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Evaluate and implement narrowly scoped tenant-bound metadata for quarantined evidence with transactional authorization and audit, without exposing uploads",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/evidence_quarantine.py && sed -n \"120,160p\" apps/api/app/models.py && cat SECURITY_STATUS.md",
-  "next_implementation_step": "Inspect evidence/reference and investigation tenant FKs and audit patterns; design lifecycle and reconcile local filesystem/DB transaction failure before integration. If safe atomic custody cannot be assured, document the blocker and continue independent work instead of claiming verified evidence."
+  "next_recommended_task": "Continue independent investigation functionality: inspect case history and reporting requirements, and implement a bounded tenant-authorized read-only case report with explicit unverified provenance",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n \"investigation\\|provenance\" apps/api/app/protected_api.py | tail -90",
+  "next_implementation_step": "Inspect investigation read/list/history endpoints and audit patterns; implement a tenant-scoped bounded report or export that clearly labels analyst assertions/unverified evidence, with authorization, audit rollback and SQLite/PostgreSQL tests; do not claim verified chain of custody."
 }

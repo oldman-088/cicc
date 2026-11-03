@@ -223,6 +223,7 @@ class CisaSyncAttempt(Base):
     __table_args__ = (
         ForeignKeyConstraint(['tenant_id', 'actor_id'], ['users.tenant_id', 'users.id']),
         CheckConstraint("status IN ('running', 'succeeded', 'failed', 'abandoned')", name='ck_cisa_sync_status'),
+        Index('ix_cisa_sync_tenant_started_id', 'tenant_id', 'started_at', 'id'),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False, index=True)

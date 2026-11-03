@@ -21,9 +21,15 @@ from .login_service import LoginStatus, login, logout
 from .connectors.cisa_sync import abandon_sync, get_status
 from .connectors.nvd_sync import abandon_sync as abandon_nvd_sync, get_status as get_nvd_status
 from .connectors.nvd_cve import _cve_id
-from .models import NvdCatalogRecord, NvdSyncAttempt, Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, User, AuthSession
+from .models import CisaSyncAttempt, NvdCatalogRecord, NvdSyncAttempt, Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, User, AuthSession
 from .security import Permission, Role, authorize
 from .sessions import authenticate_session, authenticate_session_locked, _digest
+
+class CisaAttemptStatus(str, Enum):
+    RUNNING = 'running'
+    SUCCEEDED = 'succeeded'
+    FAILED = 'failed'
+    ABANDONED = 'abandoned'
 
 class NvdAttemptStatus(str, Enum):
     RUNNING = 'running'
@@ -1064,6 +1070,34 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
         if not abandoned:
             raise HTTPException(status_code=404, detail='Active attempt not found', headers={'Cache-Control':'no-store'})
         return {'status':'abandoned', 'notice':'The worker may still run, but its result cannot be imported.'}
+
+    @router.get('/sources/cisa-kev/attempts', dependencies=[Depends(require_tls)])
+    def cisa_attempts(before: UUID | None = None, status: CisaAttemptStatus | None = None, token: str = Depends(bearer)):
+        with factory.begin() as db:
+            principal = authenticate_session_locked(db, token)
+            if principal is None:
+                raise HTTPException(status_code=401, detail='Authentication required', headers={'WWW-Authenticate':'Bearer', 'Cache-Control':'no-store'})
+            try:
+                authorize(principal, principal.tenant_id, Permission.MANAGE_USERS)
+            except PermissionError:
+                raise HTTPException(status_code=403, detail='Access denied', headers={'Cache-Control':'no-store'}) from None
+            query = select(CisaSyncAttempt).where(CisaSyncAttempt.tenant_id == principal.tenant_id)
+            if status is not None: query = query.where(CisaSyncAttempt.status == status.value)
+            if before is not None:
+                anchor = db.scalar(query.where(CisaSyncAttempt.id == before))
+                if anchor is None:
+                    raise HTTPException(status_code=404, detail='Cursor not found', headers={'Cache-Control':'no-store'})
+                query = query.where(or_(CisaSyncAttempt.started_at < anchor.started_at,
+                    and_(CisaSyncAttempt.started_at == anchor.started_at, CisaSyncAttempt.id < anchor.id)))
+            attempts = list(db.scalars(query.order_by(CisaSyncAttempt.started_at.desc(), CisaSyncAttempt.id.desc()).limit(101)))
+            record_event(db, principal.tenant_id, AuditType.CISA_ATTEMPTS_READ, principal.user_id)
+            def utc_iso(value):
+                return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)).isoformat()
+            return {'items': [{'id': str(x.id), 'actor_id': str(x.actor_id), 'status': x.status,
+                'started_at': utc_iso(x.started_at), 'finished_at': utc_iso(x.finished_at) if x.finished_at else None,
+                'error_code': x.error_code} for x in attempts[:100]], 'limit': 100,
+                'next_cursor': str(attempts[99].id) if len(attempts) > 100 else None,
+                'notice': 'Attempt history is not a consistent snapshot or evidence of live source health.'}
 
     @router.get('/sources/cisa-kev/status', dependencies=[Depends(require_tls)])
     def cisa_status(token: str = Depends(bearer)):

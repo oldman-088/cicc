@@ -49,6 +49,7 @@ class AuditType(str, Enum):
     CISA_SYNC_FAILED = 'cisa_sync_failed'
     CISA_SYNC_ABANDONED = 'cisa_sync_abandoned'
     CISA_STATUS_READ = 'cisa_status_read'
+    CISA_ATTEMPTS_READ = 'cisa_attempts_read'
     AUDIT_READ = 'audit_read'
     INVESTIGATION_CREATED = 'investigation_created'
     INVESTIGATION_READ = 'investigation_read'
