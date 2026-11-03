@@ -65,3 +65,5 @@
 - Provenance-target audit FK may prevent deleting provenance events; historical audit rows have null targets, retention is unresolved and recorded history and audit remain mutable/unverified.
 
 - Provenance-targeted write audits cover manual entity/evidence/relationship changes and changed NVD records, not unchanged NVD imports or bulk CISA snapshot imports; historical audit rows remain untargeted.
+
+- Investigation text export is bounded JSON-shaped text, not a complete or immutable evidentiary report. Data copied outside the server cannot be access-controlled or revoked by CICC.

@@ -9,13 +9,14 @@ from datetime import datetime, timezone
 from enum import Enum
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from .audit import AuditType, record_event
+from .report_export import render_text, ReportTooLarge
 from .accounts import create_user, change_role, disable_user, revoke_user_sessions, change_own_password, PasswordChangeThrottled
 from .login_service import LoginStatus, login, logout
 from .connectors.cisa_sync import abandon_sync, get_status
@@ -89,6 +90,11 @@ class RelationshipKind(str, Enum):
     DEPENDS_ON = 'DEPENDS_ON'
     BELONGS_TO = 'BELONGS_TO'
     RELATED_TO = 'RELATED_TO'
+
+class ReportFormat(str, Enum):
+    JSON = 'json'
+    TEXT = 'text'
+
 
 class RelationshipDirection(str, Enum):
     SUBJECT = 'subject'
@@ -608,7 +614,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             return {**investigation_output(*row), 'notice':'Eligibility reflects this query only; case history is not tamper-resistant.'}
 
     @router.get('/investigations/{investigation_id}/report', dependencies=[Depends(require_tls)])
-    def investigation_report(investigation_id: UUID, token: str = Depends(bearer)):
+    def investigation_report(investigation_id: UUID, format: ReportFormat = ReportFormat.JSON, token: str = Depends(bearer)):
         """Bounded analytical summary, not an evidentiary or consistent snapshot."""
         with factory.begin() as db:
             principal = authenticate_session_locked(db, token)
@@ -631,8 +637,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 .order_by(InvestigationEvidenceLink.id).limit(51)))
             notes = list(db.scalars(select(InvestigationNote).where(InvestigationNote.tenant_id == principal.tenant_id,
                 InvestigationNote.investigation_id == investigation_id).order_by(InvestigationNote.created_at, InvestigationNote.id).limit(51)))
-            record_event(db, principal.tenant_id, AuditType.INVESTIGATION_REPORT_READ, principal.user_id, target_investigation_id=investigation_id)
-            return {'generated_at':datetime.now(timezone.utc).isoformat(), 'investigation':investigation_output(*row),
+            report = {'generated_at':datetime.now(timezone.utc).isoformat(), 'investigation':investigation_output(*row),
                 'entities':{'items':[{'link_id':str(link.id), 'entity':entity_output(entity),
                     'association_status':'analyst_association_unverified'} for link,entity in entity_rows[:50]], 'truncated':len(entity_rows)>50},
                 'evidence':{'items':[{'link_id':str(link.id), 'entity_id':str(link.entity_id), 'evidence_id':str(evidence.id),
@@ -643,6 +648,15 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                     'created_at':note.created_at.isoformat(), 'status':'analyst_entered_unverified'} for note in notes[:50]],
                     'truncated':len(notes)>50},
                 'notice':'Bounded report is not a consistent snapshot, complete history, verified evidence, chain of custody, or tamper-resistant record. Associations and notes are analyst assertions; supplied hashes are not verified.'}
+            if format == ReportFormat.TEXT:
+                try:
+                    text = render_text(report)
+                except ReportTooLarge:
+                    raise HTTPException(status_code=413, detail='Report export exceeds size limit', headers={'Cache-Control':'no-store'}) from None
+                record_event(db, principal.tenant_id, AuditType.INVESTIGATION_REPORT_EXPORTED, principal.user_id, target_investigation_id=investigation_id)
+                return PlainTextResponse(text, headers={'Content-Disposition':f'attachment; filename="investigation-{investigation_id}.txt"', 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'})
+            record_event(db, principal.tenant_id, AuditType.INVESTIGATION_REPORT_READ, principal.user_id, target_investigation_id=investigation_id)
+            return report
 
     @router.patch('/investigations/{investigation_id}', dependencies=[Depends(require_tls)])
     def update_investigation(investigation_id: UUID, payload: InvestigationUpdateInput, token: str = Depends(bearer)):

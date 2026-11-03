@@ -124,7 +124,8 @@
     "API 328 passed, 34 PostgreSQL-only SQLite variants skipped; relationship direction + kind filtering and scoped cursors, 101-item pagination and audit rollback tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed",
     "API 330 passed, 34 PostgreSQL-only SQLite variants skipped; provenance event-type filtering, viewer access, scoped pagination and audit failure tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed",
     "API 335 passed, 34 PostgreSQL-only SQLite variants skipped; provenance event detail, scoped audit FK, audit cursor and historical SQLite migration preservation tested on migrated SQLite/PostgreSQL; synthetic PostgreSQL restore checks provenance target and entity constraint; schema parity passed",
-    "API 339 passed, 34 PostgreSQL-only SQLite variants skipped; manual entity create/update, evidence reference, relationship and changed NVD import audit targets match newly created provenance, with rollback and unchanged-import tests on migrated SQLite/PostgreSQL; parity and synthetic restore passed"
+    "API 339 passed, 34 PostgreSQL-only SQLite variants skipped; manual entity create/update, evidence reference, relationship and changed NVD import audit targets match newly created provenance, with rollback and unchanged-import tests on migrated SQLite/PostgreSQL; parity and synthetic restore passed",
+    "API 343 passed, 34 PostgreSQL-only SQLite variants skipped; bounded investigation plain-text export, escape handling, viewer/tenant scope, truncation, audit rollback and export limit tested on SQLite/PostgreSQL; schema parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -183,12 +184,13 @@
     "Relationship direction/kind pagination is not a snapshot; filters are exact and cursor anchors must continue matching; query performance at production scale is unmeasured.",
     "Provenance event-type filter is exact, pagination is not snapshot-consistent, and production-scale index performance is unmeasured; earlier provenance remains incomplete and assertions unverified.",
     "Provenance detail audit FK can prevent deleting provenance events; older audit events lack provenance targets, audit remains mutable and event assertions remain unverified.",
-    "Only manual writes and NVD changed-record audit events target corresponding provenance; unchanged NVD imports and bulk CISA catalog import do not target an individual provenance event. Historical audit events remain untargeted."
+    "Only manual writes and NVD changed-record audit events target corresponding provenance; unchanged NVD imports and bulk CISA catalog import do not target an individual provenance event. Historical audit events remain untargeted.",
+    "Investigation text export is JSON-shaped ASCII, bounded to 4 MiB and 50 items per section; it is not a complete report, consistent snapshot, verified evidence or chain of custody. Export/download copies remain outside server access control."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace matched 30d5327 and was fast-forwarded to remote 5af2b1f before current changes",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Improve authorized investigation report usability through a bounded plain-text export without claiming verified evidence or snapshot consistency",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A100 \"def investigation_report\" apps/api/app/protected_api.py && grep -n -i report apps/api/tests/test_migrations.py",
-  "next_implementation_step": "Inspect investigation report implementation and tests; design safe tenant-scoped text export that escapes control characters, limits output, preserves truncation/disclaimers and audits transactionally; test injection, RBAC and isolation. Avoid external renderer dependencies."
+  "next_recommended_task": "Review and strengthen evidence quarantine lifecycle, focusing on safe cleanup of orphaned staging files without touching unrelated or active objects",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/evidence_quarantine.py && cat apps/api/tests/test_evidence_quarantine.py",
+  "next_implementation_step": "Inspect evidence_quarantine.py and tests. Design an explicit operator-only, bounded cleanup primitive with strict opaque filename validation, no-follow file inspection, age threshold and safe concurrency limitations; implement only if deletion safety is enforceable, otherwise document and select an independent task."
 }
