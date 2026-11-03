@@ -67,3 +67,5 @@
 - Provenance-targeted write audits cover manual entity/evidence/relationship changes and changed NVD records, not unchanged NVD imports or bulk CISA snapshot imports; historical audit rows remain untargeted.
 
 - Investigation text export is bounded JSON-shaped text, not a complete or immutable evidentiary report. Data copied outside the server cannot be access-controlled or revoked by CICC.
+
+- Automatic quarantine orphan cleanup is deferred: age alone cannot distinguish stale files from active slow writers because staging lacks a lock/lease; interrupted hard-link publication and database/filesystem reconciliation need a safe design. Do not expose deletion or uploads before solving these limits.
