@@ -3160,3 +3160,35 @@ def test_investigation_report_scoped_bounded_and_audited(migration_db, monkeypat
     with factory() as db:
         events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='investigation_report_read')))
         assert len(events)==1 and events[0].tenant_id==tenant and events[0].target_investigation_id==case_id
+
+
+def test_investigation_report_truncates_entity_and_evidence_sections(migration_db):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationEntityLink, InvestigationEvidenceLink, EvidenceReference
+    from app.protected_api import protected_router
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        token=issue_session(db,tenant,'admin','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='synthetic case',description='fixture'); db.add(case); db.flush()
+        for i in range(51):
+            entity=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title=f'synthetic {i}',source='fixture')
+            db.add(entity); db.flush()
+            db.add(InvestigationEntityLink(tenant_id=tenant,investigation_id=case.id,entity_id=entity.id,created_by=actor)); db.flush()
+            evidence=EvidenceReference(tenant_id=tenant,entity_id=entity.id,created_by=actor,description=f'fixture {i}',source='fixture',sha256='0'*64)
+            db.add(evidence); db.flush()
+            db.add(InvestigationEvidenceLink(tenant_id=tenant,investigation_id=case.id,entity_id=entity.id,evidence_id=evidence.id,created_by=actor))
+        case_id=case.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    with TestClient(app,base_url='https://testserver') as client:
+        response=client.get(f'/api/v1/secure/investigations/{case_id}/report',headers={'Authorization':'Bearer '+token})
+        assert response.status_code == 200
+        result=response.json()
+        assert len(result['entities']['items'])==50 and result['entities']['truncated']
+        assert len(result['evidence']['items'])==50 and result['evidence']['truncated']
+        assert all(item['status']=='analyst_entered_unverified' and item['sha256']=='0'*64 for item in result['evidence']['items'])
+        assert not result['notes']['truncated'] and result['notes']['items']==[]

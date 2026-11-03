@@ -108,7 +108,8 @@
     "API 295 passed, 33 PostgreSQL-only SQLite variants skipped; synthetic local quarantine staging tests include no-clobber collisions, symlink and permission rejection, size bounds, short writes, and error cleanup; schema parity and synthetic restore passed",
     "API 299 passed, 33 PostgreSQL-only SQLite variants skipped; standalone quarantine inspection tested for digest mismatch, unsafe symlinks/hardlinks/directories/FIFOs, permissions, size and selected concurrent mutation; schema parity and synthetic restore passed",
     "API 301 passed, 33 PostgreSQL-only SQLite variants skipped; CISA attempt history RBAC, scoped filter cursors, ties and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
-    "API 303 passed, 33 PostgreSQL-only SQLite variants skipped; bounded investigation report tests cover viewer access, foreign tenant denial, 50-note truncation, unverified labels and atomic audit on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
+    "API 303 passed, 33 PostgreSQL-only SQLite variants skipped; bounded investigation report tests cover viewer access, foreign tenant denial, 50-note truncation, unverified labels and atomic audit on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
+    "API 305 passed, 33 SQLite PostgreSQL-only variants skipped; report tests cover entity/evidence 51-item truncation and unverified hash labels on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -156,12 +157,13 @@
     "New session restored workspace at c6ef133 with project files untracked; fetched active remote branch and fast-forwarded local Git metadata with a mixed reset, preserving workspace content; status clean before new work.",
     "Quarantine inspection compares bytes against a supplied digest and detects selected metadata changes only; it cannot prove authenticity, atomic snapshot or protection against same-UID tampering, ACLs, hostile filesystems or later modifications.",
     "Connecting quarantine to tenant metadata is deferred until filesystem/database reconciliation, storage and ACL trust, crash recovery, malware scanning and authenticated custody are designed; no API or production evidence storage exists.",
-    "Investigation report is a bounded JSON summary, not snapshot-consistent, comprehensive, tamper-resistant or proof of verified evidence; each section returns at most 50 items and explicit truncation flags."
+    "Investigation report is a bounded JSON summary, not snapshot-consistent, comprehensive, tamper-resistant or proof of verified evidence; each section returns at most 50 items and explicit truncation flags.",
+    "Report sections are independently bounded and queried; an evidence item may refer to an entity omitted from the entity section, and concurrent changes may produce mixed-time results."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Strengthen investigation report boundary coverage for entity and evidence section truncation and concurrent changes; continue remaining investigation/export requirements",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A40 \"def investigation_report\" apps/api/app/protected_api.py",
-  "next_implementation_step": "Add migrated SQLite/PostgreSQL report tests with 51 linked entities and evidence references; verify tenant joins, section truncation and no evidence hash verification claims, then assess concurrency and pagination needs."
+  "next_recommended_task": "Continue investigation usability with audited targeted read of an individual history event, scoped to tenant and investigation",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A35 \"def list_investigation_events\" apps/api/app/protected_api.py",
+  "next_implementation_step": "Inspect investigation event list and audit targeting; implement authorized case/event detail endpoint with scoped 404, explicit unverified history disclaimer, transactional audit and migrated SQLite/PostgreSQL tests."
 }
