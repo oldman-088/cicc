@@ -659,7 +659,7 @@ def test_postgres_mutual_admin_demotions_serialize_without_deadlock(migration_db
     finally:
         event.remove(engine, 'before_cursor_execute', observe)
 
-def test_migrated_login_throttle_bounds_bucket_allocation(migration_db):
+def test_migrated_login_throttle_bounds_bucket_allocation(migration_db, monkeypatch):
     from sqlalchemy import func, select
     from sqlalchemy.orm import sessionmaker
     from app.bootstrap import create_tenant_with_admin
@@ -669,6 +669,9 @@ def test_migrated_login_throttle_bounds_bucket_allocation(migration_db):
     factory = sessionmaker(engine, expire_on_commit=False)
     tenant, _ = create_tenant_with_admin(factory, tenant_name='test', username='admin', password='a safe long password')
     policy = LoginPolicy(global_limit=1, source_limit=5, account_limit=5)
+    from app import login_service
+    original_consume = login_service.consume
+    monkeypatch.setattr(login_service, 'consume', lambda db, **kwargs: original_consume(db, now=120, **kwargs))
     for i in range(4):
         result = login(factory, secret=b'x'*32, tenant_id=tenant, username=f'user{i}', password='wrong', source_ip=f'192.0.2.{i+1}', policy=policy)
         assert result.status == (LoginStatus.DENIED if i == 0 else LoginStatus.THROTTLED)
@@ -3318,3 +3321,47 @@ def test_investigation_event_audit_revision_preserves_existing_rows(tmp_path, mo
     command.downgrade(config,'0034_cisa_attempt_index')
     with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type FROM security_audit_events').all()==[('fixture',)]
     command.downgrade(config,'base'); engine.dispose()
+
+
+def test_postgres_report_discloses_mixed_time_reads(migration_db):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationNote, User
+    from app.protected_api import protected_router
+    from app.sessions import issue_session
+    engine,_=migration_db
+    if engine.dialect.name != 'postgresql': pytest.skip('PostgreSQL read-committed interleaving test')
+    factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        token=issue_session(db,tenant,'admin','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='fixture',description='fixture'); db.add(case)
+        other_actor=User(tenant_id=tenant,username='other',role='analyst',active=True,password_hash='fixture')
+        db.add(other_actor); db.flush(); case_id, other_actor_id=case.id, other_actor.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    entities_read, proceed=Event(),Event()
+    def observe(conn,cursor,statement,parameters,context,executemany):
+        if 'FROM investigation_entity_links JOIN intelligence_entities' in statement:
+            entities_read.set()
+            if not proceed.wait(10): raise TimeoutError('test synchronization timed out')
+    event.listen(engine,'after_cursor_execute',observe)
+    try:
+        with TestClient(app,base_url='https://testserver') as client, ThreadPoolExecutor(max_workers=1) as pool:
+            future=pool.submit(client.get,f'/api/v1/secure/investigations/{case_id}/report',headers={'Authorization':'Bearer '+token})
+            try:
+                assert entities_read.wait(10)
+                with factory.begin() as db:
+                    db.add(InvestigationNote(tenant_id=tenant,investigation_id=case_id,author_id=other_actor_id,body='inserted after report started'))
+                proceed.set()
+                response=future.result(timeout=10)
+            finally:
+                proceed.set()
+            assert response.status_code==200
+            assert response.json()['notes']['items'][0]['body']=='inserted after report started'
+            assert 'not a consistent snapshot' in response.json()['notice']
+    finally:
+        event.remove(engine,'after_cursor_execute',observe)

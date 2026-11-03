@@ -529,3 +529,7 @@
 
 ## 2026-11-03 case-event audit synthetic restore
 - Expanded disposable PostgreSQL logical dump/restore drill with synthetic case-event-targeted audit data; verified restored target identifiers and that the restored composite FK rejects a wrong-case event. Schema parity and drill passed. This is not production backup recovery, encryption, off-site durability, PITR, RPO/RTO or actual evidence restoration.
+
+## 2026-11-03 report concurrency and throttle test stability
+- Forced PostgreSQL interleaving verifies a note committed after report generation starts can appear in the report, consistent with its explicit non-snapshot disclaimer. This demonstrates one interleaving, not comprehensive concurrency behavior. Initial test attempt blocked because inserted note referenced the same actor row locked by the report; using a separate same-tenant author made the interleaving deterministic.
+- Full suite initially also exposed another real-time fixed-window throttle test crossing a boundary; fixed its test-only rate-limit clock to a constant without changing production policy. Rerun: 313 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and parity passed.

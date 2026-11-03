@@ -113,7 +113,8 @@
     "API 307 passed, 33 PostgreSQL-only SQLite variants skipped; investigation event detail viewer access, cross-case/tenant denial and case-targeted audit failure tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "API 309 passed, 33 PostgreSQL-only SQLite variants skipped; investigation event audit target tenant/case composite constraints and audit filtering tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed",
     "API 312 passed, 33 PostgreSQL-only SQLite variants skipped; event-target audit filter cursor scope and tied 101-item traversal tested on migrated SQLite/PostgreSQL, legacy audit preservation/downgrade tested on SQLite; synthetic restore and parity passed",
-    "Synthetic disposable PostgreSQL restore checked case-event targeted audit data and verified restored composite constraint rejects a wrong-case event; this is not production recovery verification"
+    "Synthetic disposable PostgreSQL restore checked case-event targeted audit data and verified restored composite constraint rejects a wrong-case event; this is not production recovery verification",
+    "API 313 passed, 34 PostgreSQL-only SQLite variants skipped; forced PostgreSQL interleaving confirms documented mixed-time report behavior; deterministic fixed-window throttle test fixed; synthetic restore and parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -168,7 +169,7 @@
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Continue independent product/security work: assess and harden investigation report concurrency semantics and bounded output",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A50 \"def investigation_report\" apps/api/app/protected_api.py",
-  "next_implementation_step": "Inspect report query path and PostgreSQL transaction isolation; add a deterministic concurrent mutation test illustrating documented non-snapshot behavior or implement an appropriate consistent snapshot with authorization/audit tests without falsely claiming immutable evidence."
+  "next_recommended_task": "Continue independent usability/security work: add bounded audited event-type filtering to case history",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A35 \"def list_investigation_events\" apps/api/app/protected_api.py",
+  "next_implementation_step": "Inspect investigation event model and list endpoint; add strictly bounded literal event_type filter with filter-scoped cursor anchor, tenant authorization and transactional audit; test SQLite/PostgreSQL including cross-filter and tenant cursor denial."
 }
