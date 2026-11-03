@@ -21,3 +21,5 @@ The synthetic drill checks a case-event audit target after restore and rejects a
 The synthetic drill also verifies a relationship-targeted audit record and rejects an unrelated endpoint after restore; this is not a production recovery validation.
 
 The synthetic drill also checks provenance-targeted audit and rejection of a mismatched entity after restore; this remains a disposable synthetic drill, not production backup verification.
+
+The synthetic restore drill checks note correction links, both fixture note bodies and the cross-case FK; this does not establish production backup or custody guarantees.

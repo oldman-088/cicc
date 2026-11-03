@@ -131,7 +131,8 @@
     "API 347 passed, 34 PostgreSQL-only SQLite variants skipped; bounded read-only quarantine inventory tested with generated synthetic objects, unsafe symlink metadata, bounded traversal, and cooperating-stage lock contention; parity and synthetic restore passed",
     "API 349 passed, 34 PostgreSQL-only SQLite variants skipped; read-only quarantine inventory CLI preflight, sanitized errors and synthetic local subprocess tested; parity and synthetic restore passed",
     "API 351 passed, 34 PostgreSQL-only SQLite variants skipped; quarantine CLI subprocess tests verify contention during active cooperating stage, insecure/missing directory refusal, no file mutation and path redaction; parity and synthetic restore passed",
-    "API 356 passed, 35 PostgreSQL-only SQLite variants skipped; append-only investigation note corrections tested for admin/author scope, foreign/closed denial, atomic rollback, tenant/case DB constraints and concurrent PostgreSQL duplicates; schema parity and synthetic restore passed"
+    "API 356 passed, 35 PostgreSQL-only SQLite variants skipped; append-only investigation note corrections tested for admin/author scope, foreign/closed denial, atomic rollback, tenant/case DB constraints and concurrent PostgreSQL duplicates; schema parity and synthetic restore passed",
+    "API 359 passed, 36 PostgreSQL-only SQLite variants skipped; analyst-owned/chained note correction and forced PostgreSQL close-before-lock tests passed; synthetic PostgreSQL restore validates correction links and cross-case FK; schema parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -201,7 +202,7 @@
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace matched 30d5327 and was fast-forwarded to remote 5af2b1f before current changes",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Strengthen investigation note correction testing for analyst ownership, chained corrections and close-before-lock race",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A70 \"def correct_investigation_note\" apps/api/app/protected_api.py && grep -n -A70 \"def test_note_correction\" apps/api/tests/test_migrations.py",
-  "next_implementation_step": "Add migrated SQLite/PostgreSQL tests for author-owned and chained note corrections, access restrictions and links; force PostgreSQL case-close-before-lock interleaving to prove no correction commits, and verify audit/history rollback. Document and push."
+  "next_recommended_task": "Strengthen note correction integrity against duplicate replacements and historical migration regressions",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/migrations/versions/0042_note_corrections.py && grep -n -A50 \"class InvestigationNoteCorrection\" apps/api/app/models.py && grep -n -A90 \"def test_note_correction\" apps/api/tests/test_migrations.py",
+  "next_implementation_step": "Add migrated SQLite/PostgreSQL tests for replacement-note uniqueness and duplicate source constraints across correction chains, plus a SQLite upgrade/downgrade historical-note preservation test; assess and document DB-level cycle limitations and deletion constraints."
 }

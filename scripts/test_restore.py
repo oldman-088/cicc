@@ -26,7 +26,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / 'apps/api'
 sys.path.insert(0, str(API))
-from app.models import Tenant, User, Entity, Investigation, InvestigationEvent, InvestigationEntityLink, NvdCatalogRecord, SecurityAuditEvent, Relationship, ProvenanceEvent
+from app.models import Tenant, User, Entity, Investigation, InvestigationEvent, InvestigationEntityLink, NvdCatalogRecord, SecurityAuditEvent, Relationship, ProvenanceEvent, InvestigationNote, InvestigationNoteCorrection
 
 
 def main():
@@ -45,7 +45,7 @@ def main():
             engine = create_engine(source_db)
             try:
                 factory = sessionmaker(engine, expire_on_commit=False)
-                tenant_id, actor_id, entity_id, case_id, event_id, audit_id, other_entity_id, relation_id, relation_audit_id, provenance_id, provenance_audit_id = (uuid4() for _ in range(11))
+                tenant_id, actor_id, entity_id, case_id, event_id, audit_id, other_entity_id, relation_id, relation_audit_id, provenance_id, provenance_audit_id, note_id, correction_id = (uuid4() for _ in range(13))
                 with factory.begin() as db:
                     db.add(Tenant(id=tenant_id, name='synthetic restore tenant')); db.flush()
                     db.add(User(id=actor_id, tenant_id=tenant_id, username='fixture', role='admin', active=True, password_hash='synthetic-invalid-hash')); db.flush()
@@ -53,6 +53,9 @@ def main():
                     db.add(Entity(id=other_entity_id, tenant_id=tenant_id, created_by=actor_id, kind='indicator', title='synthetic second entity', source='fixture'))
                     db.add(Investigation(id=case_id, tenant_id=tenant_id, created_by=actor_id, title='synthetic case', description='synthetic only')); db.flush()
                     db.add(InvestigationEntityLink(tenant_id=tenant_id, investigation_id=case_id, entity_id=entity_id, created_by=actor_id))
+                    db.add_all([InvestigationNote(id=note_id,tenant_id=tenant_id,investigation_id=case_id,author_id=actor_id,body='synthetic note'),
+                        InvestigationNote(id=correction_id,tenant_id=tenant_id,investigation_id=case_id,author_id=actor_id,body='synthetic correction')]); db.flush()
+                    db.add(InvestigationNoteCorrection(tenant_id=tenant_id,investigation_id=case_id,original_note_id=note_id,correction_note_id=correction_id,created_by=actor_id))
                     db.add(InvestigationEvent(id=event_id, tenant_id=tenant_id, investigation_id=case_id, actor_id=actor_id, event_type='fixture', details={'synthetic':True})); db.flush()
                     db.add(ProvenanceEvent(id=provenance_id,tenant_id=tenant_id,entity_id=entity_id,actor_id=actor_id,event_type='fixture',details={'synthetic':True})); db.flush()
                     db.add(SecurityAuditEvent(id=provenance_audit_id,tenant_id=tenant_id,actor_id=actor_id,event_type='provenance_event_read',target_entity_id=entity_id,target_provenance_id=provenance_id))
@@ -75,6 +78,9 @@ def main():
                     assert db.get(Investigation,case_id).title == 'synthetic case'
                     assert db.scalar(select(InvestigationEntityLink).where(InvestigationEntityLink.investigation_id == case_id)).entity_id == entity_id
                     assert db.scalar(select(InvestigationEvent).where(InvestigationEvent.investigation_id == case_id)).details == {'synthetic':True}
+                    correction = db.scalar(select(InvestigationNoteCorrection).where(InvestigationNoteCorrection.original_note_id == note_id))
+                    assert correction.correction_note_id == correction_id and db.get(InvestigationNote, note_id).body == 'synthetic note'
+                    assert db.get(InvestigationNote, correction_id).body == 'synthetic correction'
                     audit = db.get(SecurityAuditEvent, audit_id)
                     assert audit.tenant_id == tenant_id and audit.target_investigation_id == case_id and audit.target_investigation_event_id == event_id
                     provenance_audit = db.get(SecurityAuditEvent, provenance_audit_id)
@@ -109,6 +115,17 @@ def main():
                         db.rollback()
                     else:
                         raise AssertionError('Restored audit event constraint did not reject mismatched case')
+                # A correction cannot point to a note from another case after restore.
+                with factory.begin() as db:
+                    other_case = Investigation(tenant_id=tenant_id,created_by=actor_id,title='other case',description='fixture'); db.add(other_case); db.flush()
+                    other_note = InvestigationNote(tenant_id=tenant_id,investigation_id=other_case.id,author_id=actor_id,body='foreign case note'); db.add(other_note); db.flush()
+                    db.add(InvestigationNoteCorrection(tenant_id=tenant_id,investigation_id=other_case.id,original_note_id=other_note.id,correction_note_id=correction_id,created_by=actor_id))
+                    try:
+                        db.flush()
+                    except IntegrityError:
+                        db.rollback()
+                    else:
+                        raise AssertionError('Restored note correction constraint did not reject another case')
                 # Provenance audit targets must match the referenced event's entity.
                 with factory.begin() as db:
                     db.add(SecurityAuditEvent(tenant_id=tenant_id,actor_id=actor_id,event_type='fixture',

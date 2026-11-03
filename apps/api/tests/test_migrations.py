@@ -4088,3 +4088,80 @@ def test_postgres_concurrent_note_corrections_are_serialized(migration_db):
     with factory() as db:
         assert len(list(db.scalars(select(InvestigationNoteCorrection))))==1
         assert len(list(db.scalars(select(InvestigationNote).where(InvestigationNote.investigation_id==case_id))))==2
+
+
+def test_note_correction_by_author_and_chained_admin_correction(migration_db):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation
+    from app.protected_api import protected_router
+    from app.security import Role
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    with factory.begin() as db: admin=issue_session(db,tenant,'admin','a safe long password')
+    for name in ('analyst','other'):
+        accounts.create_user(factory,admin_token=admin,username=name,password='a safe long password',role=Role.ANALYST)
+    with factory.begin() as db:
+        analyst=issue_session(db,tenant,'analyst','a safe long password')
+        other=issue_session(db,tenant,'other','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='case',description='fixture'); db.add(case); db.flush(); case_id=case.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32)); h=lambda t:{'Authorization':'Bearer '+t}
+    base=f'/api/v1/secure/investigations/{case_id}/notes'
+    with TestClient(app,base_url='https://testserver') as client:
+        original=client.post(base,headers=h(analyst),json={'body':'first'}).json()['id']
+        assert client.post(f'{base}/{original}/corrections',headers=h(other),json={'body':'wrong author'}).status_code==403
+        first=client.post(f'{base}/{original}/corrections',headers=h(analyst),json={'body':'second'})
+        assert first.status_code==201
+        middle=first.json()['id']
+        assert client.post(f'{base}/{middle}/corrections',headers=h(other),json={'body':'wrong author'}).status_code==403
+        final=client.post(f'{base}/{middle}/corrections',headers=h(admin),json={'body':'third'})
+        assert final.status_code==201
+        last=final.json()['id']
+        assert client.post(f'{base}/{last}/corrections',headers=h(analyst),json={'body':'not admin author'}).status_code==403
+        notes={n['id']:n for n in client.get(base,headers=h(analyst)).json()['items']}
+        assert notes[original]['corrected_by_note_id']==middle
+        assert notes[middle]['corrects_note_id']==original and notes[middle]['corrected_by_note_id']==last
+        assert notes[last]['corrects_note_id']==middle and notes[last]['corrected_by_note_id'] is None
+        assert [notes[x]['body'] for x in (original,middle,last)]==['first','second','third']
+
+
+def test_postgres_note_correction_denied_after_case_close_lock_wait(migration_db):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationNote, InvestigationNoteCorrection, InvestigationEvent, SecurityAuditEvent
+    from app.protected_api import protected_router
+    from app.sessions import issue_session
+    engine,_=migration_db
+    if engine.dialect.name!='postgresql': pytest.skip('PostgreSQL row locks required')
+    factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        token=issue_session(db,tenant,'admin','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='case',description='fixture'); db.add(case); db.flush()
+        note=InvestigationNote(tenant_id=tenant,investigation_id=case.id,author_id=actor,body='fixture'); db.add(note); db.flush(); cid,nid=case.id,note.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32)); waiting=Event()
+    def observe(conn,cursor,statement,parameters,context,executemany):
+        if 'FROM investigations' in statement and 'FOR UPDATE' in statement: waiting.set()
+    with TestClient(app,base_url='https://testserver') as client, ThreadPoolExecutor(max_workers=1) as pool:
+        with factory.begin() as blocker:
+            case=blocker.scalar(select(Investigation).where(Investigation.id==cid).with_for_update())
+            case.status='closed'; blocker.flush()
+            event.listen(engine,'before_cursor_execute',observe)
+            try:
+                future=pool.submit(client.post,f'/api/v1/secure/investigations/{cid}/notes/{nid}/corrections',headers={'Authorization':'Bearer '+token},json={'body':'late correction'})
+                assert waiting.wait(10)
+            finally: event.remove(engine,'before_cursor_execute',observe)
+        assert future.result(timeout=10).status_code==409
+    with factory() as db:
+        assert db.scalar(select(InvestigationNoteCorrection)) is None
+        assert len(list(db.scalars(select(InvestigationNote).where(InvestigationNote.investigation_id==cid))))==1
+        assert db.scalar(select(InvestigationEvent).where(InvestigationEvent.event_type=='note_corrected')) is None
+        assert db.scalar(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='investigation_note_corrected')) is None
