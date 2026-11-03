@@ -51,3 +51,5 @@ Tenant admin audit listing supports case and allowed event-type filtering; curso
 The demo stylesheet no longer imports third-party hosted fonts; it uses system fonts instead. This removes that particular browser request but is not a complete CSP, privacy or network security review.
 
 - Experimental secure-prefix body guard also rejects forwarded Content-Length plus Transfer-Encoding; this is defense in depth only and cannot resolve upstream HTTP parser discrepancies. Trusted proxy framing, request-size limits and real TLS remain unverified.
+
+Experimental local quarantine staging and SHA-256 utilities are standalone and synthetic-tested only. They do not implement tenant isolation, trusted custody, malware scanning, encryption, crash cleanup or upload APIs and must not be used for real evidence. Directory ancestor trust, ACLs and same-UID threats require deployment-specific design and review.

@@ -494,3 +494,8 @@
 
 ## 2026-11-02 web regression verification
 - Web typecheck, seven unit tests, production build, five synthetic Chromium/proxy smoke tests and full npm audit (zero findings) passed locally. Node emitted a module-type warning. This is not comprehensive accessibility testing or evidence of deployed production readiness.
+
+## 2026-11-03 session recovery and experimental quarantine staging
+- Session restored files but local Git metadata initially showed only `c6ef133` and the project as untracked. Fetched active remote branch `arena/da631853-cicc` and advanced local metadata to its descendant via mixed reset (no workspace content discarded); status was clean before new work. Recreated ephemeral locked Python environment and separately installed test-only pgserver.
+- Added standalone local quarantine staging for synthetic testing only: private owned pre-existing directory, no-follow directory-relative operations, generated opaque names, bounded streaming SHA-256, no-clobber hard-link publication, fsync and best-effort cleanup. Collision tests ensure existing temp/final files are not deleted; tests also cover symlinks, permissions, short writes, size and injected failures. This is not immutable, tenant-integrated, malware-scanned, API-exposed or a production custody system. It trusts ancestor paths and same-UID processes, does not inspect ACLs, and cannot guarantee crash cleanup or hard I/O deadlines.
+- Locked API suite 295 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; disposable synthetic restore and migration parity passed. No real evidence or live feeds were used.

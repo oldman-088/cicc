@@ -15,7 +15,7 @@
     "P2-01 limited provenance and analyst-authored relationships",
     "P1-02 CISA KEV adapter, import, admin status/recovery and manual CLI tested with fixtures; no live verification, start-sync API or UI; NVD single-CVE adapter, internal tenant-scoped importer, manual sync coordinator/CLI, protected observation read and admin status/abandon/attempt-history APIs tested with fixtures",
     "P1-05 partial EN/AR/FA selected demo labels and exact-match synthetic fixture text, preference and scoped RTL; remaining translations, RTL layout implemented but browser accessibility verification missing",
-    "P1-04 experimental cases, versioned details/status/assignment and history; verified evidence lifecycle, reporting and UI missing; standalone bounded digest-comparison primitive unit-tested but not connected to storage or APIs"
+    "P1-04 experimental cases, versioned details/status/assignment and history; verified evidence lifecycle, reporting and UI missing; bounded digest comparison and experimental local quarantine staging primitives tested with synthetic data, not connected to APIs"
   ],
   "pending_tasks": [
     "P0-03 authenticated sessions, API enforcement and audit",
@@ -104,7 +104,8 @@
     "API 269 passed, 33 PostgreSQL-only SQLite variants skipped; forced PostgreSQL NVD sync authorization lock-wait interleavings cover demotion, disable and revocation for found and not-found fetches; no import or success committed; synthetic restore and parity passed",
     "API 271 passed, 33 PostgreSQL-only SQLite variants skipped; NVD attempt-history admin/tenant filters, scoped cursor, keyset traversal and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "API 286 passed, 33 PostgreSQL-only SQLite variants skipped; bounded evidence stream SHA-256 comparison unit-tested for matching, mismatch, limits and read errors; synthetic restore and parity passed",
-    "Web revalidation after NVD and evidence changes: typecheck, 7 unit tests, production build, 5 synthetic Chromium/proxy smoke tests and npm audit (0 findings) passed; not an accessibility or production deployment assessment."
+    "Web revalidation after NVD and evidence changes: typecheck, 7 unit tests, production build, 5 synthetic Chromium/proxy smoke tests and npm audit (0 findings) passed; not an accessibility or production deployment assessment.",
+    "API 295 passed, 33 PostgreSQL-only SQLite variants skipped; synthetic local quarantine staging tests include no-clobber collisions, symlink and permission rejection, size bounds, short writes, and error cleanup; schema parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -147,12 +148,14 @@
     "NVD manual coordinator uses one running attempt per tenant with explicit abandonment and has no hard cancellation, shared provider-wide rate limit, start-sync endpoint or live/provider-policy verification; a crash may leave a running attempt. Not-found is only the source response for one lookup, not proof of safety.",
     "NVD CLI has only simulated TTY and fixture fetch tests; real terminal/provider behavior unverified. It does not implement a deployment-wide provider rate limiter or hard deadline.",
     "NVD attempt-history pagination is not a consistent snapshot; status filters can change as attempts finish, filter/tenant-mismatched anchors fail, and production-scale filtered scan performance is unmeasured.",
-    "Evidence digest comparison primitive only compares bytes read to a caller-supplied digest; no upload/storage/quarantine, authenticity, chain of custody, scanning or ongoing integrity verification is implemented. Blocking reads have no hard deadline."
+    "Evidence digest comparison primitive only compares bytes read to a caller-supplied digest; no upload/storage/quarantine, authenticity, chain of custody, scanning or ongoing integrity verification is implemented. Blocking reads have no hard deadline.",
+    "Experimental local quarantine staging is not tenant-integrated, immutable, scanned, API-exposed or production ready. It trusts configured ancestor paths and same-UID processes, does not inspect ACLs, and cannot guarantee cleanup after crashes or filesystem errors; blocking I/O has no deadline.",
+    "New session restored workspace at c6ef133 with project files untracked; fetched active remote branch and fast-forwarded local Git metadata with a mixed reset, preserving workspace content; status clean before new work."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Design and implement a safe isolated evidence quarantine storage primitive before any upload endpoint",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat SECURITY.md && cat apps/api/app/evidence_integrity.py && sed -n \"120,160p\" apps/api/app/models.py",
-  "next_implementation_step": "Inspect security requirements and existing evidence model; implement and test storage-neutral quarantine staging with strict size limits and cleanup, immutable/atomic publication and no user-controlled paths, or document the blockers and choose another independent task. Do not expose uploads until security controls are in place."
+  "next_recommended_task": "Add safe local quarantine inspection and integrity recheck primitives before considering tenant integration or upload APIs",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/evidence_quarantine.py && cat apps/api/tests/test_evidence_quarantine.py",
+  "next_implementation_step": "Inspect evidence_quarantine.py; implement bounded opening/rechecking of an opaque quarantine object using directory-relative no-follow semantics, regular-file and link checks with no path supplied by user, unit tests for tampering, symlinks and invalid identifiers; document unresolved custody and storage limitations."
 }

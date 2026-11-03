@@ -36,3 +36,5 @@
 - NVD attempt-history traversal is not a snapshot; changing statuses can invalidate filtered cursors. Filtered production-scale performance is unmeasured.
 
 - Evidence SHA-256 comparison is a standalone bounded primitive only: no upload, quarantine, malware scanning, trusted reference digest, file storage, authenticity, chain of custody or persistent integrity checks. It can block on the underlying stream and is not exposed through an API.
+
+- Local quarantine staging is a synthetic-tested standalone primitive only; no tenant authorization, metadata binding, malware scanning, API, durable or immutable custody, encryption, retention, ACL verification or crash reconciliation. It trusts configured ancestor paths and processes under the same UID; blocking I/O has no hard deadline. Do not use it for real evidence.

@@ -74,3 +74,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-02 partial: admin NVD attempt history with tenant/filter-scoped cursor, transactional audit and index (migration 0033), tested on migrated SQLite/PostgreSQL with synthetic attempts; no live health inference or snapshot consistency.
 
 - P1-04 partial: storage-neutral bounded stream SHA-256 comparison tested with synthetic bytes (`apps/api/app/evidence_integrity.py`); no upload/storage/quarantine or authenticity/custody guarantees.
+
+- P1-04 partial: bounded local quarantine staging with generated names, no-clobber publication and best-effort cleanup (`evidence_quarantine.py`), synthetic-only tests. No upload API, tenant binding, scanning, immutable or verified chain of custody.
