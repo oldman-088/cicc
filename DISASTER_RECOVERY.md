@@ -15,3 +15,5 @@ This creates two temporary local PostgreSQL instances using local trust authenti
 Future deployment must establish encrypted off-site backups, access controls, retention, recovery point and time objectives, isolated restores, integrity validation and scheduled recovery drills. Never claim recoverability without verification on the actual deployed system.
 
 The synthetic drill also checks an NVD observation's data and timestamps plus the restored tenant/entity foreign key. These are fixture-only assertions, not a production recovery validation.
+
+The synthetic drill checks a case-event audit target after restore and rejects an audit target referencing an event from the wrong case. This does not establish production recovery capability or immutable audit.

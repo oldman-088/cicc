@@ -526,3 +526,6 @@
 
 ## 2026-11-03 event audit cursor and migration preservation
 - Added migrated SQLite/PostgreSQL tests for 101 tied event-targeted audit rows, tenant/filter scoped cursors and foreign/mismatched anchors; SQLite migration 0035 upgrade/downgrade preserves historical untargeted audit rows. API suite 312 passed, 33 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed. Pagination remains non-snapshot and existing audit targets are not backfilled.
+
+## 2026-11-03 case-event audit synthetic restore
+- Expanded disposable PostgreSQL logical dump/restore drill with synthetic case-event-targeted audit data; verified restored target identifiers and that the restored composite FK rejects a wrong-case event. Schema parity and drill passed. This is not production backup recovery, encryption, off-site durability, PITR, RPO/RTO or actual evidence restoration.
