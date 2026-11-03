@@ -71,3 +71,5 @@
 - Automatic quarantine orphan cleanup is deferred: age alone cannot distinguish stale files from active slow writers because legacy/noncooperating staging lacks a lock/lease; interrupted hard-link publication and database/filesystem reconciliation need a safe design. Do not expose deletion or uploads before solving these limits.
 
 - New staging takes a nonblocking shared POSIX directory flock, tested only on a local filesystem with cooperating processes. No cleanup exists; advisory locks cannot control legacy or noncooperating writers, same-UID tampering or every filesystem, and do not establish storage/DB reconciliation.
+
+- Read-only quarantine inventory provides only observed filename/metadata for a bounded, unordered, non-snapshot prefix. It cannot prove orphan status, provenance, safety, completeness or protect against noncooperating writers. No deletion, CLI, API or tenant binding.

@@ -143,3 +143,62 @@ def inspect_object(directory: str, object_id: str, expected_sha256: str, *, max_
             os.close(fd)
     finally:
         os.close(dirfd)
+
+
+@dataclass(frozen=True)
+class QuarantineEntry:
+    object_id: str
+    kind: str
+    size: int
+    modified_ns: int
+    safe_metadata: bool
+    link_count: int
+
+
+@dataclass(frozen=True)
+class QuarantineInventory:
+    items: tuple[QuarantineEntry, ...]
+    examined: int
+    truncated: bool
+
+
+def inventory(directory: str, *, max_entries: int) -> QuarantineInventory:
+    """Inspect a bounded directory prefix without deleting or opening objects.
+
+    Requires an exclusive nonblocking directory flock; only staging processes
+    using the same advisory protocol are coordinated. Enumeration order is not
+    stable and no cursor is provided, so repeated calls may examine the same
+    entries. Metadata is an observation, not proof of ownership, custody, safety,
+    content integrity or orphan status. Caller must authorize and protect output.
+    """
+    if type(max_entries) is not int or not 1 <= max_entries <= 1000:
+        raise ValueError('Invalid inventory limit')
+    dirfd = _open_private_dir(directory)
+    try:
+        if fcntl is None:
+            raise RuntimeError('Required filesystem locking unavailable')
+        fcntl.flock(dirfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        items = []
+        examined = 0
+        truncated = False
+        with os.scandir(dirfd) as entries:
+            for entry in entries:
+                if examined == max_entries:
+                    truncated = True
+                    break
+                examined += 1
+                match = re.fullmatch(r'(tmp|q)-([0-9a-f]{64})', entry.name)
+                if match is None:
+                    continue
+                try:
+                    info = os.stat(entry.name, dir_fd=dirfd, follow_symlinks=False)
+                except FileNotFoundError:
+                    # A non-cooperating process can still change the directory.
+                    continue
+                safe = (stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid()
+                        and not info.st_mode & 0o077 and info.st_nlink == 1)
+                items.append(QuarantineEntry(object_id=match.group(2), kind='temporary' if match.group(1) == 'tmp' else 'published',
+                    size=info.st_size, modified_ns=info.st_mtime_ns, safe_metadata=bool(safe), link_count=info.st_nlink))
+        return QuarantineInventory(items=tuple(items), examined=examined, truncated=truncated)
+    finally:
+        os.close(dirfd)

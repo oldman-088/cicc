@@ -100,3 +100,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-04 partial: audited bounded investigation text export with explicit disclaimers and control-character escaping, tested with synthetic migrated SQLite/PostgreSQL data. No UI, verified files, custody or complete/tamper-resistant report.
 
 - P1-04 partial: experimental quarantine staging holds an advisory nonblocking shared POSIX directory lock for cooperating maintenance; synthetic local cross-process tests only. No cleanup, tenant binding, upload API or custody guarantee.
+
+- P1-04 partial: bounded read-only internal quarantine inventory with advisory exclusive lock and no-follow metadata, tested with synthetic local files; not a complete scan, orphan detection, deletion, custody or tenant-integrated API.

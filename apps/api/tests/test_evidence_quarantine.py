@@ -189,3 +189,36 @@ def test_staging_fails_closed_while_exclusive_directory_lock_held(tmp_path):
     finally:
         os.close(fd)
     assert stage_stream(str(path),io.BytesIO(b'fixture'),max_bytes=10).byte_count==7
+
+
+def test_inventory_is_bounded_read_only_and_marks_unsafe_objects(tmp_path):
+    from app.evidence_quarantine import inventory
+    path=private_dir(tmp_path)
+    good=stage_stream(str(path),io.BytesIO(b'synthetic'),max_bytes=20)
+    temp=path / ('tmp-'+'a'*64); temp.write_bytes(b'partial'); temp.chmod(0o600)
+    symlink=path / ('q-'+'b'*64); symlink.symlink_to(tmp_path / 'missing')
+    (path / 'unrelated').write_text('do not inspect or delete')
+    before=set(p.name for p in path.iterdir())
+    result=inventory(str(path),max_entries=100)
+    assert result.examined==4 and not result.truncated and len(result.items)==3
+    entries={entry.object_id:entry for entry in result.items}
+    assert entries[good.object_id].kind=='published' and entries[good.object_id].safe_metadata
+    assert entries['a'*64].kind=='temporary' and entries['a'*64].safe_metadata
+    assert not entries['b'*64].safe_metadata
+    assert set(p.name for p in path.iterdir())==before
+    limited=inventory(str(path),max_entries=1)
+    assert limited.examined==1 and limited.truncated and len(limited.items)<=1
+    for value in (0,1001,True,-1):
+        with pytest.raises(ValueError): inventory(str(path),max_entries=value)
+
+
+def test_inventory_fails_closed_during_cooperating_stage(tmp_path):
+    from app.evidence_quarantine import inventory
+    path=private_dir(tmp_path)
+    class Active:
+        def read(self,n):
+            with pytest.raises(BlockingIOError): inventory(str(path),max_entries=10)
+            raise OSError('synthetic failure')
+    with pytest.raises(OSError,match='synthetic failure'):
+        stage_stream(str(path),Active(),max_bytes=10)
+    assert inventory(str(path),max_entries=10).items==()
