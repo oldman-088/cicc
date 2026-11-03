@@ -88,3 +88,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-01/P2-01 partial: tenant/entity-scoped relationship detail with viewer access and transactional entity-targeted audit, synthetic SQLite/PostgreSQL tests; relationship-specific audit target added in migration 0038 with tenant/endpoint constraint and audit filtering; older rows are not backfilled. Verification remains incomplete.
 
 - P1-01/P2-01 partial: relationship list kind filtering and endpoint/kind-scoped cursor, audited and tested on SQLite/PostgreSQL, migration 0039 indexes; no snapshot or production-scale performance guarantee.
+
+- P1-01/P2-01 partial: relationship subject/object direction filtering composable with kind, scoped keyset anchors and audit; synthetic migrated SQLite/PostgreSQL tests, no snapshot guarantee.

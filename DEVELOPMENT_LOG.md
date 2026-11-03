@@ -558,3 +558,7 @@
 ## 2026-11-03 relationship kind filtering
 - Experimental entity relationship list accepts optional validated `kind`; cursor anchors must match tenant, endpoint and active kind. Migration 0039 adds subject/kind and object/kind traversal indexes. Successful lists are audited against the requested entity, not each item. Pagination is not a snapshot; OR-query and index performance at production scale is unmeasured. Existing unspecified-kind requests still include historical kinds.
 - Migrated SQLite/PostgreSQL tests cover viewer access, unauthorized/foreign scope, invalid kinds, 101 tied subject/object relationships, mismatched/missing cursor, no-store failure behavior and audit rollback. API suite 326 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; schema parity and synthetic restore passed.
+
+## 2026-11-03 directional relationship traversal
+- Experimental relationship list accepts optional `direction=subject|object`, combinable with `kind`. Anchors must match the tenant, requested endpoint and all active filters; omitting direction retains both sides. Existing traversal indexes apply; pagination is not a snapshot and production-scale performance is not measured.
+- Migrated SQLite/PostgreSQL synthetic tests verify 101 ties, both directions, combined filters, foreign/wrong-direction/wrong-kind anchors and audit rollback. API suite 328 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; schema parity and disposable synthetic restore passed.

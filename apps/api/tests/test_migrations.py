@@ -3646,3 +3646,56 @@ def test_relationship_kind_filter_scoped_cursors_and_audit(migration_db,monkeypa
     with factory() as db:
         events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='relationship_read',SecurityAuditEvent.tenant_id==tenant)))
         assert len(events)==3 and all(e.target_entity_id==x and e.target_relationship_id is None for e in events)
+
+
+def test_relationship_direction_and_kind_filters_scoped(migration_db,monkeypatch):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import SecurityAuditEvent
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        token=issue_session(db,tenant,'admin','a safe long password')
+        x=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='x',source='fixture')
+        y=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='y',source='fixture')
+        f=Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='f',source='fixture')
+        g=Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='g',source='fixture')
+        db.add_all([x,y,f,g]); db.flush(); xid,yid,fid,gid=x.id,y.id,f.id,g.id
+        now=datetime(2026,1,1,tzinfo=timezone.utc)
+        rows=[Relationship(tenant_id=tenant,subject_id=xid,object_id=yid,kind='USES',source='fixture',created_at=now) for _ in range(101)]
+        inverse=Relationship(tenant_id=tenant,subject_id=yid,object_id=xid,kind='USES',source='fixture',created_at=now)
+        other_kind=Relationship(tenant_id=tenant,subject_id=xid,object_id=yid,kind='RELATED_TO',source='fixture',created_at=now)
+        foreign=Relationship(tenant_id=other,subject_id=fid,object_id=gid,kind='USES',source='fixture',created_at=now)
+        db.add_all([*rows,inverse,other_kind,foreign]); db.flush(); inverse_id,kind_id,foreign_id=inverse.id,other_kind.id,foreign.id
+    app=FastAPI(); app.include_router(protected_api.protected_router(factory,b'x'*32))
+    h={'Authorization':'Bearer '+token}; path=f'/api/v1/secure/entities/{xid}/relationships'
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        filters={'direction':'subject','kind':'USES'}
+        assert client.get(path,headers=h,params={'direction':'both'}).status_code==422
+        for bad in (inverse_id,kind_id,foreign_id):
+            assert client.get(path,headers=h,params={**filters,'after':str(bad)}).status_code==404
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.get(path,headers=h,params=filters).status_code==500
+        first=client.get(path,headers=h,params=filters).json()
+        second=client.get(path,headers=h,params={**filters,'after':first['next_cursor']}).json()
+        all_rows=first['items']+second['items']
+        assert len(all_rows)==101 and len({r['id'] for r in all_rows})==101
+        assert all(r['subject_id']==str(xid) and r['kind']=='USES' for r in all_rows)
+        assert second['next_cursor'] is None
+        reverse=client.get(path,headers=h,params={'direction':'object','kind':'USES'}).json()
+        assert len(reverse['items'])==1 and reverse['items'][0]['id']==str(inverse_id)
+        assert client.get(path,headers=h,params={'direction':'object','kind':'USES','after':first['items'][0]['id']}).status_code==404
+        # The same relationship is traversable from the opposite endpoint/direction.
+        result=client.get(f'/api/v1/secure/entities/{yid}/relationships',headers=h,params=filters).json()
+        assert len(result['items'])==1 and result['items'][0]['id']==str(inverse_id)
+    with factory() as db:
+        events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='relationship_read',SecurityAuditEvent.tenant_id==tenant)))
+        assert len(events)==4 and {e.target_entity_id for e in events}=={xid,yid}

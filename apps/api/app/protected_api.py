@@ -90,6 +90,11 @@ class RelationshipKind(str, Enum):
     BELONGS_TO = 'BELONGS_TO'
     RELATED_TO = 'RELATED_TO'
 
+class RelationshipDirection(str, Enum):
+    SUBJECT = 'subject'
+    OBJECT = 'object'
+
+
 class RelationshipInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     subject_id: UUID
@@ -467,7 +472,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             return {'id':str(relation.id), 'status':'analyst_assertion_unverified'}
 
     @router.get('/entities/{entity_id}/relationships', dependencies=[Depends(require_tls)])
-    def list_relationships(entity_id: UUID, after: UUID | None = None, kind: RelationshipKind | None = None, token: str = Depends(bearer)):
+    def list_relationships(entity_id: UUID, after: UUID | None = None, kind: RelationshipKind | None = None, direction: RelationshipDirection | None = None, token: str = Depends(bearer)):
         with factory.begin() as db:
             principal = authenticate_session_locked(db, token)
             if principal is None:
@@ -475,7 +480,12 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             authorize(principal, principal.tenant_id, Permission.READ_INTELLIGENCE)
             if db.scalar(select(Entity.id).where(Entity.tenant_id == principal.tenant_id, Entity.id == entity_id)) is None:
                 raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
-            scope = or_(Relationship.subject_id == entity_id, Relationship.object_id == entity_id)
+            if direction == RelationshipDirection.SUBJECT:
+                scope = Relationship.subject_id == entity_id
+            elif direction == RelationshipDirection.OBJECT:
+                scope = Relationship.object_id == entity_id
+            else:
+                scope = or_(Relationship.subject_id == entity_id, Relationship.object_id == entity_id)
             query = select(Relationship).where(Relationship.tenant_id == principal.tenant_id, scope)
             if kind is not None: query = query.where(Relationship.kind == kind.value)
             if after is not None:
