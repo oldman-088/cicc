@@ -117,7 +117,8 @@
     "API 313 passed, 34 PostgreSQL-only SQLite variants skipped; forced PostgreSQL interleaving confirms documented mixed-time report behavior; deterministic fixed-window throttle test fixed; synthetic restore and parity passed",
     "API 315 passed, 34 PostgreSQL-only SQLite variants skipped; case history event_type exact filter, tenant/filter cursor scoping and tied 101-item traversal tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "API 317 passed, 34 PostgreSQL-only SQLite variants skipped; case note author filter, tenant/filter cursor scope, 101 tied notes and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
-    "2026-11-03: pip check passed and pip-audit --disable-pip --no-deps reported no known vulnerabilities for pinned runtime and dev lock entries; npm ci/audit zero findings, web typecheck, 7 unit, build and 5 synthetic browser smoke tests passed. Audits are time-dependent, not security reviews."
+    "2026-11-03: pip check passed and pip-audit --disable-pip --no-deps reported no known vulnerabilities for pinned runtime and dev lock entries; npm ci/audit zero findings, web typecheck, 7 unit, build and 5 synthetic browser smoke tests passed. Audits are time-dependent, not security reviews.",
+    "API 319 passed, 34 PostgreSQL-only SQLite variants skipped; relationship detail viewer, subject/object scope, foreign/parent denial and entity-targeted audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -169,12 +170,13 @@
     "Report sections are independently bounded and queried; an evidence item may refer to an entity omitted from the entity section, and concurrent changes may produce mixed-time results.",
     "Investigation event read audit targets are tenant/case/event constrained but old audit records are not backfilled; the foreign key may prevent event deletion and history remains mutable.",
     "Investigation history event-type filtering is exact and cursor traversal is not a snapshot; production-scale query performance is unmeasured despite the supporting index.",
-    "Case note author filtering is not snapshot-consistent; author identifiers in query strings can appear in intermediary logs and production-scale query performance is unmeasured."
+    "Case note author filtering is not snapshot-consistent; author identifiers in query strings can appear in intermediary logs and production-scale query performance is unmeasured.",
+    "Relationship detail audits target the requested entity, not an individual relationship ID; assertions and evidence references remain unverified."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace snapshot is a822bab",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Continue product functionality: expose authorized, scoped relationship detail with transactional audit",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A45 \"def list_relationships\" apps/api/app/protected_api.py && sed -n \"35,70p\" apps/api/app/models.py",
-  "next_implementation_step": "Inspect relationship listing and model constraints, implement GET entity-scoped relationship detail with tenant and subject/object scope, targeted audit and unverified-evidence notice; test viewer access, cross-tenant/parent mismatch, rollback on audit failure and SQLite/PostgreSQL migrations."
+  "next_recommended_task": "Add scoped relationship audit targeting if retention and entity/relationship integrity can be enforced",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && sed -n \"35,120p\" apps/api/app/models.py && grep -n -A25 \"def get_relationship\" apps/api/app/protected_api.py",
+  "next_implementation_step": "Inspect relationship schema and audit target migrations. Design tenant/entity/relationship-scoped target supporting both subject and object access, including FK/check limitations, retention and historical null targets; implement only if integrity can be enforced and verify on migrated SQLite/PostgreSQL, otherwise document limitation and pick another task."
 }

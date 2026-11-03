@@ -3446,3 +3446,49 @@ def test_investigation_notes_author_filter_scope_pagination_and_audit(migration_
     with factory() as db:
         events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='investigation_read',SecurityAuditEvent.target_investigation_id==cid)))
         assert len(events)==3
+
+
+def test_relationship_detail_tenant_parent_scope_and_audit(migration_db, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import SecurityAuditEvent
+    from app.security import Role
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        admin=issue_session(db,tenant,'admin','a safe long password')
+        foreign=issue_session(db,other,'admin','a safe long password')
+    accounts.create_user(factory,admin_token=admin,username='viewer',password='a safe long password',role=Role.VIEWER)
+    with factory.begin() as db:
+        viewer=issue_session(db,tenant,'viewer','a safe long password')
+        x=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='x',source='fixture')
+        y=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='y',source='fixture')
+        z=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='z',source='fixture')
+        f=Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='foreign',source='fixture')
+        db.add_all([x,y,z,f]); db.flush()
+        relation=Relationship(tenant_id=tenant,subject_id=x.id,object_id=y.id,kind='RELATED_TO',source='fixture',created_by=actor,provenance={'status':'analyst_assertion_unverified'})
+        db.add(relation); db.flush(); xid,yid,zid,fid,rid=x.id,y.id,z.id,f.id,relation.id
+    app=FastAPI(); app.include_router(protected_api.protected_router(factory,b'x'*32))
+    h=lambda t:{'Authorization':'Bearer '+t}
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        path=f'/api/v1/secure/entities/{xid}/relationships/{rid}'
+        assert client.get(path).status_code==401
+        assert client.get(path,headers=h(foreign)).status_code==404
+        assert client.get(f'/api/v1/secure/entities/{zid}/relationships/{rid}',headers=h(viewer)).status_code==404
+        assert client.get(f'/api/v1/secure/entities/{fid}/relationships/{rid}',headers=h(viewer)).status_code==404
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.get(path,headers=h(viewer)).status_code==500
+        response=client.get(path,headers=h(viewer))
+        assert response.status_code==200 and response.headers['cache-control']=='no-store'
+        assert response.json()['id']==str(rid) and 'not independently verified' in response.json()['notice']
+        assert client.get(f'/api/v1/secure/entities/{yid}/relationships/{rid}',headers=h(viewer)).status_code==200
+    with factory() as db:
+        events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='relationship_read')))
+        assert len(events)==2 and {e.target_entity_id for e in events}=={xid,yid}

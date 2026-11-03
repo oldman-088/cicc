@@ -492,6 +492,25 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 'created_at':x.created_at.isoformat(), 'provenance':x.provenance} for x in relations[:100]],
                 'truncated':len(relations) > 100, 'next_cursor':str(relations[99].id) if len(relations) > 100 else None}
 
+    @router.get('/entities/{entity_id}/relationships/{relationship_id}', dependencies=[Depends(require_tls)])
+    def get_relationship(entity_id: UUID, relationship_id: UUID, token: str = Depends(bearer)):
+        with factory.begin() as db:
+            principal = authenticate_session_locked(db, token)
+            if principal is None:
+                raise HTTPException(status_code=401, detail='Authentication required', headers={'WWW-Authenticate':'Bearer', 'Cache-Control':'no-store'})
+            authorize(principal, principal.tenant_id, Permission.READ_INTELLIGENCE)
+            relation = db.scalar(select(Relationship).where(Relationship.tenant_id == principal.tenant_id,
+                Relationship.id == relationship_id, or_(Relationship.subject_id == entity_id, Relationship.object_id == entity_id)))
+            if relation is None:
+                raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
+            record_event(db, principal.tenant_id, AuditType.RELATIONSHIP_READ, principal.user_id, target_entity_id=entity_id)
+            return {'id':str(relation.id), 'subject_id':str(relation.subject_id), 'object_id':str(relation.object_id),
+                'kind':relation.kind, 'source':relation.source, 'confidence':relation.confidence,
+                'created_by':str(relation.created_by) if relation.created_by else None,
+                'evidence_id':str(relation.evidence_id) if relation.evidence_id else None,
+                'created_at':relation.created_at.isoformat(), 'provenance':relation.provenance,
+                'notice':'Relationship and evidence references are assertions, not independently verified facts.'}
+
     @router.post('/investigations', status_code=201, dependencies=[Depends(require_tls)])
     def create_investigation(payload: InvestigationInput, token: str = Depends(bearer)):
         with factory.begin() as db:

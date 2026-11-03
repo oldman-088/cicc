@@ -545,3 +545,7 @@
 ## 2026-11-03 dependency and web regression checks
 - Installed pip-audit separately in the ephemeral dev environment, ran pip check and audited each pinned Python runtime/dev lock entry with `--disable-pip --no-deps`: no broken requirements or known reported vulnerabilities. npm ci and full npm audit reported zero findings. Audits are time-dependent and do not assess code, configuration or separately installed test/audit tools.
 - Web typecheck, seven unit tests, production build and five synthetic Chromium/proxy smoke tests passed; Node emitted module-type warnings. Tests do not establish comprehensive accessibility or production readiness.
+
+## 2026-11-03 relationship detail
+- Added experimental `GET /api/v1/secure/entities/{entity_id}/relationships/{relationship_id}`. Tenant-scoped authenticated readers may use either endpoint entity as parent; unrelated/foreign IDs return 404. The response labels relationships and evidence references unverified, and successful reads atomically audit the requested entity. Audit does not currently target the individual relationship.
+- Migrated SQLite/PostgreSQL tests cover viewer authorization, subject/object access, unrelated/foreign scope, no-store and audit failure. API 319 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; synthetic restore and schema parity passed.

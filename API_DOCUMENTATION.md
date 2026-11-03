@@ -127,3 +127,5 @@ Admin audit supports `investigation_event_id` to filter events with a matching t
 `GET /api/v1/secure/investigations/{case_id}/events` optionally accepts an exact `event_type` consisting of lowercase letters, digits and underscores, starting with a letter (1–64 characters). An `after` cursor must belong to the same tenant/case and match the active filter. Unknown valid types return no items; traversal is not a snapshot.
 
 `GET /api/v1/secure/investigations/{case_id}/notes` optionally accepts `author_id` (UUID). `after` must identify a note in the same tenant/case matching the filter. Unknown or foreign authors return an empty list; traversal is not a snapshot, and query strings may be logged by intermediaries.
+
+`GET /api/v1/secure/entities/{entity_id}/relationships/{relationship_id}` returns a tenant-scoped relationship to authorized readers when the parent entity is its subject or object. Reads are transactionally audited against the requested entity (not the individual relationship). Relationships and evidence references are unverified assertions.
