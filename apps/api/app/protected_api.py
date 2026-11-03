@@ -300,10 +300,11 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                             source_reference=payload.source_reference, confidence=payload.confidence,
                             verification_status='unverified')
             db.add(entity); db.flush()
-            db.add(ProvenanceEvent(tenant_id=principal.tenant_id, entity_id=entity.id, actor_id=principal.user_id,
+            provenance = ProvenanceEvent(tenant_id=principal.tenant_id, entity_id=entity.id, actor_id=principal.user_id,
                 event_type='manual_entity_created', details={'source': entity.source, 'source_reference': entity.source_reference,
-                'confidence': entity.confidence, 'verification_status': entity.verification_status}))
-            record_event(db, principal.tenant_id, AuditType.INTELLIGENCE_CREATED, principal.user_id, target_entity_id=entity.id)
+                'confidence': entity.confidence, 'verification_status': entity.verification_status})
+            db.add(provenance); db.flush()
+            record_event(db, principal.tenant_id, AuditType.INTELLIGENCE_CREATED, principal.user_id, target_entity_id=entity.id, target_provenance_id=provenance.id)
             return {'id': str(entity.id), 'verification_status': entity.verification_status, 'version': entity.version}
 
     @router.get('/entities/{entity_id}', dependencies=[Depends(require_tls)])
@@ -343,9 +344,10 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 raise HTTPException(status_code=409, detail='Version conflict', headers={'Cache-Control':'no-store'})
             after = {'title': payload.title, 'confidence': payload.confidence, 'verification_status': 'unverified',
                      'version': payload.expected_version + 1}
-            db.add(ProvenanceEvent(tenant_id=principal.tenant_id, entity_id=entity_id, actor_id=principal.user_id,
-                event_type='manual_entity_updated', details={'before': before, 'after': after}))
-            record_event(db, principal.tenant_id, AuditType.INTELLIGENCE_UPDATED, principal.user_id, target_entity_id=entity_id)
+            provenance = ProvenanceEvent(tenant_id=principal.tenant_id, entity_id=entity_id, actor_id=principal.user_id,
+                event_type='manual_entity_updated', details={'before': before, 'after': after})
+            db.add(provenance); db.flush()
+            record_event(db, principal.tenant_id, AuditType.INTELLIGENCE_UPDATED, principal.user_id, target_entity_id=entity_id, target_provenance_id=provenance.id)
             return {'id': str(entity_id), 'version': after['version'], 'verification_status': 'unverified'}
 
     @router.post('/entities/{entity_id}/evidence', status_code=201, dependencies=[Depends(require_tls)])
@@ -364,10 +366,11 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             item = EvidenceReference(tenant_id=principal.tenant_id, entity_id=entity.id, created_by=principal.user_id,
                                      description=payload.description, source=payload.source, reference=payload.reference, sha256=payload.sha256)
             db.add(item); db.flush()
-            db.add(ProvenanceEvent(tenant_id=principal.tenant_id, entity_id=entity.id, actor_id=principal.user_id,
+            provenance = ProvenanceEvent(tenant_id=principal.tenant_id, entity_id=entity.id, actor_id=principal.user_id,
                 evidence_id=item.id, event_type='evidence_reference_added', details={'source': item.source,
-                'reference': item.reference, 'sha256': item.sha256, 'status': 'analyst_entered_unverified'}))
-            record_event(db, principal.tenant_id, AuditType.EVIDENCE_CREATED, principal.user_id, target_entity_id=entity.id, target_evidence_id=item.id)
+                'reference': item.reference, 'sha256': item.sha256, 'status': 'analyst_entered_unverified'})
+            db.add(provenance); db.flush()
+            record_event(db, principal.tenant_id, AuditType.EVIDENCE_CREATED, principal.user_id, target_entity_id=entity.id, target_evidence_id=item.id, target_provenance_id=provenance.id)
             return {'id': str(item.id), 'status': 'analyst_entered_unverified'}
 
     @router.get('/entities/{entity_id}/evidence', dependencies=[Depends(require_tls)])
@@ -482,11 +485,12 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 confidence=payload.confidence, evidence_id=payload.evidence_id, created_by=principal.user_id,
                 provenance={'method':'manual', 'status':'analyst_assertion_unverified'})
             db.add(relation); db.flush()
-            db.add(ProvenanceEvent(tenant_id=principal.tenant_id, entity_id=payload.subject_id, actor_id=principal.user_id,
+            provenance = ProvenanceEvent(tenant_id=principal.tenant_id, entity_id=payload.subject_id, actor_id=principal.user_id,
                 evidence_id=payload.evidence_id, event_type='relationship_asserted', details={'relationship_id':str(relation.id),
                 'object_id':str(payload.object_id), 'kind':payload.kind.value, 'source':payload.source,
-                'confidence':payload.confidence, 'status':'analyst_assertion_unverified'}))
-            record_event(db, principal.tenant_id, AuditType.RELATIONSHIP_CREATED, principal.user_id, target_entity_id=payload.subject_id, target_relationship_id=relation.id, relationship_subject_id=relation.subject_id, relationship_object_id=relation.object_id)
+                'confidence':payload.confidence, 'status':'analyst_assertion_unverified'})
+            db.add(provenance); db.flush()
+            record_event(db, principal.tenant_id, AuditType.RELATIONSHIP_CREATED, principal.user_id, target_entity_id=payload.subject_id, target_relationship_id=relation.id, relationship_subject_id=relation.subject_id, relationship_object_id=relation.object_id, target_provenance_id=provenance.id)
             return {'id':str(relation.id), 'status':'analyst_assertion_unverified'}
 
     @router.get('/entities/{entity_id}/relationships', dependencies=[Depends(require_tls)])

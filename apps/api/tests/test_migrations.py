@@ -3858,3 +3858,68 @@ def test_provenance_audit_revision_preserves_historical_rows(tmp_path,monkeypatc
     command.downgrade(config,'0040_provenance_type_index')
     with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type FROM security_audit_events').all()==[('fixture',)]
     command.downgrade(config,'base'); engine.dispose()
+
+
+def test_manual_write_audit_targets_created_provenance(migration_db,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import ProvenanceEvent, SecurityAuditEvent
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    with factory.begin() as db: token=issue_session(db,tenant,'admin','a safe long password')
+    app=FastAPI(); app.include_router(protected_api.protected_router(factory,b'x'*32))
+    h={'Authorization':'Bearer '+token}; base='/api/v1/secure'
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        payload={'kind':'indicator','title':'fixture','source':'manual'}
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.post(base+'/entities',headers=h,json=payload).status_code==500
+        with factory() as db:
+            assert db.scalar(select(Entity.id)) is None and db.scalar(select(ProvenanceEvent.id)) is None
+        first=client.post(base+'/entities',headers=h,json=payload).json()['id']
+        second=client.post(base+'/entities',headers=h,json=payload).json()['id']
+        assert client.patch(f'{base}/entities/{first}',headers=h,json={'title':'updated','confidence':None,'expected_version':1}).status_code==200
+        evidence=client.post(f'{base}/entities/{first}/evidence',headers=h,json={'description':'fixture','source':'manual'})
+        assert evidence.status_code==201
+        relation=client.post(base+'/relationships',headers=h,json={'subject_id':first,'object_id':second,'kind':'RELATED_TO','source':'manual','evidence_id':evidence.json()['id']})
+        assert relation.status_code==201
+    with factory() as db:
+        entries=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant,SecurityAuditEvent.event_type.in_(['intelligence_created','intelligence_updated','evidence_created','relationship_created']))))
+        assert len(entries)==5
+        expected={'intelligence_created':'manual_entity_created','intelligence_updated':'manual_entity_updated','evidence_created':'evidence_reference_added','relationship_created':'relationship_asserted'}
+        for entry in entries:
+            assert entry.target_provenance_id is not None
+            p=db.get(ProvenanceEvent,entry.target_provenance_id)
+            assert p.entity_id==entry.target_entity_id and p.event_type==expected[entry.event_type]
+        relationship_audit=next(e for e in entries if e.event_type=='relationship_created')
+        assert str(relationship_audit.target_relationship_id)==relation.json()['id']
+        evidence_audit=next(e for e in entries if e.event_type=='evidence_created')
+        assert str(evidence_audit.target_evidence_id)==evidence.json()['id']
+
+
+def test_nvd_audit_targets_provenance_only_for_changes(migration_db):
+    from datetime import datetime, timezone
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.connectors.nvd_import import import_record
+    from app.models import ProvenanceEvent, SecurityAuditEvent
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,_=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    with factory.begin() as db: token=issue_session(db,tenant,'admin','a safe long password')
+    record=nvd_fixture()
+    import_record(factory,admin_token=token,record=record)
+    import_record(factory,admin_token=token,record=record)
+    changed=nvd_fixture(collected=datetime(2026,1,3,tzinfo=timezone.utc),text='updated synthetic fixture')
+    import_record(factory,admin_token=token,record=changed)
+    with factory() as db:
+        audits=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant,SecurityAuditEvent.event_type=='nvd_record_imported')))
+        assert len(audits)==3 and sum(a.target_provenance_id is None for a in audits)==1
+        events=[db.get(ProvenanceEvent,a.target_provenance_id) for a in audits if a.target_provenance_id]
+        assert {e.event_type for e in events}=={'source_record_created','source_record_updated'}
+        assert all(e.entity_id==next(a.target_entity_id for a in audits if a.target_provenance_id==e.id) for e in events)

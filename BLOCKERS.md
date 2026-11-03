@@ -63,3 +63,5 @@
 - Provenance event-type filtering and pagination are not snapshot-consistent; earlier history is incomplete, assertions unverified and index performance is unmeasured at production scale.
 
 - Provenance-target audit FK may prevent deleting provenance events; historical audit rows have null targets, retention is unresolved and recorded history and audit remain mutable/unverified.
+
+- Provenance-targeted write audits cover manual entity/evidence/relationship changes and changed NVD records, not unchanged NVD imports or bulk CISA snapshot imports; historical audit rows remain untargeted.

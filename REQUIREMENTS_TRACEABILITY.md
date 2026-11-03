@@ -94,3 +94,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-01/P2-01 partial: entity provenance type filtering and tenant/entity/filter-scoped cursor with atomic read audit, migration 0040 index and migrated SQLite/PostgreSQL tests; no snapshot or tamper-resistance.
 
 - P1-01/P2-01 partial: entity-scoped provenance event detail with exact tenant/entity/event audit target and admin filter (migration 0041), tested with synthetic migrated SQLite/PostgreSQL data. Historical audit remains untargeted; retention/tamper resistance unresolved.
+
+- P1-01/P2-01 partial: provenance-target audit on manual entity/evidence/relationship writes and changed NVD observations, synthetic SQLite/PostgreSQL tests; unchanged imports, CISA bulk audits and historical events are untargeted.

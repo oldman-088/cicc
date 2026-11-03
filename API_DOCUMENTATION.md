@@ -139,3 +139,5 @@ The relationship list also accepts `direction=subject` or `direction=object`, op
 `GET /api/v1/secure/entities/{entity_id}/provenance` optionally accepts exact `event_type` (1–64 lowercase letters, digits or underscores, starting with a letter). `after` must identify an event in the same tenant/entity matching the filter. Unknown valid types return no items; provenance is incomplete, mutable and not a consistent snapshot.
 
 `GET /api/v1/secure/entities/{entity_id}/provenance/{provenance_id}` returns one tenant/entity-scoped event to an authorized reader and transactionally audits the exact event. Admin audit accepts `provenance_id`; prior records are not backfilled. The FK may prevent provenance deletion; provenance assertions are unverified, history incomplete and audit not tamper-resistant.
+
+New manual entity create/update, evidence-reference create and relationship-create audit rows target the corresponding provenance event. NVD import audit targets it only when the observation changed or was created; unchanged imports and CISA bulk snapshot audits have no individual provenance target. Older audit rows are not backfilled.

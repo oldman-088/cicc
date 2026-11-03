@@ -85,12 +85,15 @@ def import_record(factory: sessionmaker, *, admin_token: str, record: NvdRecord,
             db.add(NvdCatalogRecord(tenant_id=tenant.id, entity_id=entity_id, cve_id=record.cve_id,
                 details=details, first_collected_at=record.collected_at, last_collected_at=record.collected_at))
             created, changed = True, False
+        provenance = None
         if created or changed:
-            db.add(ProvenanceEvent(tenant_id=tenant.id, entity_id=entity_id, actor_id=principal.user_id,
+            provenance = ProvenanceEvent(tenant_id=tenant.id, entity_id=entity_id, actor_id=principal.user_id,
                 event_type='source_record_created' if created else 'source_record_updated',
                 details={'source': SOURCE, 'source_reference': record.source_reference, 'cve_id': record.cve_id,
-                         'collected_at': record.collected_at.isoformat(), 'observation': details}))
-        record_event(db, tenant.id, AuditType.NVD_RECORD_IMPORTED, principal.user_id, target_entity_id=entity_id)
+                         'collected_at': record.collected_at.isoformat(), 'observation': details})
+            db.add(provenance); db.flush()
+        record_event(db, tenant.id, AuditType.NVD_RECORD_IMPORTED, principal.user_id, target_entity_id=entity_id,
+                     target_provenance_id=provenance.id if provenance is not None else None)
         if attempt is not None:
             attempt.status = 'succeeded'
             attempt.finished_at = datetime.now(timezone.utc)
