@@ -555,6 +555,43 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             record_event(db, principal.tenant_id, AuditType.INVESTIGATION_READ, principal.user_id, target_investigation_id=investigation_id)
             return {**investigation_output(*row), 'notice':'Eligibility reflects this query only; case history is not tamper-resistant.'}
 
+    @router.get('/investigations/{investigation_id}/report', dependencies=[Depends(require_tls)])
+    def investigation_report(investigation_id: UUID, token: str = Depends(bearer)):
+        """Bounded analytical summary, not an evidentiary or consistent snapshot."""
+        with factory.begin() as db:
+            principal = authenticate_session_locked(db, token)
+            if principal is None:
+                raise HTTPException(status_code=401, detail='Authentication required', headers={'WWW-Authenticate':'Bearer', 'Cache-Control':'no-store'})
+            authorize(principal, principal.tenant_id, Permission.READ_INTELLIGENCE)
+            row = db.execute(select(Investigation, User.active, User.role).outerjoin(User,
+                and_(User.tenant_id == Investigation.tenant_id, User.id == Investigation.assignee_id)).where(
+                    Investigation.tenant_id == principal.tenant_id, Investigation.id == investigation_id)).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
+            entity_rows = list(db.execute(select(InvestigationEntityLink, Entity).join(Entity,
+                and_(Entity.tenant_id == InvestigationEntityLink.tenant_id, Entity.id == InvestigationEntityLink.entity_id))
+                .where(InvestigationEntityLink.tenant_id == principal.tenant_id, InvestigationEntityLink.investigation_id == investigation_id)
+                .order_by(InvestigationEntityLink.id).limit(51)))
+            evidence_rows = list(db.execute(select(InvestigationEvidenceLink, EvidenceReference).join(EvidenceReference,
+                and_(EvidenceReference.tenant_id == InvestigationEvidenceLink.tenant_id,
+                     EvidenceReference.entity_id == InvestigationEvidenceLink.entity_id, EvidenceReference.id == InvestigationEvidenceLink.evidence_id))
+                .where(InvestigationEvidenceLink.tenant_id == principal.tenant_id, InvestigationEvidenceLink.investigation_id == investigation_id)
+                .order_by(InvestigationEvidenceLink.id).limit(51)))
+            notes = list(db.scalars(select(InvestigationNote).where(InvestigationNote.tenant_id == principal.tenant_id,
+                InvestigationNote.investigation_id == investigation_id).order_by(InvestigationNote.created_at, InvestigationNote.id).limit(51)))
+            record_event(db, principal.tenant_id, AuditType.INVESTIGATION_REPORT_READ, principal.user_id, target_investigation_id=investigation_id)
+            return {'generated_at':datetime.now(timezone.utc).isoformat(), 'investigation':investigation_output(*row),
+                'entities':{'items':[{'link_id':str(link.id), 'entity':entity_output(entity),
+                    'association_status':'analyst_association_unverified'} for link,entity in entity_rows[:50]], 'truncated':len(entity_rows)>50},
+                'evidence':{'items':[{'link_id':str(link.id), 'entity_id':str(link.entity_id), 'evidence_id':str(evidence.id),
+                    'description':evidence.description, 'source':evidence.source, 'reference':evidence.reference,
+                    'sha256':evidence.sha256, 'status':'analyst_entered_unverified'} for link,evidence in evidence_rows[:50]],
+                    'truncated':len(evidence_rows)>50},
+                'notes':{'items':[{'id':str(note.id), 'author_id':str(note.author_id), 'body':note.body,
+                    'created_at':note.created_at.isoformat(), 'status':'analyst_entered_unverified'} for note in notes[:50]],
+                    'truncated':len(notes)>50},
+                'notice':'Bounded report is not a consistent snapshot, complete history, verified evidence, chain of custody, or tamper-resistant record. Associations and notes are analyst assertions; supplied hashes are not verified.'}
+
     @router.patch('/investigations/{investigation_id}', dependencies=[Depends(require_tls)])
     def update_investigation(investigation_id: UUID, payload: InvestigationUpdateInput, token: str = Depends(bearer)):
         with factory.begin() as db:

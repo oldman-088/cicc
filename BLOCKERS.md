@@ -43,3 +43,5 @@
 
 - Tenant-bound quarantine integration is deferred pending filesystem/database reconciliation, crash recovery, storage/ACL trust, malware scanning and authenticated custody. Existing primitives cannot safely be represented as verified evidence or exposed as a production upload flow.
 - CISA attempt history is not snapshot-consistent; changing statuses can invalidate filtered cursors, and filtered production-scale performance is unmeasured.
+
+- Investigation report is bounded to 50 items per section, not a consistent snapshot, complete report, tamper-resistant record or verified evidence/custody; it includes user-supplied references and hashes without verification. Export rendering and operational UI remain absent.

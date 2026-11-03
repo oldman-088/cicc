@@ -3106,3 +3106,57 @@ def test_cisa_attempt_history_scoped_filters_pagination_and_audit(migration_db, 
         assert all(item['status']=='failed' and item['started_at'].endswith('+00:00') for item in results)
     with factory() as db:
         assert len(list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant,SecurityAuditEvent.event_type=='cisa_attempts_read'))))==2
+
+
+def test_investigation_report_scoped_bounded_and_audited(migration_db, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, EvidenceReference, SecurityAuditEvent
+    from app.protected_api import protected_router
+    from app.security import Role
+    from app.sessions import issue_session
+    engine, _ = migration_db
+    factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        admin=issue_session(db,tenant,'admin','a safe long password')
+        foreign=issue_session(db,other,'admin','a safe long password')
+    accounts.create_user(factory,admin_token=admin,username='viewer',password='a safe long password',role=Role.VIEWER)
+    with factory.begin() as db:
+        viewer=issue_session(db,tenant,'viewer','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='synthetic case',description='fixture'); db.add(case); db.flush()
+        entity=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='synthetic entity',source='fixture'); db.add(entity); db.flush()
+        link=InvestigationEntityLink(tenant_id=tenant,investigation_id=case.id,entity_id=entity.id,created_by=actor); db.add(link); db.flush()
+        evidence=EvidenceReference(tenant_id=tenant,entity_id=entity.id,created_by=actor,description='synthetic reference',source='fixture',sha256='0'*64); db.add(evidence); db.flush()
+        db.add(InvestigationEvidenceLink(tenant_id=tenant,investigation_id=case.id,entity_id=entity.id,evidence_id=evidence.id,created_by=actor))
+        db.add_all([InvestigationNote(tenant_id=tenant,investigation_id=case.id,author_id=actor,body=f'synthetic note {i}') for i in range(51)])
+        foreign_case=Investigation(tenant_id=other,created_by=other_actor,title='private',description='private'); db.add(foreign_case); db.flush()
+        case_id, foreign_id, evidence_id = case.id, foreign_case.id, evidence.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    headers=lambda t:{'Authorization':'Bearer '+t}
+    path=f'/api/v1/secure/investigations/{case_id}/report'
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        assert client.get(path).status_code==401
+        assert client.get(path,headers=headers(foreign)).status_code==404
+        assert client.get(f'/api/v1/secure/investigations/{foreign_id}/report',headers=headers(viewer)).status_code==404
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.get(path,headers=headers(viewer)).status_code==500
+        response=client.get(path,headers=headers(viewer))
+        assert response.status_code==200 and response.headers['cache-control']=='no-store'
+        report=response.json()
+        assert report['investigation']['title']=='synthetic case'
+        assert report['entities']['items'][0]['association_status']=='analyst_association_unverified'
+        assert report['evidence']['items'][0]['evidence_id']==str(evidence_id)
+        assert report['evidence']['items'][0]['status']=='analyst_entered_unverified'
+        assert len(report['notes']['items'])==50 and report['notes']['truncated']
+        assert not report['entities']['truncated'] and not report['evidence']['truncated']
+        assert 'not a consistent snapshot' in report['notice'] and 'hashes are not verified' in report['notice']
+    with factory() as db:
+        events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='investigation_report_read')))
+        assert len(events)==1 and events[0].tenant_id==tenant and events[0].target_investigation_id==case_id
