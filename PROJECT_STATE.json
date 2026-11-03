@@ -130,7 +130,8 @@
     "API 345 passed, 34 PostgreSQL-only SQLite variants skipped; experimental quarantine shared directory locking verified against exclusive cross-process contention and failure cleanup on local POSIX filesystem; synthetic restore and schema parity passed",
     "API 347 passed, 34 PostgreSQL-only SQLite variants skipped; bounded read-only quarantine inventory tested with generated synthetic objects, unsafe symlink metadata, bounded traversal, and cooperating-stage lock contention; parity and synthetic restore passed",
     "API 349 passed, 34 PostgreSQL-only SQLite variants skipped; read-only quarantine inventory CLI preflight, sanitized errors and synthetic local subprocess tested; parity and synthetic restore passed",
-    "API 351 passed, 34 PostgreSQL-only SQLite variants skipped; quarantine CLI subprocess tests verify contention during active cooperating stage, insecure/missing directory refusal, no file mutation and path redaction; parity and synthetic restore passed"
+    "API 351 passed, 34 PostgreSQL-only SQLite variants skipped; quarantine CLI subprocess tests verify contention during active cooperating stage, insecure/missing directory refusal, no file mutation and path redaction; parity and synthetic restore passed",
+    "API 356 passed, 35 PostgreSQL-only SQLite variants skipped; append-only investigation note corrections tested for admin/author scope, foreign/closed denial, atomic rollback, tenant/case DB constraints and concurrent PostgreSQL duplicates; schema parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -194,12 +195,13 @@
     "Automatic quarantine orphan deletion is deferred: staging now uses a nonblocking shared directory flock only for cooperating processes on tested local POSIX filesystems; age alone remains unsafe for legacy/noncooperating writers; DB/filesystem reconciliation, hard-link interrupted publication and same-UID threats remain unresolved.",
     "Quarantine flock is advisory, POSIX/filesystem-dependent, and only coordinates cooperating processes sharing the same directory inode; legacy/noncooperating writers and hostile same-UID processes remain unprotected. No cleanup implementation exists.",
     "Quarantine inventory is internal, read-only and non-snapshot; enumeration order is unspecified, no cursor or completeness guarantee, metadata does not establish orphan status or authenticity; advisory lock does not constrain noncooperating processes.",
-    "Quarantine inventory CLI has no application authentication or audit; it relies on trusted local operator/OS controls, reports partial metadata only, and is not a cleanup operation or production evidence service."
+    "Quarantine inventory CLI has no application authentication or audit; it relies on trusted local operator/OS controls, reports partial metadata only, and is not a cleanup operation or production evidence service.",
+    "Note corrections append new notes and links rather than editing originals; only the note author or admin can correct it, one direct correction per note. SQL-level tamper resistance, retention and cycle prevention against direct database writes are absent. Lists/reports are not snapshot-consistent and bounded reports may omit related notes."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace matched 30d5327 and was fast-forwarded to remote 5af2b1f before current changes",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Implement authenticated, tenant-scoped investigation note detail editing with optimistic concurrency only if historical/audit integrity can be preserved",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A34 \"class InvestigationNote\" apps/api/app/models.py && grep -n -A100 \"def add_investigation_note\\|def list_investigation_notes\" apps/api/app/protected_api.py",
-  "next_implementation_step": "Inspect InvestigationNote model, case status/locking semantics, existing note endpoints and migrations; evaluate immutable note history and audit retention before adding edit. If safe history cannot be guaranteed, document blocker and choose independent case-read enhancement."
+  "next_recommended_task": "Strengthen investigation note correction testing for analyst ownership, chained corrections and close-before-lock race",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A70 \"def correct_investigation_note\" apps/api/app/protected_api.py && grep -n -A70 \"def test_note_correction\" apps/api/tests/test_migrations.py",
+  "next_implementation_step": "Add migrated SQLite/PostgreSQL tests for author-owned and chained note corrections, access restrictions and links; force PostgreSQL case-close-before-lock interleaving to prove no correction commits, and verify audit/history rollback. Document and push."
 }

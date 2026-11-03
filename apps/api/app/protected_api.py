@@ -22,7 +22,7 @@ from .login_service import LoginStatus, login, logout
 from .connectors.cisa_sync import abandon_sync, get_status
 from .connectors.nvd_sync import abandon_sync as abandon_nvd_sync, get_status as get_nvd_status
 from .connectors.nvd_cve import _cve_id
-from .models import CisaSyncAttempt, NvdCatalogRecord, NvdSyncAttempt, Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, User, AuthSession
+from .models import CisaSyncAttempt, NvdCatalogRecord, NvdSyncAttempt, Entity, EvidenceReference, ProvenanceEvent, Relationship, SecurityAuditEvent, Investigation, InvestigationEvent, InvestigationEntityLink, InvestigationEvidenceLink, InvestigationNote, InvestigationNoteCorrection, User, AuthSession
 from .security import Permission, Role, authorize
 from .sessions import authenticate_session, authenticate_session_locked, _digest
 
@@ -212,6 +212,20 @@ class RedactedValidationRoute(APIRoute):
                 return JSONResponse({'detail': 'Invalid request'}, status_code=422,
                                     headers={'Cache-Control': 'no-store'})
         return handler
+
+def note_correction_links(db, tenant_id, investigation_id, notes):
+    """Bounded batch lookup; observations can change during non-snapshot reads."""
+    ids = [note.id for note in notes]
+    links = {note_id: {'corrects_note_id': None, 'corrected_by_note_id': None} for note_id in ids}
+    if ids:
+        rows = db.scalars(select(InvestigationNoteCorrection).where(
+            InvestigationNoteCorrection.tenant_id == tenant_id,
+            InvestigationNoteCorrection.investigation_id == investigation_id,
+            or_(InvestigationNoteCorrection.original_note_id.in_(ids), InvestigationNoteCorrection.correction_note_id.in_(ids))))
+        for row in rows:
+            if row.original_note_id in links: links[row.original_note_id]['corrected_by_note_id'] = str(row.correction_note_id)
+            if row.correction_note_id in links: links[row.correction_note_id]['corrects_note_id'] = str(row.original_note_id)
+    return links
 
 def entity_output(entity):
     return {'id':str(entity.id), 'kind':entity.kind, 'title':entity.title, 'source':entity.source,
@@ -637,6 +651,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 .order_by(InvestigationEvidenceLink.id).limit(51)))
             notes = list(db.scalars(select(InvestigationNote).where(InvestigationNote.tenant_id == principal.tenant_id,
                 InvestigationNote.investigation_id == investigation_id).order_by(InvestigationNote.created_at, InvestigationNote.id).limit(51)))
+            note_links = note_correction_links(db, principal.tenant_id, investigation_id, notes[:50])
             report = {'generated_at':datetime.now(timezone.utc).isoformat(), 'investigation':investigation_output(*row),
                 'entities':{'items':[{'link_id':str(link.id), 'entity':entity_output(entity),
                     'association_status':'analyst_association_unverified'} for link,entity in entity_rows[:50]], 'truncated':len(entity_rows)>50},
@@ -645,7 +660,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                     'sha256':evidence.sha256, 'status':'analyst_entered_unverified'} for link,evidence in evidence_rows[:50]],
                     'truncated':len(evidence_rows)>50},
                 'notes':{'items':[{'id':str(note.id), 'author_id':str(note.author_id), 'body':note.body,
-                    'created_at':note.created_at.isoformat(), 'status':'analyst_entered_unverified'} for note in notes[:50]],
+                    'created_at':note.created_at.isoformat(), 'status':'analyst_entered_unverified', **note_links[note.id]} for note in notes[:50]],
                     'truncated':len(notes)>50},
                 'notice':'Bounded report is not a consistent snapshot, complete history, verified evidence, chain of custody, or tamper-resistant record. Associations and notes are analyst assertions; supplied hashes are not verified.'}
             if format == ReportFormat.TEXT:
@@ -977,6 +992,43 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             record_event(db, principal.tenant_id, AuditType.INVESTIGATION_NOTE_CREATED, principal.user_id, target_investigation_id=case.id, target_note_id=note.id)
             return {'id':str(note.id), 'status':'analyst_entered_unverified'}
 
+    @router.post('/investigations/{investigation_id}/notes/{note_id}/corrections', status_code=201, dependencies=[Depends(require_tls)])
+    def correct_investigation_note(investigation_id: UUID, note_id: UUID, payload: InvestigationNoteInput, token: str = Depends(bearer)):
+        """Append a correction, preserving the earlier note rather than editing it."""
+        with factory.begin() as db:
+            principal = authenticate_session_locked(db, token)
+            if principal is None:
+                raise HTTPException(status_code=401, detail='Authentication required', headers={'WWW-Authenticate':'Bearer', 'Cache-Control':'no-store'})
+            try:
+                authorize(principal, principal.tenant_id, Permission.WRITE_INTELLIGENCE)
+            except PermissionError:
+                raise HTTPException(status_code=403, detail='Access denied', headers={'Cache-Control':'no-store'}) from None
+            case = db.scalar(select(Investigation).where(Investigation.tenant_id == principal.tenant_id,
+                Investigation.id == investigation_id).with_for_update().execution_options(populate_existing=True))
+            if case is None:
+                raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
+            if case.status != 'open':
+                raise HTTPException(status_code=409, detail='Investigation is closed', headers={'Cache-Control':'no-store'})
+            original = db.scalar(select(InvestigationNote).where(InvestigationNote.tenant_id == principal.tenant_id,
+                InvestigationNote.investigation_id == case.id, InvestigationNote.id == note_id))
+            if original is None:
+                raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
+            if original.author_id != principal.user_id and principal.role != Role.ADMIN:
+                raise HTTPException(status_code=403, detail='Access denied', headers={'Cache-Control':'no-store'})
+            if db.scalar(select(InvestigationNoteCorrection.id).where(InvestigationNoteCorrection.tenant_id == principal.tenant_id,
+                InvestigationNoteCorrection.investigation_id == case.id, InvestigationNoteCorrection.original_note_id == note_id)) is not None:
+                raise HTTPException(status_code=409, detail='Note already corrected', headers={'Cache-Control':'no-store'})
+            replacement = InvestigationNote(tenant_id=principal.tenant_id, investigation_id=case.id, author_id=principal.user_id, body=payload.body)
+            db.add(replacement); db.flush()
+            db.add(InvestigationNoteCorrection(tenant_id=principal.tenant_id, investigation_id=case.id,
+                original_note_id=original.id, correction_note_id=replacement.id, created_by=principal.user_id))
+            db.add(InvestigationEvent(tenant_id=principal.tenant_id, investigation_id=case.id, actor_id=principal.user_id,
+                event_type='note_corrected', details={'original_note_id':str(original.id), 'correction_note_id':str(replacement.id), 'status':'analyst_entered_unverified'}))
+            record_event(db, principal.tenant_id, AuditType.INVESTIGATION_NOTE_CORRECTED, principal.user_id,
+                         target_investigation_id=case.id, target_note_id=replacement.id)
+            return {'id':str(replacement.id), 'corrects_note_id':str(original.id), 'status':'analyst_entered_unverified',
+                    'notice':'Original note is retained; corrections are assertions, not tamper-resistant or independently verified.'}
+
     @router.get('/investigations/{investigation_id}/notes', dependencies=[Depends(require_tls)])
     def list_investigation_notes(investigation_id: UUID, after: UUID | None = None, author_id: UUID | None = None, token: str = Depends(bearer)):
         with factory.begin() as db:
@@ -996,9 +1048,10 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 query = query.where(or_(InvestigationNote.created_at > anchor.created_at,
                     and_(InvestigationNote.created_at == anchor.created_at, InvestigationNote.id > anchor.id)))
             notes = list(db.scalars(query.order_by(InvestigationNote.created_at, InvestigationNote.id).limit(101)))
+            links = note_correction_links(db, principal.tenant_id, investigation_id, notes[:100])
             record_event(db, principal.tenant_id, AuditType.INVESTIGATION_READ, principal.user_id, target_investigation_id=investigation_id)
             return {'items':[{'id':str(n.id), 'author_id':str(n.author_id), 'body':n.body,
-                'created_at':n.created_at.isoformat(), 'status':'analyst_entered_unverified'} for n in notes[:100]],
+                'created_at':n.created_at.isoformat(), 'status':'analyst_entered_unverified', **links[n.id]} for n in notes[:100]],
                 'next_cursor':str(notes[99].id) if len(notes)>100 else None,
                 'notice':'Notes are analyst assertions, not verified facts or tamper-resistant; pagination is not a snapshot.'}
 
@@ -1013,9 +1066,16 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 InvestigationNote.investigation_id == investigation_id, InvestigationNote.id == note_id))
             if note is None:
                 raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
+            prior = db.scalar(select(InvestigationNoteCorrection.original_note_id).where(
+                InvestigationNoteCorrection.tenant_id == principal.tenant_id, InvestigationNoteCorrection.investigation_id == investigation_id,
+                InvestigationNoteCorrection.correction_note_id == note.id))
+            later = db.scalar(select(InvestigationNoteCorrection.correction_note_id).where(
+                InvestigationNoteCorrection.tenant_id == principal.tenant_id, InvestigationNoteCorrection.investigation_id == investigation_id,
+                InvestigationNoteCorrection.original_note_id == note.id))
             record_event(db, principal.tenant_id, AuditType.INVESTIGATION_READ, principal.user_id,
                 target_investigation_id=investigation_id, target_note_id=note.id)
-            return {'id':str(note.id), 'author_id':str(note.author_id), 'body':note.body,
+            return {'corrects_note_id':str(prior) if prior else None, 'corrected_by_note_id':str(later) if later else None,
+                'id':str(note.id), 'author_id':str(note.author_id), 'body':note.body,
                 'created_at':note.created_at.isoformat(), 'status':'analyst_entered_unverified',
                 'notice':'Analyst assertion, not verified or tamper-resistant.'}
 

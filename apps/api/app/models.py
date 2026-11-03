@@ -342,3 +342,23 @@ class InvestigationNote(Base):
     author_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     body: Mapped[str] = mapped_column(String(4000), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class InvestigationNoteCorrection(Base):
+    """Append-only correction link; storage is not tamper-resistant."""
+    __tablename__ = 'investigation_note_corrections'
+    __table_args__ = (
+        ForeignKeyConstraint(['tenant_id','investigation_id','original_note_id'], ['investigation_notes.tenant_id','investigation_notes.investigation_id','investigation_notes.id']),
+        ForeignKeyConstraint(['tenant_id','investigation_id','correction_note_id'], ['investigation_notes.tenant_id','investigation_notes.investigation_id','investigation_notes.id']),
+        ForeignKeyConstraint(['tenant_id','created_by'], ['users.tenant_id','users.id']),
+        UniqueConstraint('tenant_id','investigation_id','original_note_id',name='uq_note_correction_original'),
+        UniqueConstraint('tenant_id','investigation_id','correction_note_id',name='uq_note_correction_replacement'),
+        CheckConstraint('original_note_id <> correction_note_id',name='ck_note_correction_distinct'),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid,primary_key=True,default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'),nullable=False)
+    investigation_id: Mapped[UUID] = mapped_column(Uuid,nullable=False)
+    original_note_id: Mapped[UUID] = mapped_column(Uuid,nullable=False)
+    correction_note_id: Mapped[UUID] = mapped_column(Uuid,nullable=False)
+    created_by: Mapped[UUID] = mapped_column(Uuid,nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=utcnow,nullable=False)

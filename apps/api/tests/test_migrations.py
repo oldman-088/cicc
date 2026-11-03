@@ -3972,3 +3972,119 @@ def test_investigation_text_export_scope_escape_bounds_and_audit(migration_db,mo
     with factory() as db:
         audits=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.tenant_id==tenant,SecurityAuditEvent.event_type=='investigation_report_exported')))
         assert len(audits)==1 and audits[0].target_investigation_id==case_id
+
+
+def test_note_correction_is_append_only_scoped_and_audited(migration_db,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationEvent, InvestigationNote, InvestigationNoteCorrection, SecurityAuditEvent
+    from app.security import Role
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,_=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        admin=issue_session(db,tenant,'admin','a safe long password'); foreign=issue_session(db,other,'admin','a safe long password')
+    accounts.create_user(factory,admin_token=admin,username='analyst',password='a safe long password',role=Role.ANALYST)
+    accounts.create_user(factory,admin_token=admin,username='viewer',password='a safe long password',role=Role.VIEWER)
+    with factory.begin() as db:
+        analyst=issue_session(db,tenant,'analyst','a safe long password'); viewer=issue_session(db,tenant,'viewer','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='case',description='fixture')
+        closed=Investigation(tenant_id=tenant,created_by=actor,title='closed',description='fixture',status='closed')
+        db.add_all([case,closed]); db.flush(); case_id,closed_id=case.id,closed.id
+        old=InvestigationNote(tenant_id=tenant,investigation_id=case_id,author_id=actor,body='original fixture')
+        closed_note=InvestigationNote(tenant_id=tenant,investigation_id=closed_id,author_id=actor,body='closed fixture')
+        db.add_all([old,closed_note]); db.flush(); old_id,closed_note_id=old.id,closed_note.id
+    app=FastAPI(); app.include_router(protected_api.protected_router(factory,b'x'*32))
+    h=lambda t:{'Authorization':'Bearer '+t}; base=f'/api/v1/secure/investigations/{case_id}/notes'; path=f'{base}/{old_id}/corrections'
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        assert client.post(path,json={'body':'correction'}).status_code==401
+        assert client.post(path,headers=h(viewer),json={'body':'correction'}).status_code==403
+        assert client.post(path,headers=h(analyst),json={'body':'correction'}).status_code==403
+        assert client.post(path,headers=h(foreign),json={'body':'correction'}).status_code==404
+        assert client.post(f'{base}/{closed_note_id}/corrections',headers=h(admin),json={'body':'correction'}).status_code==404
+        assert client.post(f'/api/v1/secure/investigations/{closed_id}/notes/{closed_note_id}/corrections',headers=h(admin),json={'body':'correction'}).status_code==409
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.post(path,headers=h(admin),json={'body':'correction'}).status_code==500
+        with factory() as db:
+            assert db.scalar(select(InvestigationNoteCorrection)) is None
+            assert len(list(db.scalars(select(InvestigationNote).where(InvestigationNote.investigation_id==case_id))))==1
+        response=client.post(path,headers=h(admin),json={'body':'corrected fixture'})
+        assert response.status_code==201 and response.headers['cache-control']=='no-store'
+        new_id=response.json()['id']; assert response.json()['corrects_note_id']==str(old_id)
+        assert client.post(path,headers=h(admin),json={'body':'duplicate'}).status_code==409
+        old_detail=client.get(f'{base}/{old_id}',headers=h(viewer)).json()
+        new_detail=client.get(f'{base}/{new_id}',headers=h(viewer)).json()
+        assert old_detail['body']=='original fixture' and old_detail['corrected_by_note_id']==new_id
+        assert new_detail['body']=='corrected fixture' and new_detail['corrects_note_id']==str(old_id)
+        notes=client.get(base,headers=h(viewer)).json()['items']; assert len(notes)==2
+        assert {n['id']:n for n in notes}[str(old_id)]['corrected_by_note_id']==new_id
+        report=client.get(f'/api/v1/secure/investigations/{case_id}/report',headers=h(viewer)).json()
+        assert {n['id']:n for n in report['notes']['items']}[new_id]['corrects_note_id']==str(old_id)
+        audit=client.get('/api/v1/secure/audit',headers=h(admin),params={'event_type':'investigation_note_corrected'}).json()['items']
+        assert len(audit)==1 and audit[0]['target_note_id']==new_id and audit[0]['target_investigation_id']==str(case_id)
+    with factory() as db:
+        assert db.scalar(select(InvestigationEvent).where(InvestigationEvent.event_type=='note_corrected')).details['original_note_id']==str(old_id)
+
+
+def test_note_correction_database_constraints(migration_db):
+    from app.models import Investigation, InvestigationNote, InvestigationNoteCorrection, User
+    engine,_=migration_db; a,b=uuid4(),uuid4(); u,v=uuid4(),uuid4()
+    with Session(engine) as db:
+        db.add_all([Tenant(id=a,name='a'),Tenant(id=b,name='b')]); db.flush()
+        db.add_all([User(id=u,tenant_id=a,username='a',role='admin',active=True,password_hash='fixture'), User(id=v,tenant_id=b,username='b',role='admin',active=True,password_hash='fixture')]); db.flush()
+        ca=Investigation(tenant_id=a,created_by=u,title='a',description='fixture')
+        cb=Investigation(tenant_id=a,created_by=u,title='b',description='fixture')
+        cf=Investigation(tenant_id=b,created_by=v,title='f',description='fixture')
+        db.add_all([ca,cb,cf]); db.flush()
+        x=InvestigationNote(tenant_id=a,investigation_id=ca.id,author_id=u,body='x')
+        y=InvestigationNote(tenant_id=a,investigation_id=ca.id,author_id=u,body='y')
+        z=InvestigationNote(tenant_id=a,investigation_id=cb.id,author_id=u,body='z')
+        f=InvestigationNote(tenant_id=b,investigation_id=cf.id,author_id=v,body='f')
+        db.add_all([x,y,z,f]); db.flush(); cid,xid,yid,zid,fid=ca.id,x.id,y.id,z.id,f.id; db.commit()
+    valid=dict(tenant_id=a,investigation_id=cid,original_note_id=xid,correction_note_id=yid,created_by=u)
+    for values in [dict(correction_note_id=xid),dict(correction_note_id=zid),dict(correction_note_id=fid),dict(created_by=v)]:
+        with Session(engine) as db:
+            db.add(InvestigationNoteCorrection(**{**valid,**values}))
+            with pytest.raises(IntegrityError): db.flush()
+            db.rollback()
+    with Session(engine) as db:
+        db.add(InvestigationNoteCorrection(**valid)); db.commit()
+        db.add(InvestigationNoteCorrection(**valid))
+        with pytest.raises(IntegrityError): db.flush()
+        db.rollback()
+
+
+def test_postgres_concurrent_note_corrections_are_serialized(migration_db):
+    from concurrent.futures import ThreadPoolExecutor
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import Investigation, InvestigationNote, InvestigationNoteCorrection
+    from app.protected_api import protected_router
+    from app.security import Role
+    from app.sessions import issue_session
+    engine,_=migration_db
+    if engine.dialect.name!='postgresql': pytest.skip('PostgreSQL row locks required')
+    factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    with factory.begin() as db: a=issue_session(db,tenant,'admin','a safe long password')
+    accounts.create_user(factory,admin_token=a,username='admin2',password='a safe long password',role=Role.ADMIN)
+    with factory.begin() as db:
+        b=issue_session(db,tenant,'admin2','a safe long password')
+        case=Investigation(tenant_id=tenant,created_by=actor,title='case',description='fixture'); db.add(case); db.flush()
+        note=InvestigationNote(tenant_id=tenant,investigation_id=case.id,author_id=actor,body='fixture'); db.add(note); db.flush(); case_id,note_id=case.id,note.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    with TestClient(app,base_url='https://testserver') as client, ThreadPoolExecutor(max_workers=2) as pool:
+        def post(token): return client.post(f'/api/v1/secure/investigations/{case_id}/notes/{note_id}/corrections',headers={'Authorization':'Bearer '+token},json={'body':'correction'}).status_code
+        assert sorted(pool.map(post,[a,b]))==[201,409]
+    with factory() as db:
+        assert len(list(db.scalars(select(InvestigationNoteCorrection))))==1
+        assert len(list(db.scalars(select(InvestigationNote).where(InvestigationNote.investigation_id==case_id))))==2

@@ -104,3 +104,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-04 partial: bounded read-only internal quarantine inventory with advisory exclusive lock and no-follow metadata, tested with synthetic local files; not a complete scan, orphan detection, deletion, custody or tenant-integrated API.
 
 - P1-04 partial: explicitly confirmed local read-only quarantine inventory CLI, synthetic subprocess tests only. No application auth/audit, tenant scope, deletion, verified evidence or production storage.
+
+- P1-04 partial: append-only note correction link, role/scope checks, case history and targeted audit (migration 0042) with synthetic SQLite/PostgreSQL concurrency tests. No DB tamper resistance, verified evidence, complete reporting or UI.
