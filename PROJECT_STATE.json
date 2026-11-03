@@ -119,7 +119,8 @@
     "API 317 passed, 34 PostgreSQL-only SQLite variants skipped; case note author filter, tenant/filter cursor scope, 101 tied notes and audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
     "2026-11-03: pip check passed and pip-audit --disable-pip --no-deps reported no known vulnerabilities for pinned runtime and dev lock entries; npm ci/audit zero findings, web typecheck, 7 unit, build and 5 synthetic browser smoke tests passed. Audits are time-dependent, not security reviews.",
     "API 319 passed, 34 PostgreSQL-only SQLite variants skipped; relationship detail viewer, subject/object scope, foreign/parent denial and entity-targeted audit rollback tested on migrated SQLite/PostgreSQL; synthetic restore and parity passed",
-    "API 324 passed, 34 PostgreSQL-only SQLite variants skipped; relationship-target audit integrity, subject/object access, cross-tenant and wrong-endpoint rejection, filtered cursor pagination, historical SQLite migration preservation and synthetic restored constraints passed; schema parity passed"
+    "API 324 passed, 34 PostgreSQL-only SQLite variants skipped; relationship-target audit integrity, subject/object access, cross-tenant and wrong-endpoint rejection, filtered cursor pagination, historical SQLite migration preservation and synthetic restored constraints passed; schema parity passed",
+    "API 326 passed, 34 PostgreSQL-only SQLite variants skipped; relationship kind filtering, subject/object and filter-scoped cursors, RBAC and audit rollback tested on migrated SQLite/PostgreSQL; schema parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -173,12 +174,13 @@
     "Investigation history event-type filtering is exact and cursor traversal is not a snapshot; production-scale query performance is unmeasured despite the supporting index.",
     "Case note author filtering is not snapshot-consistent; author identifiers in query strings can appear in intermediary logs and production-scale query performance is unmeasured.",
     "Relationship detail and creation audit targets are tenant/relationship/endpoint constrained; older audit events lack relationship targets. The foreign key can prevent relationship deletion or endpoint changes; audit retention policy is unresolved. Assertions and references remain unverified.",
-    "This session checkout was restored at c6ef133 with an untracked workspace exactly matching historical 30d5327; fetched remote descendant 5af2b1f and fast-forwarded without losing workspace changes."
+    "This session checkout was restored at c6ef133 with an untracked workspace exactly matching historical 30d5327; fetched remote descendant 5af2b1f and fast-forwarded without losing workspace changes.",
+    "Relationship kind-filter pagination is not a consistent snapshot; filters accept supported current kinds, and production-scale OR-query/index performance is unmeasured."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace matched 30d5327 and was fast-forwarded to remote 5af2b1f before current changes",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Add tenant-scoped relationship-list filters and filter-matched cursor checks with atomic audit, if compatible with existing query semantics",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && sed -n \"35,80p;465,515p\" apps/api/app/protected_api.py && grep -n -i relationship apps/api/tests/test_migrations.py",
-  "next_implementation_step": "Inspect relationship-list endpoint and migrated tests; add an optional validated relationship kind filter with appropriately scoped cursors, supporting index, authorization and pagination tests on SQLite/PostgreSQL, documenting non-snapshot behavior."
+  "next_recommended_task": "Add optional relationship direction filtering with tenant/entity/filter-scoped cursors and audit",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -40 DEVELOPMENT_LOG.md && cat BLOCKERS.md && sed -n \"65,105p;465,510p\" apps/api/app/protected_api.py && grep -n -A65 test_relationship_kind_filter apps/api/tests/test_migrations.py",
+  "next_implementation_step": "Extend relationship list with subject/object direction filter, combining existing kind and anchor validation; test both sides, mixed kinds, foreign/mismatched cursors, pagination and audit rollback on migrated SQLite/PostgreSQL."
 }

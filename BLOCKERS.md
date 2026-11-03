@@ -55,3 +55,5 @@
 - Relationship detail is audited against the requested subject/object entity only; the individual relationship ID is not retained as an audit target. Relationships and evidence references are unverified assertions.
 
 - Relationship-target audit FK may block deleting relationships or changing endpoints; historical events lack targets. Audit and relationship assertions remain mutable and unverified; retention/deletion policy and production-scale performance remain unresolved.
+
+- Relationship kind filtering uses bounded keyset traversal, not a snapshot; only supported current kinds are selectable, and subject/object OR-query performance is unmeasured at production scale.

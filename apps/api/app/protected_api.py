@@ -467,7 +467,7 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
             return {'id':str(relation.id), 'status':'analyst_assertion_unverified'}
 
     @router.get('/entities/{entity_id}/relationships', dependencies=[Depends(require_tls)])
-    def list_relationships(entity_id: UUID, after: UUID | None = None, token: str = Depends(bearer)):
+    def list_relationships(entity_id: UUID, after: UUID | None = None, kind: RelationshipKind | None = None, token: str = Depends(bearer)):
         with factory.begin() as db:
             principal = authenticate_session_locked(db, token)
             if principal is None:
@@ -477,8 +477,9 @@ def protected_router(factory: sessionmaker, secret: bytes) -> APIRouter:
                 raise HTTPException(status_code=404, detail='Not found', headers={'Cache-Control':'no-store'})
             scope = or_(Relationship.subject_id == entity_id, Relationship.object_id == entity_id)
             query = select(Relationship).where(Relationship.tenant_id == principal.tenant_id, scope)
+            if kind is not None: query = query.where(Relationship.kind == kind.value)
             if after is not None:
-                anchor = db.scalar(select(Relationship).where(Relationship.tenant_id == principal.tenant_id, scope, Relationship.id == after))
+                anchor = db.scalar(query.where(Relationship.id == after))
                 if anchor is None:
                     raise HTTPException(status_code=404, detail='Cursor not found', headers={'Cache-Control':'no-store'})
                 query = query.where(or_(Relationship.created_at > anchor.created_at,

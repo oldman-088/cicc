@@ -131,3 +131,5 @@ Admin audit supports `investigation_event_id` to filter events with a matching t
 `GET /api/v1/secure/entities/{entity_id}/relationships/{relationship_id}` returns a tenant-scoped relationship to authorized readers when the parent entity is its subject or object. Reads are transactionally audited against the requested entity and individual relationship. Creation is also relationship-targeted. Relationships and evidence references are unverified assertions.
 
 Admin audit accepts `relationship_id` to filter relationship-targeted events. Historical rows are not backfilled. The database enforces that the audited entity is an endpoint of the referenced tenant-scoped relationship; its FK can prevent relationship deletion or endpoint changes. Pagination is not a snapshot, and audit remains mutable.
+
+`GET /api/v1/secure/entities/{entity_id}/relationships` accepts an optional supported `kind` filter. `after` must identify a relationship in the same tenant involving that entity and matching the kind; otherwise 404. Without the filter, historical kinds remain visible. The list is not a consistent snapshot; OR-query/index performance at production scale is unmeasured.

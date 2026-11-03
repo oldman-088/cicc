@@ -41,6 +41,8 @@ class Relationship(Base):
     __tablename__ = "intelligence_relationships"
     __table_args__ = (
         UniqueConstraint('tenant_id', 'id', 'subject_id', 'object_id', name='uq_relationship_audit_scope'),
+        Index('ix_rel_subject_kind_time_id', 'tenant_id', 'subject_id', 'kind', 'created_at', 'id'),
+        Index('ix_rel_object_kind_time_id', 'tenant_id', 'object_id', 'kind', 'created_at', 'id'),
         Index('ix_rel_tenant_subject_time_id', 'tenant_id', 'subject_id', 'created_at', 'id'),
         Index('ix_rel_tenant_object_time_id', 'tenant_id', 'object_id', 'created_at', 'id'),
         ForeignKeyConstraint(["tenant_id", "subject_id"], ["intelligence_entities.tenant_id", "intelligence_entities.id"]),

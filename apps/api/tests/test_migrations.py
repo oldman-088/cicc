@@ -3593,3 +3593,56 @@ def test_relationship_audit_revision_preserves_historical_rows(tmp_path,monkeypa
     command.downgrade(config,'0037_case_note_author_index')
     with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type FROM security_audit_events').all()==[('fixture',)]
     command.downgrade(config,'base'); engine.dispose()
+
+
+def test_relationship_kind_filter_scoped_cursors_and_audit(migration_db,monkeypatch):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app import accounts, protected_api
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import SecurityAuditEvent
+    from app.security import Role
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        admin=issue_session(db,tenant,'admin','a safe long password')
+        foreign=issue_session(db,other,'admin','a safe long password')
+    accounts.create_user(factory,admin_token=admin,username='viewer',password='a safe long password',role=Role.VIEWER)
+    with factory.begin() as db:
+        viewer=issue_session(db,tenant,'viewer','a safe long password')
+        entities=[Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='x',source='fixture') for _ in range(3)]
+        fe=[Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='f',source='fixture') for _ in range(2)]
+        db.add_all(entities+fe); db.flush(); x,y,z=(e.id for e in entities); fx,fy=(e.id for e in fe)
+        now=datetime(2026,1,1,tzinfo=timezone.utc)
+        rows=[Relationship(tenant_id=tenant,subject_id=x if n%2 else y,object_id=y if n%2 else x,kind='USES',source='fixture',created_at=now) for n in range(101)]
+        mismatch=Relationship(tenant_id=tenant,subject_id=x,object_id=y,kind='RELATED_TO',source='fixture',created_at=now)
+        unrelated=Relationship(tenant_id=tenant,subject_id=y,object_id=z,kind='USES',source='fixture',created_at=now)
+        outside=Relationship(tenant_id=other,subject_id=fx,object_id=fy,kind='USES',source='fixture',created_at=now)
+        db.add_all([*rows,mismatch,unrelated,outside]); db.flush(); mid,uid,fid=mismatch.id,unrelated.id,outside.id
+    app=FastAPI(); app.include_router(protected_api.protected_router(factory,b'x'*32))
+    h=lambda t:{'Authorization':'Bearer '+t}
+    path=f'/api/v1/secure/entities/{x}/relationships'
+    with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
+        assert client.get(path).status_code==401
+        assert client.get(path,headers=h(foreign),params={'kind':'USES'}).status_code==404
+        assert client.get(path,headers=h(viewer),params={'kind':'invalid'}).status_code==422
+        for anchor in (mid,uid,fid,uuid4()):
+            assert client.get(path,headers=h(viewer),params={'kind':'USES','after':str(anchor)}).status_code==404
+        def fail(*args,**kwargs): raise RuntimeError('audit unavailable')
+        with monkeypatch.context() as patch:
+            patch.setattr(protected_api,'record_event',fail)
+            assert client.get(path,headers=h(viewer),params={'kind':'USES'}).status_code==500
+        first=client.get(path,headers=h(viewer),params={'kind':'USES'}).json()
+        second=client.get(path,headers=h(viewer),params={'kind':'USES','after':first['next_cursor']}).json()
+        combined=first['items']+second['items']
+        assert len(combined)==101 and len({item['id'] for item in combined})==101
+        assert all(item['kind']=='USES' and str(x) in (item['subject_id'],item['object_id']) for item in combined)
+        assert first['truncated'] and not second['truncated'] and second['next_cursor'] is None
+        assert len(client.get(path,headers=h(viewer),params={'kind':'RELATED_TO'}).json()['items'])==1
+    with factory() as db:
+        events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='relationship_read',SecurityAuditEvent.tenant_id==tenant)))
+        assert len(events)==3 and all(e.target_entity_id==x and e.target_relationship_id is None for e in events)
