@@ -101,3 +101,55 @@ def test_short_os_writes_are_completed(tmp_path, monkeypatch):
     monkeypatch.setattr(os, 'write', short)
     result = stage_stream(str(path), io.BytesIO(b'synthetic payload'), max_bytes=100)
     assert (path / ('q-' + result.object_id)).read_bytes() == b'synthetic payload'
+
+
+def test_inspect_detects_mismatch_and_reads_only_generated_name(tmp_path):
+    from app.evidence_quarantine import inspect_object
+    path = private_dir(tmp_path)
+    result = stage_stream(str(path), io.BytesIO(b'fixture'), max_bytes=20)
+    check = inspect_object(str(path), result.object_id, result.sha256, max_bytes=20)
+    assert check.matches and check.byte_count == 7
+    obj = path / ('q-' + result.object_id)
+    obj.write_bytes(b'tampered')
+    assert not inspect_object(str(path), result.object_id, result.sha256, max_bytes=20).matches
+    for name in ('../escape', 'q-'+result.object_id, 'A'*64, '', None):
+        with pytest.raises(ValueError): inspect_object(str(path), name, result.sha256, max_bytes=20)
+    with pytest.raises(EvidenceTooLarge): inspect_object(str(path), result.object_id, result.sha256, max_bytes=2)
+
+
+def test_inspect_rejects_symlinks_hardlinks_directories_and_permissions(tmp_path):
+    from app.evidence_quarantine import inspect_object
+    path = private_dir(tmp_path)
+    obj_id='a'*64
+    item=path / ('q-' + obj_id)
+    outside=tmp_path / 'outside'; outside.write_bytes(b'outside')
+    item.symlink_to(outside)
+    with pytest.raises(OSError): inspect_object(str(path), obj_id, '0'*64, max_bytes=10)
+    item.unlink(); os.link(outside, item)
+    with pytest.raises(ValueError, match='Unsafe'): inspect_object(str(path), obj_id, '0'*64, max_bytes=10)
+    item.unlink(); item.mkdir()
+    with pytest.raises(ValueError, match='Unsafe'): inspect_object(str(path), obj_id, '0'*64, max_bytes=10)
+    item.rmdir(); item.write_bytes(b'data'); item.chmod(0o644)
+    with pytest.raises(ValueError, match='Unsafe'): inspect_object(str(path), obj_id, '0'*64, max_bytes=10)
+
+
+def test_inspect_detects_selected_concurrent_modification(tmp_path, monkeypatch):
+    from app import evidence_quarantine
+    path = private_dir(tmp_path)
+    result = stage_stream(str(path), io.BytesIO(b'fixture'), max_bytes=20)
+    original = evidence_quarantine.compare_sha256
+    def mutate(stream, expected, **kwargs):
+        answer = original(stream, expected, **kwargs)
+        (path / ('q-' + result.object_id)).write_bytes(b'changed content')
+        return answer
+    monkeypatch.setattr(evidence_quarantine, 'compare_sha256', mutate)
+    with pytest.raises(ValueError, match='changed'):
+        evidence_quarantine.inspect_object(str(path), result.object_id, result.sha256, max_bytes=20)
+
+
+def test_inspect_rejects_fifo_without_blocking(tmp_path):
+    from app.evidence_quarantine import inspect_object
+    path = private_dir(tmp_path)
+    os.mkfifo(path / ('q-' + 'c'*64), 0o600)
+    with pytest.raises(ValueError, match='Unsafe'):
+        inspect_object(str(path), 'c'*64, '0'*64, max_bytes=10)

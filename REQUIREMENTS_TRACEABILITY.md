@@ -76,3 +76,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-04 partial: storage-neutral bounded stream SHA-256 comparison tested with synthetic bytes (`apps/api/app/evidence_integrity.py`); no upload/storage/quarantine or authenticity/custody guarantees.
 
 - P1-04 partial: bounded local quarantine staging with generated names, no-clobber publication and best-effort cleanup (`evidence_quarantine.py`), synthetic-only tests. No upload API, tenant binding, scanning, immutable or verified chain of custody.
+
+- P1-04 partial: standalone quarantine reinspection by opaque ID rejects unsafe file types, links and permissions and compares a bounded digest; synthetic tests only, no authenticated evidence lifecycle or immutable custody.

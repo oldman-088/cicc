@@ -9,11 +9,12 @@ Never use it for sensitive or production evidence.
 from dataclasses import dataclass
 import hashlib
 import os
+import re
 import secrets
 import stat
 from typing import BinaryIO
 
-from .evidence_integrity import CHUNK_BYTES, MAX_EVIDENCE_BYTES, EvidenceTooLarge
+from .evidence_integrity import CHUNK_BYTES, MAX_EVIDENCE_BYTES, EvidenceTooLarge, DigestComparison, compare_sha256
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,20 @@ class QuarantinedObject:
     object_id: str
     byte_count: int
     sha256: str
+
+
+def _open_private_dir(directory: str) -> int:
+    if not all(hasattr(os, flag) for flag in ('O_DIRECTORY', 'O_NOFOLLOW', 'O_CLOEXEC', 'O_NONBLOCK', 'geteuid')):
+        raise RuntimeError('Required filesystem protections unavailable')
+    dirfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(dirfd)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+            raise ValueError('Quarantine directory must be private and owned by process user')
+        return dirfd
+    except BaseException:
+        os.close(dirfd)
+        raise
 
 
 def stage_stream(directory: str, stream: BinaryIO, *, max_bytes: int) -> QuarantinedObject:
@@ -33,16 +48,11 @@ def stage_stream(directory: str, stream: BinaryIO, *, max_bytes: int) -> Quarant
     """
     if type(max_bytes) is not int or not 0 <= max_bytes <= MAX_EVIDENCE_BYTES:
         raise ValueError('Invalid byte limit')
-    if not all(hasattr(os, flag) for flag in ('O_DIRECTORY', 'O_NOFOLLOW', 'O_CLOEXEC', 'geteuid')):
-        raise RuntimeError('Required filesystem protections unavailable')
-    dirfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    dirfd = _open_private_dir(directory)
     tmp_name = final_name = None
     published = False
     created = False
     try:
-        info = os.fstat(dirfd)
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
-            raise ValueError('Quarantine directory must be private and owned by process user')
         object_id = secrets.token_hex(32)
         tmp_name, final_name = 'tmp-' + object_id, 'q-' + object_id
         fd = os.open(tmp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
@@ -87,5 +97,35 @@ def stage_stream(directory: str, stream: BinaryIO, *, max_bytes: int) -> Quarant
                 except OSError:
                     pass
         raise
+    finally:
+        os.close(dirfd)
+
+
+def inspect_object(directory: str, object_id: str, expected_sha256: str, *, max_bytes: int) -> DigestComparison:
+    """Recheck one generated object; equality is not authenticity or custody.
+
+    The configured directory and same-UID processes remain trusted. Metadata
+    comparisons detect some concurrent mutations, not all possible changes.
+    Neither ACLs nor a hard I/O deadline are checked.
+    """
+    if not isinstance(object_id, str) or re.fullmatch(r'[0-9a-f]{64}', object_id) is None:
+        raise ValueError('Invalid quarantine object identifier')
+    dirfd = _open_private_dir(directory)
+    try:
+        fd = os.open('q-' + object_id, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=dirfd)
+        try:
+            before = os.fstat(fd)
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid() or
+                before.st_mode & 0o077 or before.st_nlink != 1):
+                raise ValueError('Unsafe quarantine object')
+            with os.fdopen(fd, 'rb', closefd=False) as stream:
+                result = compare_sha256(stream, expected_sha256, max_bytes=max_bytes)
+            after = os.fstat(fd)
+            fields = ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_nlink', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+            if any(getattr(before, field) != getattr(after, field) for field in fields):
+                raise ValueError('Quarantine object changed during inspection')
+            return result
+        finally:
+            os.close(fd)
     finally:
         os.close(dirfd)
