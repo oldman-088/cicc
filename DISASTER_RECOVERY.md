@@ -17,3 +17,5 @@ Future deployment must establish encrypted off-site backups, access controls, re
 The synthetic drill also checks an NVD observation's data and timestamps plus the restored tenant/entity foreign key. These are fixture-only assertions, not a production recovery validation.
 
 The synthetic drill checks a case-event audit target after restore and rejects an audit target referencing an event from the wrong case. This does not establish production recovery capability or immutable audit.
+
+The synthetic drill also verifies a relationship-targeted audit record and rejects an unrelated endpoint after restore; this is not a production recovery validation.

@@ -53,3 +53,5 @@
 - Case note author filtering is not snapshot-consistent; author identifiers in query strings may be logged and supporting index performance at scale is unmeasured.
 
 - Relationship detail is audited against the requested subject/object entity only; the individual relationship ID is not retained as an audit target. Relationships and evidence references are unverified assertions.
+
+- Relationship-target audit FK may block deleting relationships or changing endpoints; historical events lack targets. Audit and relationship assertions remain mutable and unverified; retention/deletion policy and production-scale performance remain unresolved.

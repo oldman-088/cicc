@@ -40,6 +40,7 @@ class Entity(Base):
 class Relationship(Base):
     __tablename__ = "intelligence_relationships"
     __table_args__ = (
+        UniqueConstraint('tenant_id', 'id', 'subject_id', 'object_id', name='uq_relationship_audit_scope'),
         Index('ix_rel_tenant_subject_time_id', 'tenant_id', 'subject_id', 'created_at', 'id'),
         Index('ix_rel_tenant_object_time_id', 'tenant_id', 'object_id', 'created_at', 'id'),
         ForeignKeyConstraint(["tenant_id", "subject_id"], ["intelligence_entities.tenant_id", "intelligence_entities.id"]),
@@ -93,6 +94,7 @@ class SecurityAuditEvent(Base):
                       Index('ix_audit_tenant_evidence_time_id', 'tenant_id', 'target_evidence_id', 'occurred_at', 'id'),
                       Index('ix_audit_tenant_entity_time_id', 'tenant_id', 'target_entity_id', 'occurred_at', 'id'),
                       Index('ix_audit_tenant_user_time_id', 'tenant_id', 'target_user_id', 'occurred_at', 'id'),
+                      Index('ix_audit_tenant_relationship_time_id', 'tenant_id', 'target_relationship_id', 'occurred_at', 'id'),
                       Index('ix_audit_tenant_event_time_id', 'tenant_id', 'target_investigation_event_id', 'occurred_at', 'id'),
                       ForeignKeyConstraint(['tenant_id', 'actor_id'], ['users.tenant_id', 'users.id']),
                       ForeignKeyConstraint(['tenant_id', 'target_user_id'], ['users.tenant_id', 'users.id']),
@@ -101,6 +103,8 @@ class SecurityAuditEvent(Base):
                       ForeignKeyConstraint(['tenant_id', 'target_investigation_id'], ['investigations.tenant_id', 'investigations.id']),
                       ForeignKeyConstraint(['tenant_id', 'target_investigation_id', 'target_note_id'], ['investigation_notes.tenant_id', 'investigation_notes.investigation_id', 'investigation_notes.id']),
                       ForeignKeyConstraint(['tenant_id', 'target_investigation_id', 'target_investigation_event_id'], ['investigation_events.tenant_id', 'investigation_events.investigation_id', 'investigation_events.id'], name='fk_audit_event_scope'),
+                      ForeignKeyConstraint(['tenant_id', 'target_relationship_id', 'relationship_subject_id', 'relationship_object_id'], ['intelligence_relationships.tenant_id', 'intelligence_relationships.id', 'intelligence_relationships.subject_id', 'intelligence_relationships.object_id'], name='fk_audit_relationship_scope'),
+                      CheckConstraint('(target_relationship_id IS NULL AND relationship_subject_id IS NULL AND relationship_object_id IS NULL) OR (target_relationship_id IS NOT NULL AND relationship_subject_id IS NOT NULL AND relationship_object_id IS NOT NULL AND target_entity_id IS NOT NULL AND (target_entity_id = relationship_subject_id OR target_entity_id = relationship_object_id))', name='ck_audit_relationship_endpoint'),
                       CheckConstraint('target_investigation_event_id IS NULL OR target_investigation_id IS NOT NULL', name='ck_audit_event_has_case'),
                       CheckConstraint('target_note_id IS NULL OR target_investigation_id IS NOT NULL', name='ck_audit_note_has_case'),
                       CheckConstraint('target_session_id IS NULL OR target_user_id IS NOT NULL', name='ck_audit_session_has_user'),
@@ -114,6 +118,9 @@ class SecurityAuditEvent(Base):
     target_investigation_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     target_note_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     target_investigation_event_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    target_relationship_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    relationship_subject_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    relationship_object_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     # Snapshot identifier: intentionally no FK, so session cleanup can retain audit.
     target_session_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)

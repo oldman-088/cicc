@@ -26,7 +26,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / 'apps/api'
 sys.path.insert(0, str(API))
-from app.models import Tenant, User, Entity, Investigation, InvestigationEvent, InvestigationEntityLink, NvdCatalogRecord, SecurityAuditEvent
+from app.models import Tenant, User, Entity, Investigation, InvestigationEvent, InvestigationEntityLink, NvdCatalogRecord, SecurityAuditEvent, Relationship
 
 
 def main():
@@ -45,14 +45,17 @@ def main():
             engine = create_engine(source_db)
             try:
                 factory = sessionmaker(engine, expire_on_commit=False)
-                tenant_id, actor_id, entity_id, case_id, event_id, audit_id = (uuid4() for _ in range(6))
+                tenant_id, actor_id, entity_id, case_id, event_id, audit_id, other_entity_id, relation_id, relation_audit_id = (uuid4() for _ in range(9))
                 with factory.begin() as db:
                     db.add(Tenant(id=tenant_id, name='synthetic restore tenant')); db.flush()
                     db.add(User(id=actor_id, tenant_id=tenant_id, username='fixture', role='admin', active=True, password_hash='synthetic-invalid-hash')); db.flush()
                     db.add(Entity(id=entity_id, tenant_id=tenant_id, created_by=actor_id, kind='indicator', title='synthetic entity', source='fixture'))
+                    db.add(Entity(id=other_entity_id, tenant_id=tenant_id, created_by=actor_id, kind='indicator', title='synthetic second entity', source='fixture'))
                     db.add(Investigation(id=case_id, tenant_id=tenant_id, created_by=actor_id, title='synthetic case', description='synthetic only')); db.flush()
                     db.add(InvestigationEntityLink(tenant_id=tenant_id, investigation_id=case_id, entity_id=entity_id, created_by=actor_id))
                     db.add(InvestigationEvent(id=event_id, tenant_id=tenant_id, investigation_id=case_id, actor_id=actor_id, event_type='fixture', details={'synthetic':True})); db.flush()
+                    db.add(Relationship(id=relation_id,tenant_id=tenant_id,subject_id=entity_id,object_id=other_entity_id,kind='RELATED_TO',source='fixture')); db.flush()
+                    db.add(SecurityAuditEvent(id=relation_audit_id,tenant_id=tenant_id,actor_id=actor_id,event_type='relationship_read',target_entity_id=other_entity_id,target_relationship_id=relation_id,relationship_subject_id=entity_id,relationship_object_id=other_entity_id))
                     db.add(SecurityAuditEvent(id=audit_id, tenant_id=tenant_id, actor_id=actor_id, event_type='investigation_event_read', target_investigation_id=case_id, target_investigation_event_id=event_id))
                     db.add(NvdCatalogRecord(tenant_id=tenant_id, entity_id=entity_id, cve_id='CVE-2099-0001', details={'synthetic':True, 'description':'restore fixture only'}, first_collected_at=datetime(2026,1,1,tzinfo=timezone.utc), last_collected_at=datetime(2026,1,2,tzinfo=timezone.utc)))
             finally:
@@ -72,6 +75,9 @@ def main():
                     assert db.scalar(select(InvestigationEvent).where(InvestigationEvent.investigation_id == case_id)).details == {'synthetic':True}
                     audit = db.get(SecurityAuditEvent, audit_id)
                     assert audit.tenant_id == tenant_id and audit.target_investigation_id == case_id and audit.target_investigation_event_id == event_id
+                    relation_audit = db.get(SecurityAuditEvent, relation_audit_id)
+                    assert relation_audit.target_relationship_id == relation_id and relation_audit.target_entity_id == other_entity_id
+                    assert relation_audit.relationship_subject_id == entity_id and relation_audit.relationship_object_id == other_entity_id
                     observation = db.scalar(select(NvdCatalogRecord).where(NvdCatalogRecord.tenant_id == tenant_id, NvdCatalogRecord.cve_id == 'CVE-2099-0001'))
                     assert observation.entity_id == entity_id and observation.details == {'synthetic':True, 'description':'restore fixture only'}
                     assert observation.first_collected_at == datetime(2026,1,1,tzinfo=timezone.utc) and observation.last_collected_at == datetime(2026,1,2,tzinfo=timezone.utc)
@@ -98,6 +104,17 @@ def main():
                         db.rollback()
                     else:
                         raise AssertionError('Restored audit event constraint did not reject mismatched case')
+                # Audit targets must use an actual endpoint of the referenced relationship.
+                with factory.begin() as db:
+                    unrelated = Entity(id=uuid4(),tenant_id=tenant_id,kind='indicator',title='unrelated',source='fixture'); db.add(unrelated); db.flush()
+                    db.add(SecurityAuditEvent(tenant_id=tenant_id,actor_id=actor_id,event_type='fixture',target_entity_id=unrelated.id,
+                        target_relationship_id=relation_id,relationship_subject_id=entity_id,relationship_object_id=other_entity_id))
+                    try:
+                        db.flush()
+                    except IntegrityError:
+                        db.rollback()
+                    else:
+                        raise AssertionError('Restored relationship audit constraint did not reject unrelated entity')
                 # The NVD observation's tenant/entity FK must also survive restore.
                 with factory.begin() as db:
                     other = Tenant(id=uuid4(), name='nvd foreign synthetic tenant'); db.add(other); db.flush()

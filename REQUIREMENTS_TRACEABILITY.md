@@ -85,4 +85,4 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 
 - P1-04 partial case-event detail: tenant/case-scoped read with transactional case-targeted audit, migrated SQLite/PostgreSQL tests; event target added in migration 0035 with scoped composite FK and audit filter; historical audit backfill and tamper resistance remain missing.
 
-- P1-01/P2-01 partial: tenant/entity-scoped relationship detail with viewer access and transactional entity-targeted audit, synthetic SQLite/PostgreSQL tests; relationship-specific audit target and verification remain incomplete.
+- P1-01/P2-01 partial: tenant/entity-scoped relationship detail with viewer access and transactional entity-targeted audit, synthetic SQLite/PostgreSQL tests; relationship-specific audit target added in migration 0038 with tenant/endpoint constraint and audit filtering; older rows are not backfilled. Verification remains incomplete.

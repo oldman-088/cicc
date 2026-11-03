@@ -3489,6 +3489,107 @@ def test_relationship_detail_tenant_parent_scope_and_audit(migration_db, monkeyp
         assert response.status_code==200 and response.headers['cache-control']=='no-store'
         assert response.json()['id']==str(rid) and 'not independently verified' in response.json()['notice']
         assert client.get(f'/api/v1/secure/entities/{yid}/relationships/{rid}',headers=h(viewer)).status_code==200
+        audit=client.get('/api/v1/secure/audit',headers=h(admin),params={'relationship_id':str(rid),'event_type':'relationship_read'})
+        assert audit.status_code==200 and len(audit.json()['items'])==2
+        assert all(e['target_relationship_id']==str(rid) for e in audit.json()['items'])
+        assert client.get('/api/v1/secure/audit',headers=h(foreign),params={'relationship_id':str(rid)}).json()['items']==[]
     with factory() as db:
         events=list(db.scalars(select(SecurityAuditEvent).where(SecurityAuditEvent.event_type=='relationship_read')))
         assert len(events)==2 and {e.target_entity_id for e in events}=={xid,yid}
+        assert all(e.target_relationship_id==rid and e.relationship_subject_id==xid and e.relationship_object_id==yid for e in events)
+
+
+def test_relationship_audit_scope_integrity(migration_db):
+    from sqlalchemy.orm import sessionmaker
+    from app.models import SecurityAuditEvent
+    engine, _ = migration_db
+    factory = sessionmaker(engine, expire_on_commit=False)
+    a,b=uuid4(),uuid4()
+    with factory.begin() as db:
+        db.add_all([Tenant(id=a,name='a'),Tenant(id=b,name='b')]); db.flush()
+        x=Entity(tenant_id=a,kind='indicator',title='x',source='fixture')
+        y=Entity(tenant_id=a,kind='indicator',title='y',source='fixture')
+        z=Entity(tenant_id=a,kind='indicator',title='z',source='fixture')
+        foreign=Entity(tenant_id=b,kind='indicator',title='foreign',source='fixture')
+        db.add_all([x,y,z,foreign]); db.flush()
+        relation=Relationship(tenant_id=a,subject_id=x.id,object_id=y.id,kind='RELATED_TO',source='fixture')
+        db.add(relation); db.flush(); xid,yid,zid,fid,rid=x.id,y.id,z.id,foreign.id,relation.id
+    base={'tenant_id':a,'event_type':'relationship_read','target_relationship_id':rid,'relationship_subject_id':xid,'relationship_object_id':yid}
+    with factory.begin() as db:
+        db.add_all([SecurityAuditEvent(**base,target_entity_id=xid),SecurityAuditEvent(**base,target_entity_id=yid)])
+    invalid=[{'target_entity_id':zid}, {'target_entity_id':None},
+        {'target_entity_id':xid,'relationship_subject_id':zid}, {'target_entity_id':xid,'relationship_object_id':zid},
+        {'target_entity_id':xid,'relationship_object_id':None}, {'target_entity_id':fid,'tenant_id':b}]
+    for change in invalid:
+        with factory() as db:
+            db.add(SecurityAuditEvent(**{**base,**change}))
+            with pytest.raises(IntegrityError): db.flush()
+            db.rollback()
+    with factory() as db:
+        db.add(SecurityAuditEvent(tenant_id=a,event_type='relationship_read',relationship_subject_id=xid))
+        with pytest.raises(IntegrityError): db.flush()
+        db.rollback()
+    with factory() as db:
+        db.delete(db.get(Relationship,rid))
+        with pytest.raises(IntegrityError): db.flush()
+        db.rollback()
+
+
+def test_relationship_audit_filter_cursor_and_creation(migration_db):
+    from datetime import datetime, timezone
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+    from app.bootstrap import create_tenant_with_admin
+    from app.models import SecurityAuditEvent
+    from app.protected_api import protected_router
+    from app.sessions import issue_session
+    engine,_=migration_db; factory=sessionmaker(engine,expire_on_commit=False)
+    tenant,actor=create_tenant_with_admin(factory,tenant_name='a',username='admin',password='a safe long password')
+    other,other_actor=create_tenant_with_admin(factory,tenant_name='b',username='admin',password='a safe long password')
+    with factory.begin() as db:
+        token=issue_session(db,tenant,'admin','a safe long password')
+        x=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='x',source='fixture')
+        y=Entity(tenant_id=tenant,created_by=actor,kind='indicator',title='y',source='fixture')
+        fx=Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='x',source='fixture')
+        fy=Entity(tenant_id=other,created_by=other_actor,kind='indicator',title='y',source='fixture')
+        db.add_all([x,y,fx,fy]); db.flush(); xid,yid,fxid,fyid=x.id,y.id,fx.id,fy.id
+        rel=Relationship(tenant_id=tenant,subject_id=xid,object_id=yid,kind='RELATED_TO',source='fixture')
+        foreign=Relationship(tenant_id=other,subject_id=fxid,object_id=fyid,kind='RELATED_TO',source='fixture')
+        db.add_all([rel,foreign]); db.flush(); rid,frid=rel.id,foreign.id
+        now=datetime(2026,1,1,tzinfo=timezone.utc)
+        db.add_all([SecurityAuditEvent(tenant_id=tenant,actor_id=actor,event_type='relationship_read',occurred_at=now,
+             target_entity_id=xid,target_relationship_id=rid,relationship_subject_id=xid,relationship_object_id=yid) for _ in range(101)])
+        mismatch=SecurityAuditEvent(tenant_id=tenant,actor_id=actor,event_type='relationship_read',occurred_at=now)
+        foreign_audit=SecurityAuditEvent(tenant_id=other,actor_id=other_actor,event_type='relationship_read',occurred_at=now,
+             target_entity_id=fxid,target_relationship_id=frid,relationship_subject_id=fxid,relationship_object_id=fyid)
+        db.add_all([mismatch,foreign_audit]); db.flush(); mismatch_id,foreign_id=mismatch.id,foreign_audit.id
+    app=FastAPI(); app.include_router(protected_router(factory,b'x'*32))
+    h={'Authorization':'Bearer '+token}; filters={'relationship_id':str(rid),'event_type':'relationship_read'}
+    with TestClient(app,base_url='https://testserver') as client:
+        path='/api/v1/secure/audit'
+        assert client.get(path,headers=h,params={**filters,'before':str(mismatch_id)}).status_code==404
+        assert client.get(path,headers=h,params={**filters,'before':str(foreign_id)}).status_code==404
+        first=client.get(path,headers=h,params=filters).json()
+        second=client.get(path,headers=h,params={**filters,'before':first['next_cursor']}).json()
+        items=first['items']+second['items']
+        assert len(items)==101 and len({r['id'] for r in items})==101 and second['next_cursor'] is None
+        created=client.post('/api/v1/secure/relationships',headers=h,json={'subject_id':str(xid),'object_id':str(yid),'kind':'RELATED_TO','source':'fixture'})
+        assert created.status_code==201
+        audit=client.get(path,headers=h,params={'relationship_id':created.json()['id'],'event_type':'relationship_created'}).json()['items']
+        assert len(audit)==1 and audit[0]['target_entity_id']==str(xid)
+
+
+def test_relationship_audit_revision_preserves_historical_rows(tmp_path,monkeypatch):
+    url=f'sqlite:///{tmp_path / "relationship-audit.db"}'
+    monkeypatch.setenv('DATABASE_URL',url)
+    config=Config(str(HERE/'alembic.ini')); command.upgrade(config,'0037_case_note_author_index')
+    engine=create_engine(url); tenant,audit=uuid4(),uuid4()
+    with engine.begin() as conn:
+        conn.exec_driver_sql('INSERT INTO tenants (id,name) VALUES (?,?)',(tenant.hex,'fixture'))
+        conn.exec_driver_sql('INSERT INTO security_audit_events (id,tenant_id,event_type,occurred_at) VALUES (?,?,?,?)',(audit.hex,tenant.hex,'fixture','2026-01-01 00:00:00'))
+    command.upgrade(config,'head')
+    with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type,target_relationship_id,relationship_subject_id,relationship_object_id FROM security_audit_events').all()==[('fixture',None,None,None)]
+    command.downgrade(config,'0037_case_note_author_index')
+    with engine.begin() as conn: assert conn.exec_driver_sql('SELECT event_type FROM security_audit_events').all()==[('fixture',)]
+    command.downgrade(config,'base'); engine.dispose()
