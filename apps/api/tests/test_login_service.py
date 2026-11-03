@@ -9,6 +9,15 @@ from app.models import Base, Tenant, User, SecurityAuditEvent, AuthSession, Rate
 from app.security import hash_password
 from app.sessions import authenticate_session
 
+@pytest.fixture(autouse=True)
+def fixed_rate_limit_clock(monkeypatch):
+    # These tests assert behavior within one window, not wall-clock rollover.
+    from app import login_service
+    original = login_service.consume
+    def consume_in_window(*args, **kwargs):
+        return original(*args, **kwargs, now=120)
+    monkeypatch.setattr(login_service, 'consume', consume_in_window)
+
 @pytest.fixture
 def env(tmp_path):
     engine = create_engine(f'sqlite:///{tmp_path / "login.db"}', connect_args={'timeout': 30})
