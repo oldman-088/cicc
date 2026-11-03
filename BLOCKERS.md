@@ -72,4 +72,4 @@
 
 - New staging takes a nonblocking shared POSIX directory flock, tested only on a local filesystem with cooperating processes. No cleanup exists; advisory locks cannot control legacy or noncooperating writers, same-UID tampering or every filesystem, and do not establish storage/DB reconciliation.
 
-- Read-only quarantine inventory provides only observed filename/metadata for a bounded, unordered, non-snapshot prefix. It cannot prove orphan status, provenance, safety, completeness or protect against noncooperating writers. No deletion, CLI, API or tenant binding.
+- Read-only quarantine inventory provides only observed filename/metadata for a bounded, unordered, non-snapshot prefix. It cannot prove orphan status, provenance, safety, completeness or protect against noncooperating writers. No deletion, network API or tenant binding. A read-only local inventory CLI relies on trusted OS/operator controls and lacks application authentication/audit.

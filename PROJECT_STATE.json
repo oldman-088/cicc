@@ -128,7 +128,8 @@
     "API 343 passed, 34 PostgreSQL-only SQLite variants skipped; bounded investigation plain-text export, escape handling, viewer/tenant scope, truncation, audit rollback and export limit tested on SQLite/PostgreSQL; schema parity and synthetic restore passed",
     "Fresh npm ci, web typecheck, 7 unit tests, production build, 5 synthetic Chromium/proxy smoke tests and npm audit (0 findings) passed in current session; Python pip check and lock agreement passed.",
     "API 345 passed, 34 PostgreSQL-only SQLite variants skipped; experimental quarantine shared directory locking verified against exclusive cross-process contention and failure cleanup on local POSIX filesystem; synthetic restore and schema parity passed",
-    "API 347 passed, 34 PostgreSQL-only SQLite variants skipped; bounded read-only quarantine inventory tested with generated synthetic objects, unsafe symlink metadata, bounded traversal, and cooperating-stage lock contention; parity and synthetic restore passed"
+    "API 347 passed, 34 PostgreSQL-only SQLite variants skipped; bounded read-only quarantine inventory tested with generated synthetic objects, unsafe symlink metadata, bounded traversal, and cooperating-stage lock contention; parity and synthetic restore passed",
+    "API 349 passed, 34 PostgreSQL-only SQLite variants skipped; read-only quarantine inventory CLI preflight, sanitized errors and synthetic local subprocess tested; parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -191,12 +192,13 @@
     "Investigation text export is JSON-shaped ASCII, bounded to 4 MiB and 50 items per section; it is not a complete report, consistent snapshot, verified evidence or chain of custody. Export/download copies remain outside server access control.",
     "Automatic quarantine orphan deletion is deferred: staging now uses a nonblocking shared directory flock only for cooperating processes on tested local POSIX filesystems; age alone remains unsafe for legacy/noncooperating writers; DB/filesystem reconciliation, hard-link interrupted publication and same-UID threats remain unresolved.",
     "Quarantine flock is advisory, POSIX/filesystem-dependent, and only coordinates cooperating processes sharing the same directory inode; legacy/noncooperating writers and hostile same-UID processes remain unprotected. No cleanup implementation exists.",
-    "Quarantine inventory is internal, read-only and non-snapshot; enumeration order is unspecified, no cursor or completeness guarantee, metadata does not establish orphan status or authenticity; advisory lock does not constrain noncooperating processes."
+    "Quarantine inventory is internal, read-only and non-snapshot; enumeration order is unspecified, no cursor or completeness guarantee, metadata does not establish orphan status or authenticity; advisory lock does not constrain noncooperating processes.",
+    "Quarantine inventory CLI has no application authentication or audit; it relies on trusted local operator/OS controls, reports partial metadata only, and is not a cleanup operation or production evidence service."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace matched 30d5327 and was fast-forwarded to remote 5af2b1f before current changes",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Make quarantine inventory useful to an explicit operator without exposing a network API",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/evidence_quarantine.py && cat apps/api/tests/test_evidence_quarantine.py",
-  "next_implementation_step": "Design a minimal interactive or explicit-confirmation read-only operator CLI for private quarantine inventory. Require a configured directory, bounded count and honest truncated/unsafe labels; avoid printing evidence content or secrets. Add subprocess/mocked filesystem tests; do not add deletion or claim production safety."
+  "next_recommended_task": "Strengthen quarantine inventory lock-contention and permission tests without enabling cleanup",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/quarantine_cli.py && cat apps/api/tests/test_quarantine_cli.py",
+  "next_implementation_step": "Test read-only inventory CLI when exclusive lock is held by an active cooperating stage, wrong directory permissions and invalid configured path; ensure it produces no JSON or private paths and never mutates files. Continue with another independent task after verification."
 }
