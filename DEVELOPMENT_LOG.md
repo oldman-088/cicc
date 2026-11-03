@@ -595,3 +595,7 @@
 ## 2026-11-03 read-only quarantine inventory operator command
 - Added `python -m app.quarantine_cli --confirm-read-only` with configured `CICC_QUARANTINE_DIRECTORY` and a bounded optional `--max-entries` (1–1000). It outputs JSON metadata only, never contents or paths, explicitly labels incompleteness and unverified status, and sanitizes errors. It has no application authentication or audit and relies on trusted local OS/operator controls. No deletion, uploads, tenant association or orphan determination.
 - Synthetic subprocess and preflight tests verify read-only behavior, metadata output and sanitized errors. API 349 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; lock check, schema parity and disposable synthetic restore passed.
+
+## 2026-11-03 quarantine inventory CLI contention checks
+- Added synthetic subprocess tests for read-only inventory while a cooperating writer holds its shared lock, and for missing or insecure directories. CLI returns a sanitized failure without JSON or private paths and does not alter unrelated files. It remains advisory-only and not production evidence storage.
+- API 351 passed, 34 intentional SQLite PostgreSQL-only skips, one upstream warning; lock check, parity and synthetic restore passed.

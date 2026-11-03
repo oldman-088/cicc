@@ -129,7 +129,8 @@
     "Fresh npm ci, web typecheck, 7 unit tests, production build, 5 synthetic Chromium/proxy smoke tests and npm audit (0 findings) passed in current session; Python pip check and lock agreement passed.",
     "API 345 passed, 34 PostgreSQL-only SQLite variants skipped; experimental quarantine shared directory locking verified against exclusive cross-process contention and failure cleanup on local POSIX filesystem; synthetic restore and schema parity passed",
     "API 347 passed, 34 PostgreSQL-only SQLite variants skipped; bounded read-only quarantine inventory tested with generated synthetic objects, unsafe symlink metadata, bounded traversal, and cooperating-stage lock contention; parity and synthetic restore passed",
-    "API 349 passed, 34 PostgreSQL-only SQLite variants skipped; read-only quarantine inventory CLI preflight, sanitized errors and synthetic local subprocess tested; parity and synthetic restore passed"
+    "API 349 passed, 34 PostgreSQL-only SQLite variants skipped; read-only quarantine inventory CLI preflight, sanitized errors and synthetic local subprocess tested; parity and synthetic restore passed",
+    "API 351 passed, 34 PostgreSQL-only SQLite variants skipped; quarantine CLI subprocess tests verify contention during active cooperating stage, insecure/missing directory refusal, no file mutation and path redaction; parity and synthetic restore passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -198,7 +199,7 @@
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace matched 30d5327 and was fast-forwarded to remote 5af2b1f before current changes",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Strengthen quarantine inventory lock-contention and permission tests without enabling cleanup",
-  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/quarantine_cli.py && cat apps/api/tests/test_quarantine_cli.py",
-  "next_implementation_step": "Test read-only inventory CLI when exclusive lock is held by an active cooperating stage, wrong directory permissions and invalid configured path; ensure it produces no JSON or private paths and never mutates files. Continue with another independent task after verification."
+  "next_recommended_task": "Implement authenticated, tenant-scoped investigation note detail editing with optimistic concurrency only if historical/audit integrity can be preserved",
+  "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && grep -n -A34 \"class InvestigationNote\" apps/api/app/models.py && grep -n -A100 \"def add_investigation_note\\|def list_investigation_notes\" apps/api/app/protected_api.py",
+  "next_implementation_step": "Inspect InvestigationNote model, case status/locking semantics, existing note endpoints and migrations; evaluate immutable note history and audit retention before adding edit. If safe history cannot be guaranteed, document blocker and choose independent case-read enhancement."
 }
