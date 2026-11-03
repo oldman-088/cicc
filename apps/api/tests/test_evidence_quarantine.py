@@ -153,3 +153,39 @@ def test_inspect_rejects_fifo_without_blocking(tmp_path):
     os.mkfifo(path / ('q-' + 'c'*64), 0o600)
     with pytest.raises(ValueError, match='Unsafe'):
         inspect_object(str(path), 'c'*64, '0'*64, max_bytes=10)
+
+
+def test_staging_holds_cross_process_shared_directory_lock_and_releases_on_failure(tmp_path):
+    import subprocess
+    import sys
+    path=private_dir(tmp_path)
+    check = '''import fcntl, os, sys
+fd=os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY)
+try:
+    try: fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError: sys.exit(7)
+    sys.exit(0)
+finally: os.close(fd)
+'''
+    def attempt_exclusive():
+        return subprocess.run([sys.executable,'-c',check,str(path)],check=False).returncode
+    class ActiveStream:
+        def read(self,n):
+            assert attempt_exclusive()==7
+            raise OSError('synthetic read failure')
+    with pytest.raises(OSError,match='synthetic read failure'):
+        stage_stream(str(path),ActiveStream(),max_bytes=10)
+    assert list(path.iterdir())==[] and attempt_exclusive()==0
+
+
+def test_staging_fails_closed_while_exclusive_directory_lock_held(tmp_path):
+    import fcntl
+    path=private_dir(tmp_path)
+    fd=os.open(path,os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(BlockingIOError): stage_stream(str(path),io.BytesIO(b'fixture'),max_bytes=10)
+        assert list(path.iterdir())==[]
+    finally:
+        os.close(fd)
+    assert stage_stream(str(path),io.BytesIO(b'fixture'),max_bytes=10).byte_count==7

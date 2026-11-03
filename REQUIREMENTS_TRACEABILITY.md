@@ -98,3 +98,5 @@ Experimental CISA status/abandon APIs: `GET /api/v1/secure/sources/cisa-kev/stat
 - P1-01/P2-01 partial: provenance-target audit on manual entity/evidence/relationship writes and changed NVD observations, synthetic SQLite/PostgreSQL tests; unchanged imports, CISA bulk audits and historical events are untargeted.
 
 - P1-04 partial: audited bounded investigation text export with explicit disclaimers and control-character escaping, tested with synthetic migrated SQLite/PostgreSQL data. No UI, verified files, custody or complete/tamper-resistant report.
+
+- P1-04 partial: experimental quarantine staging holds an advisory nonblocking shared POSIX directory lock for cooperating maintenance; synthetic local cross-process tests only. No cleanup, tenant binding, upload API or custody guarantee.

@@ -7,6 +7,10 @@ custody, crash cleanup or protection from processes running under the same UID.
 Never use it for sensitive or production evidence.
 """
 from dataclasses import dataclass
+try:
+    import fcntl
+except ImportError:  # The primitive requires POSIX locking.
+    fcntl = None
 import hashlib
 import os
 import re
@@ -44,11 +48,21 @@ def stage_stream(directory: str, stream: BinaryIO, *, max_bytes: int) -> Quarant
     Reads at most max_bytes + 1 bytes. Caller must supply a trusted configured
     directory path and own authorization, retention and reconciliation. A match
     of the returned hash to a reference does not establish authenticity. I/O is
-    blocking and has no deadline. Caller owns the stream; it is not closed.
+    blocking and has no deadline. A nonblocking shared directory flock coordinates
+    only with cooperating maintenance; caller owns the stream and it is not closed.
     """
     if type(max_bytes) is not int or not 0 <= max_bytes <= MAX_EVIDENCE_BYTES:
         raise ValueError('Invalid byte limit')
     dirfd = _open_private_dir(directory)
+    # Cooperating maintenance must take an exclusive directory flock. Keep the
+    # shared lock from before name creation until publication/cleanup completes.
+    try:
+        if fcntl is None:
+            raise RuntimeError('Required filesystem locking unavailable')
+        fcntl.flock(dirfd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except BaseException:
+        os.close(dirfd)
+        raise
     tmp_name = final_name = None
     published = False
     created = False

@@ -126,7 +126,8 @@
     "API 335 passed, 34 PostgreSQL-only SQLite variants skipped; provenance event detail, scoped audit FK, audit cursor and historical SQLite migration preservation tested on migrated SQLite/PostgreSQL; synthetic PostgreSQL restore checks provenance target and entity constraint; schema parity passed",
     "API 339 passed, 34 PostgreSQL-only SQLite variants skipped; manual entity create/update, evidence reference, relationship and changed NVD import audit targets match newly created provenance, with rollback and unchanged-import tests on migrated SQLite/PostgreSQL; parity and synthetic restore passed",
     "API 343 passed, 34 PostgreSQL-only SQLite variants skipped; bounded investigation plain-text export, escape handling, viewer/tenant scope, truncation, audit rollback and export limit tested on SQLite/PostgreSQL; schema parity and synthetic restore passed",
-    "Fresh npm ci, web typecheck, 7 unit tests, production build, 5 synthetic Chromium/proxy smoke tests and npm audit (0 findings) passed in current session; Python pip check and lock agreement passed."
+    "Fresh npm ci, web typecheck, 7 unit tests, production build, 5 synthetic Chromium/proxy smoke tests and npm audit (0 findings) passed in current session; Python pip check and lock agreement passed.",
+    "API 345 passed, 34 PostgreSQL-only SQLite variants skipped; experimental quarantine shared directory locking verified against exclusive cross-process contention and failure cleanup on local POSIX filesystem; synthetic restore and schema parity passed"
   ],
   "known_issues": [
     "Protected API experimental and default-off; UI has no login or intelligence editing",
@@ -187,12 +188,13 @@
     "Provenance detail audit FK can prevent deleting provenance events; older audit events lack provenance targets, audit remains mutable and event assertions remain unverified.",
     "Only manual writes and NVD changed-record audit events target corresponding provenance; unchanged NVD imports and bulk CISA catalog import do not target an individual provenance event. Historical audit events remain untargeted.",
     "Investigation text export is JSON-shaped ASCII, bounded to 4 MiB and 50 items per section; it is not a complete report, consistent snapshot, verified evidence or chain of custody. Export/download copies remain outside server access control.",
-    "Automatic quarantine orphan deletion is deferred: existing staging has no cross-process lock or lease and a live writer can retain an old temporary file, so age alone is unsafe; DB/filesystem reconciliation, hard-link interrupted publication and same-UID threats remain unresolved."
+    "Automatic quarantine orphan deletion is deferred: staging now uses a nonblocking shared directory flock only for cooperating processes on tested local POSIX filesystems; age alone remains unsafe for legacy/noncooperating writers; DB/filesystem reconciliation, hard-link interrupted publication and same-UID threats remain unresolved.",
+    "Quarantine flock is advisory, POSIX/filesystem-dependent, and only coordinates cooperating processes sharing the same directory inode; legacy/noncooperating writers and hostile same-UID processes remain unprotected. No cleanup implementation exists."
   ],
   "active_branch": "arena/da631853-cicc",
   "latest_commit": "See git log; restored workspace matched 30d5327 and was fast-forwarded to remote 5af2b1f before current changes",
   "last_updated": "2026-11-02T19:15:09.675739+00:00",
-  "next_recommended_task": "Implement a safe staging/cleanup coordination mechanism and verify lock behavior before any orphan deletion",
+  "next_recommended_task": "Design a read-only quarantine orphan inventory before implementing any deletion",
   "exact_resume_instructions": "cd /home/user/cicc && git status --short --branch && git log -5 --oneline && cat PROJECT_STATE.json && cat MASTER_TASK_QUEUE.md && tail -50 DEVELOPMENT_LOG.md && cat BLOCKERS.md && cat apps/api/app/evidence_quarantine.py && cat apps/api/tests/test_evidence_quarantine.py",
-  "next_implementation_step": "Inspect evidence_quarantine.py. Design explicit advisory lock held for the entire staging/publication lifetime and failure paths, verify nonblocking contention with subprocess tests, and preserve existing no-clobber/cleanup behavior; do not implement deletion unless active writers and hard-link crash windows are safely handled. If infeasible, document and choose an independent task."
+  "next_implementation_step": "Inspect quarantine shared directory flock and staging/inspection semantics. Implement a bounded, explicit operator-invoked read-only inventory of tmp/q names using exclusive nonblocking directory lock, strict filenames and no-follow metadata. Test active-writer contention, bounded scans and hostile entries; do not delete or claim tenant custody, live safety or production readiness."
 }

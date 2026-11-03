@@ -68,4 +68,6 @@
 
 - Investigation text export is bounded JSON-shaped text, not a complete or immutable evidentiary report. Data copied outside the server cannot be access-controlled or revoked by CICC.
 
-- Automatic quarantine orphan cleanup is deferred: age alone cannot distinguish stale files from active slow writers because staging lacks a lock/lease; interrupted hard-link publication and database/filesystem reconciliation need a safe design. Do not expose deletion or uploads before solving these limits.
+- Automatic quarantine orphan cleanup is deferred: age alone cannot distinguish stale files from active slow writers because legacy/noncooperating staging lacks a lock/lease; interrupted hard-link publication and database/filesystem reconciliation need a safe design. Do not expose deletion or uploads before solving these limits.
+
+- New staging takes a nonblocking shared POSIX directory flock, tested only on a local filesystem with cooperating processes. No cleanup exists; advisory locks cannot control legacy or noncooperating writers, same-UID tampering or every filesystem, and do not establish storage/DB reconciliation.
