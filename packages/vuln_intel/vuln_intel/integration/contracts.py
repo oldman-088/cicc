@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping, Protocol, Sequence
 
 __all__ = [
     "AuditPort",
@@ -67,6 +67,25 @@ class VulnerabilityStore(Protocol):
 
     def find(self, *, tenant_id: str, cve: str) -> Mapping[str, Any] | None:  # pragma: no cover
         """Return the stored row for this tenant/CVE, or ``None``."""
+
+    def list(  # pragma: no cover
+        self,
+        *,
+        tenant_id: str,
+        limit: int,
+        cursor: str | None = None,
+        severity: str | None = None,
+        kev_only: bool = False,
+        order: str = "cve",
+    ) -> tuple[Sequence[Mapping[str, Any]], str | None]:
+        """Return ``(rows, next_cursor)`` for one tenant.
+
+        ``limit`` is the *page size*, not a cap on how many rows exist. The store
+        decides how rows are filtered efficiently (in SQL, not in Python), and
+        returns an opaque cursor for the next page. ``cursor`` is opaque by design:
+        callers must not construct one, so the store can change its ordering
+        strategy without breaking clients.
+        """
 
     def upsert(  # pragma: no cover
         self,

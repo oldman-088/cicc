@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .contracts import UpsertOutcome, UpsertResult
 from .mapping import ENRICHMENT_KEY, assert_persistable, event_types
@@ -53,12 +53,92 @@ class InMemoryVulnerabilityStore:
         row = self.rows.get((tenant_id, cve))
         if row is None:
             return None
+        # `cve` is part of the read contract: a caller that fetched by identifier
+        # must not have to remember which identifier it asked for, and an API
+        # shaper that omits it emits a record with a null primary key.
         return {
+            "cve": cve,
             "entity_id": row.entity_id,
             "details": row.details,
             "collected_at": row.collected_at,
             "origin": row.origin,
         }
+
+    def list(
+        self,
+        *,
+        tenant_id: str,
+        limit: int,
+        cursor: str | None = None,
+        severity: str | None = None,
+        kev_only: bool = False,
+        order: str = "cve",
+    ) -> tuple[Sequence[Mapping[str, Any]], str | None]:
+        """Page one tenant's rows.
+
+        Filtering happens here rather than in the caller for the same reason the
+        SQL adapter must do it in SQL: paging after filtering is correct, paging
+        before filtering silently drops matching rows.
+        """
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if order not in ("cve", "-cve", "severity", "-severity"):
+            raise ValueError("unsupported order")
+        rows = [
+            (cve, row)
+            for (tenant, cve), row in self.rows.items()
+            if tenant == tenant_id
+        ]
+        if severity is not None:
+            wanted = severity.strip().lower()
+            rows = [
+                (cve, row)
+                for cve, row in rows
+                if str((row.details.get(ENRICHMENT_KEY) or {}).get("severity", "")).lower()
+                == wanted
+            ]
+        if kev_only:
+            rows = [
+                (cve, row)
+                for cve, row in rows
+                if bool((row.details.get(ENRICHMENT_KEY) or {}).get("kev"))
+            ]
+
+        def severity_key(row: _Row) -> str:
+            return str((row.details.get(ENRICHMENT_KEY) or {}).get("severity", ""))
+
+        reverse = order.startswith("-")
+        rows.sort(
+            key=(lambda item: item[0]) if order.endswith("cve") else (lambda item: severity_key(item[1])),
+            reverse=reverse,
+        )
+        # The cursor is the last key emitted, not an offset: an offset shifts when
+        # rows are inserted mid-listing, which would skip or repeat records.
+        if cursor:
+            keys = [item[0] if order.endswith("cve") else severity_key(item[1]) for item in rows]
+            try:
+                start = keys.index(cursor) + 1
+            except ValueError:
+                start = 0
+            rows = rows[start:]
+
+        page = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit and page:
+            last = page[-1]
+            next_cursor = last[0] if order.endswith("cve") else severity_key(last[1])
+        out: list[Mapping[str, Any]] = []
+        for cve, row in page:
+            out.append(
+                {
+                    "cve": cve,
+                    "entity_id": row.entity_id,
+                    "details": row.details,
+                    "collected_at": row.collected_at,
+                    "origin": row.origin,
+                }
+            )
+        return out, next_cursor
 
     # -- write port ------------------------------------------------------
     def upsert(
