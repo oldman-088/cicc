@@ -219,3 +219,92 @@ class TestBenchmarkHarness:
 
         for item in run_all()["results"]:
             assert item["spread_pct"] is not None
+
+
+class TestCachedPropertiesCannotGoStale:
+    """`best_cvss` and `effective_severity` are cached for speed.
+
+    A cache on a mutable object would silently serve an old answer after
+    enrichment, which would corrupt every score and ranking downstream. The record
+    is frozen, so mutation is impossible — but `dataclasses.replace` is how the
+    pipeline builds enriched copies, and it must produce a *fresh* cache.
+    """
+
+    def _record(self, score=5.0, version="3.1"):
+        from vuln_intel.schema import CveId, CvssScore, NormalizedVulnerability, Origin, Severity
+
+        return NormalizedVulnerability(
+            cve=CveId.parse("CVE-2026-0001"),
+            origin=Origin.LIVE,
+            cvss=(
+                CvssScore(
+                    version=version, base_score=score, severity=Severity.MEDIUM, assessed=True
+                ),
+            ),
+        )
+
+    def test_replace_does_not_inherit_the_cached_value(self):
+        from dataclasses import replace
+
+        original = self._record(5.0, "3.1")
+        assert original.best_cvss is not None
+        assert original.best_cvss.base_score == 5.0
+
+        enriched = replace(original, kev=True)
+        assert enriched.best_cvss is not None
+        assert enriched.best_cvss.base_score == 5.0  # unchanged input, unchanged answer
+
+    def test_replace_with_new_cvss_recomputes(self):
+        from dataclasses import replace
+
+        from vuln_intel.schema import CvssScore, Severity
+
+        original = self._record(5.0, "3.1")
+        assert original.best_cvss is not None  # populate the cache
+
+        upgraded = replace(
+            original,
+            cvss=(
+                CvssScore(
+                    version="4.0", base_score=9.8, severity=Severity.CRITICAL, assessed=True
+                ),
+            ),
+        )
+        assert upgraded.best_cvss is not None
+        assert upgraded.best_cvss.base_score == 9.8
+        # And the original is untouched, so a cache cannot leak between records.
+        assert original.best_cvss is not None
+        assert original.best_cvss.base_score == 5.0
+
+    def test_effective_severity_does_not_stick_after_replace(self):
+        from dataclasses import replace
+
+        from vuln_intel.schema import CvssScore, Severity
+
+        original = self._record(5.0, "3.1")
+        assert original.effective_severity is Severity.MEDIUM
+        raised = replace(
+            original,
+            cvss=(
+                CvssScore(
+                    version="4.0", base_score=9.8, severity=Severity.CRITICAL, assessed=True
+                ),
+            ),
+        )
+        assert raised.effective_severity is Severity.CRITICAL
+
+    def test_record_is_actually_frozen(self):
+        """If this ever becomes mutable, the caches above become a correctness bug."""
+        import dataclasses
+
+        from vuln_intel.schema import NormalizedVulnerability
+
+        assert dataclasses.fields(NormalizedVulnerability), "sanity"
+        record = self._record()
+        try:
+            record.kev = True  # type: ignore[misc]
+        except dataclasses.FrozenInstanceError:
+            return
+        raise AssertionError(
+            "NormalizedVulnerability is mutable; cached properties are now unsafe"
+        )
