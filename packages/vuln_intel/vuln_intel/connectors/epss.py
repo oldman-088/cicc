@@ -253,6 +253,17 @@ def parse_epss_response(
     if observed.tzinfo is None:
         raise ValidationError("observed_at must be aware", field="observed_at")
     model_version = coerce_text(body.get("version"), field_name="version", limit=40)
+    # `data` must be a list. A null/absent value used to fall through to an empty
+    # mapping, which is indistinguishable from a well-formed "none of these CVEs is
+    # scored" answer — the strongest claim a provider can make about exploitability.
+    # An envelope without the documented array is a contract violation, not data.
+    raw_data = body.get("data")
+    if not isinstance(raw_data, list):
+        raise SourceResponseError(
+            "EPSS envelope has no 'data' array; refusing to treat a malformed "
+            "response as 'no scores'",
+            source="epss",
+        )
     scores: dict[str, EpssScore] = {}
     for entry in mapping_list(body.get("data"), field_name="data"):
         cve = CveId.parse(entry.get("cve"))
