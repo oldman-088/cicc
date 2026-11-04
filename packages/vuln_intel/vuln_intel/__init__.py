@@ -42,6 +42,7 @@ from .connectors import (
     UnavailableEpssProvider,
     parse_epss_response,
 )
+from .circuit import BreakerState, CircuitBreaker, CircuitOpen
 from .cvss import cvss_from_source, parse_vector, score_vector
 from .errors import (
     MixedOriginError,
@@ -54,6 +55,7 @@ from .errors import (
     UnsupportedVector,
     ValidationError,
 )
+from .kev import KEV_URL, CachedKevCatalog, KevCatalog, KevConnector, KevEntry
 from .normalization import (
     KevSignal,
     attach_epss,
@@ -69,6 +71,7 @@ from .priorities import (
     rank_vulnerabilities,
     score_vulnerability,
 )
+from .pipeline import EnrichmentPipeline, PipelineReport, SourceOutcome
 from .ratelimit import RateGate, quota_for_nvd, quota_for_osv
 from .retry import RetryPolicy, call_with_retry
 from .schema import (
@@ -89,12 +92,35 @@ from .schema import (
     merge_records,
     severity_from_score,
 )
-from .transport import HttpxTransport, Transport, TransportResponse
+from .integration.observations import (
+    ImmutableObservationLog,
+    Observation,
+    digest_payload,
+    to_observations,
+)
+from .transport import HttpxTransport, Transport, TransportKind, TransportResponse, transport_kind
 
 __version__ = "0.1.0"
 
 __all__ = [
+    "BreakerState",
+    "CachedKevCatalog",
+    "CircuitBreaker",
+    "CircuitOpen",
     "EPSS_API",
+    "EnrichmentPipeline",
+    "KEV_URL",
+    "KevCatalog",
+    "KevConnector",
+    "KevEntry",
+    "ImmutableObservationLog",
+    "Observation",
+    "PipelineReport",
+    "SourceOutcome",
+    "TransportKind",
+    "digest_payload",
+    "to_observations",
+    "transport_kind",
     "LIVE_PROVIDER_AVAILABLE",
     "NVD_API",
     "OSV_API",

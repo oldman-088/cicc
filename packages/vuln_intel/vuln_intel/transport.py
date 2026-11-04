@@ -31,7 +31,28 @@ __all__ = [
     "Transport",
     "TransportResponse",
     "HttpxTransport",
+    "transport_kind",
+    "TransportKind",
 ]
+
+
+class TransportKind(str):
+    """How a transport obtained its bytes.
+
+    ``AUDITED_LIVE`` is *earned*, never declared: it is granted only to the
+    package's own :class:`HttpxTransport`, which is the only implementation whose
+    redirect refusal, byte ceiling and timeout handling have been reviewed here.
+    Any injected transport — a test double, a proxy, an internal client — is
+    ``UNAUDITED`` and is recorded as such in provenance.
+
+    This closes a real hole: previously any fake transport was stamped
+    ``transport="live"``, which meant fixture bytes could carry live-looking
+    provenance into storage.
+    """
+
+    AUDITED_LIVE = "audited-live"
+    UNAUDITED = "unaudited"
+    NONE = "none"
 
 #: Hard ceiling on a decoded source response, enforced regardless of the
 #: upstream ``Content-Length`` header.
@@ -149,3 +170,12 @@ class HttpxTransport:
             if "Timeout" in name:
                 raise SourceTimeout(f"{name}: {sanitize(exc)}") from exc
             raise SourceUnavailable(f"{name}: {sanitize(exc)}") from exc
+
+
+def transport_kind(transport: object | None) -> str:
+    """Classify a transport for provenance. Anything not ours is ``unaudited``."""
+    if transport is None:
+        return TransportKind.NONE
+    if isinstance(transport, HttpxTransport):
+        return TransportKind.AUDITED_LIVE
+    return TransportKind.UNAUDITED

@@ -70,7 +70,7 @@ from ..schema import (
     parse_timestamp,
     utcnow,
 )
-from ..transport import Transport
+from ..transport import Transport, transport_kind
 
 __all__ = ["OsvConnector", "OSV_API", "LAST_VERIFIED_LIVE", "AdvisoryOnly"]
 
@@ -343,7 +343,7 @@ class OsvConnector:
                     source=SourceKind.OSV,
                     source_ref=advisory_id,
                     fetched_at=fetched_at,
-                    transport="live" if self.transport is not None else "none",
+                    transport=transport_kind(self.transport),
                     url=f"{OSV_API}/vulns/{advisory_id}",
                 ),
             ),

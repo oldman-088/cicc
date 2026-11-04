@@ -37,7 +37,7 @@ Fail-closed rules:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
@@ -68,7 +68,7 @@ from ..schema import (
     parse_timestamp,
     utcnow,
 )
-from ..transport import Transport
+from ..transport import Transport, transport_kind
 
 __all__ = ["NvdConnector", "NVD_API", "LAST_VERIFIED_LIVE"]
 
@@ -89,7 +89,9 @@ class NvdConnector:
     """
 
     transport: Transport | None = None
-    api_key: str | None = None
+    #: ``repr=False`` is a security control, not cosmetics: a dataclass repr that
+    #: includes the key leaks it through any log line, traceback or debug dump.
+    api_key: str | None = field(default=None, repr=False)
     retry: RetryPolicy = RetryPolicy()
     gate: RateGate | None = None
     timeout: float = 30.0
@@ -370,7 +372,7 @@ class NvdConnector:
                     source=SourceKind.NVD,
                     source_ref=source_ref or None,
                     fetched_at=fetched_at,
-                    transport="live" if self.transport is not None else "none",
+                    transport=transport_kind(self.transport),
                     url=NVD_API,
                 ),
             ),
