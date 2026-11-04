@@ -1,0 +1,98 @@
+"""Test doubles and shared helpers.
+
+``FakeTransport`` is the only way the test suite reaches a connector: there is no
+network access, no retry sleeping and no clock dependence.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Callable, Mapping, Sequence
+
+from vuln_intel.transport import TransportResponse
+
+FIXED_NOW = datetime(2026, 1, 10, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def response(
+    body: Any,
+    *,
+    status: int = 200,
+    headers: Mapping[str, str] | None = None,
+    url: str = "https://example.invalid/api",
+) -> TransportResponse:
+    raw = body if isinstance(body, bytes) else json.dumps(body).encode()
+    return TransportResponse(
+        status=status, body=raw, headers=dict(headers or {}), url=url
+    )
+
+
+@dataclass
+class FakeTransport:
+    """Scripted transport.
+
+    ``script`` is consumed in order; the last entry repeats once exhausted, so a
+    paging test can keep returning a terminal page.  Every call is recorded in
+    ``calls`` for assertions.
+    """
+
+    script: Sequence[Any] = field(default_factory=tuple)
+    calls: list[dict[str, Any]] = field(default_factory=list)
+    _index: int = 0
+
+    def _next(self, url: str, params: Mapping[str, str] | None) -> TransportResponse:
+        self.calls.append({"url": url, "params": dict(params or {})})
+        if not self.script:
+            raise AssertionError("FakeTransport has no scripted responses")
+        entry = self.script[min(self._index, len(self.script) - 1)]
+        self._index += 1
+        if callable(entry):
+            result = entry(url, params)
+            if isinstance(result, BaseException):
+                raise result
+            return result
+        return entry
+
+    def get(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 30.0,
+    ) -> TransportResponse:
+        self.calls.append({"method": "GET", "headers": dict(headers or {})})
+        return self._next(url, params)
+
+
+def no_wait(_: float) -> None:
+    """Injectable sleep that never sleeps."""
+    return None
+
+
+def zero_gate(*_args: Any, **_kwargs: Any):
+    from vuln_intel.ratelimit import RateGate
+
+    return RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=no_wait)
+
+
+class ConstantClock:
+    """Monotonic clock that only advances when told to."""
+
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
+
+    def advance(self, delta: float) -> None:
+        self.value += delta
+
+
+def raises(exc_type: type[BaseException]) -> Callable[[str, Mapping[str, str] | None], BaseException]:
+    def _raise(url: str, params: Mapping[str, str] | None) -> BaseException:
+        return exc_type("scripted failure")
+
+    return _raise

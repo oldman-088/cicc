@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cicc-vuln-intel"
+version = "0.1.0"
+description = "CICC vulnerability intelligence: NVD/OSV connectors, CVE normalization, EPSS interface, prioritization"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+# Deliberately dependency-free: the package must be importable in the API
+# container without new pins, and tests must run with pytest alone.
+dependencies = []
+
+[project.optional-dependencies]
+# Required only for live collection (HttpxTransport). Install explicitly.
+live = ["httpx>=0.27,<0.29"]
+dev = ["pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+include = ["vuln_intel*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+filterwarnings = ["error::DeprecationWarning:vuln_intel.*"]
