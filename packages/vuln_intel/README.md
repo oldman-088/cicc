@@ -175,6 +175,26 @@ record = attach_epss(record, epss_score_or_none)
 catalogue was not consulted — absence of KEV data is never rendered as "not
 exploited".
 
+### Configuration actually governs behaviour
+
+`assembly.build_connectors(settings)` turns validated `Settings` into the NVD,
+OSV and KEV connectors. Before it existed, `config.py` parsed and validated
+environment variables that nothing read: an operator could set
+`CICC_VULN_NVD_MAX_PAGES=50`, see it echoed at startup, and get defaults instead.
+
+Guarantees:
+
+- **construction performs no I/O** — the first request happens when the caller
+  issues one;
+- a live transport is installed **only** when `CICC_VULN_LIVE_COLLECTION=true`,
+  and enabling it without a transport **raises** rather than building connectors
+  that would return `NOT_CONFIGURED` for every call;
+- a factory returning `None` is rejected for the same reason;
+- each connector gets its **own** transport, so one provider's breaker and pool
+  state cannot affect another's;
+- the NVD key is unwrapped from `Secret` in exactly one place and never appears in
+  `describe()`, `startup_report()`, a repr or an error message (asserted).
+
 ### CVSS is recomputed, not trusted
 
 `schema.cvss_from_source` prefers the vector and computes the score locally:
