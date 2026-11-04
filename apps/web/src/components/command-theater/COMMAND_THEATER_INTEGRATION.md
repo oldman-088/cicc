@@ -22,12 +22,20 @@ Filtering is expected to happen in the adapter/backend **before pagination**. Ea
 - `provenance` preserves source name, source record ID, collection time, and publication time when available. Missing provenance is represented as `null`, never filled with a fabricated source.
 - `evidence` contains only references returned by the adapter, each with its own source, verification state, and observation timestamp. The UI does not create evidence or infer verification.
 - Confidence values are normalized to `[0, 1]`; the runtime boundary rejects invalid values. Use `basis: "unavailable"` with a `null` value if the source supplies no score.
-- Optional positions are view-layout hints, not intelligence facts. If absent, a deterministic circular placement is assigned for display only; it conveys no analytic significance.
+- Optional positions are view-layout hints, not intelligence facts. If absent, a deterministic golden-angle spiral placement is assigned for display only; it conveys no analytic significance.
 - IDs and labels render as text (React escaping); the contract intentionally does not accept arbitrary HTML or evidence URLs. A future link field needs a separate URL allowlist/security review.
 
 ## Demo isolation and failure behavior
 
 The app route explicitly enables `demoMode` only when `NODE_ENV` is `development`. The demo provider and fixture graph are dynamically imported only for that explicit mode. Production defaults to an accessible “no provider configured” state. When an injected backend provider fails or returns invalid data, Command Theater shows an error and retry action; it never substitutes demo records. Demo records are also visibly marked synthetic, and their confidence basis remains `illustrative`.
+
+## Visualization limits and interaction
+
+Both renderers use the same selected-entity-prioritized slice policy: at most 250 entities and 250 relationships per view. The 3D slice is computed by `CommandTheater` only when 3D mode is active and passed into the canvas; the canvas does not repeat the full-graph selection pass. The 2D renderer computes its own slice once and reports omitted records, while the accessible explorer retains paginated access to all records loaded so far. A lifecycle-managed `webglcontextlost` listener switches the parent back to 2D, announces the specific failure in the selected locale, and cleans up on unmount. Automated tests simulate the event and cleanup; actual GPU/context-loss behavior still requires browser verification.
+
+When an `onSelectNode` handler is supplied, 2D map entities are actionable buttons with a single roving tab stop, related-entity arrow navigation, Home/End navigation, Enter/Space activation, and RTL-aware horizontal arrows. Without a selection handler, the SVG remains a descriptive static image. The entity list remains the primary accessible route to metadata and works independently of WebGL.
+
+The explorer keeps a bounded, in-memory 50-step selection trail with back/forward and branch truncation. It seeds context from the initial selected entity and resets when filters or the provider change. This is local UI navigation state only; it is not persisted, synchronized, or represented as a backend investigation record.
 
 ## Not implemented / requires coordination
 

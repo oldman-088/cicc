@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react";
+import { useId, useMemo, useRef, type KeyboardEvent } from "react";
 import type {
   IntelligenceNode,
   IntelligenceRelationship,
@@ -17,6 +17,7 @@ type RelationshipGraph2DProps = {
   locale: Locale;
   totalNodes?: number | null;
   totalRelationships?: number | null;
+  onSelectNode?: (nodeId: string) => void;
 };
 
 const WIDTH = 1000;
@@ -48,6 +49,7 @@ export function RelationshipGraph2D({
   locale,
   totalNodes,
   totalRelationships,
+  onSelectNode,
 }: RelationshipGraph2DProps) {
   const messages = getMessages(locale);
   const id = useId().replaceAll(":", "");
@@ -56,6 +58,24 @@ export function RelationshipGraph2D({
     [nodes, relationships, selectedNodeId],
   );
   const nodeById = useMemo(() => new Map(view.nodes.map((node) => [node.id, node])), [view.nodes]);
+  const nodeRefs = useRef(new Map<string, SVGGElement>());
+  const selectedNodeVisible = nodeById.has(selectedNodeId);
+  const confidenceFormat = useMemo(
+    () => new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }),
+    [locale],
+  );
+  const adjacency = useMemo(() => {
+    const neighbors = new Map<string, string[]>();
+    for (const relationship of view.relationships) {
+      const sourceNeighbors = neighbors.get(relationship.sourceId) ?? [];
+      sourceNeighbors.push(relationship.targetId);
+      neighbors.set(relationship.sourceId, sourceNeighbors);
+      const targetNeighbors = neighbors.get(relationship.targetId) ?? [];
+      targetNeighbors.push(relationship.sourceId);
+      neighbors.set(relationship.targetId, targetNeighbors);
+    }
+    return neighbors;
+  }, [view.relationships]);
   const relationshipTotal = Math.max(totalRelationships ?? relationships.length, relationships.length);
   const nodeTotal = Math.max(totalNodes ?? nodes.length, nodes.length);
   const limitNotices = [
@@ -68,12 +88,46 @@ export function RelationshipGraph2D({
   ].filter((notice): notice is string => notice !== null);
   const limitNotice = limitNotices.join(" ");
 
+  function handleNodeKeyDown(event: KeyboardEvent<SVGGElement>, current: PositionedIntelligenceNode) {
+    if (!onSelectNode) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelectNode(current.id);
+      return;
+    }
+
+    const currentIndex = view.nodes.findIndex((node) => node.id === current.id);
+    if (currentIndex < 0 || view.nodes.length === 0) return;
+    const linkedIds = adjacency.get(current.id) ?? [];
+    const rtl = locale !== "en";
+    const forward = event.key === "ArrowDown" || event.key === (rtl ? "ArrowLeft" : "ArrowRight");
+    const backward = event.key === "ArrowUp" || event.key === (rtl ? "ArrowRight" : "ArrowLeft");
+
+    let nextId: string | undefined;
+    if (forward) {
+      nextId = linkedIds[0] ?? view.nodes[(currentIndex + 1) % view.nodes.length]?.id;
+    } else if (backward) {
+      nextId = linkedIds.at(-1) ?? view.nodes[(currentIndex - 1 + view.nodes.length) % view.nodes.length]?.id;
+    } else if (event.key === "Home") {
+      nextId = view.nodes[0]?.id;
+    } else if (event.key === "End") {
+      nextId = view.nodes.at(-1)?.id;
+    } else {
+      return;
+    }
+
+    if (!nextId || nextId === current.id) return;
+    event.preventDefault();
+    onSelectNode(nextId);
+    nodeRefs.current.get(nextId)?.focus();
+  }
+
   return (
     <div className={styles.mapFrame}>
       <svg
         className={styles.relationshipMap}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        role="img"
+        role={onSelectNode ? "group" : "img"}
         aria-labelledby={`${id}-title`}
         aria-describedby={`${id}-description`}
         preserveAspectRatio="xMidYMid meet"
@@ -133,13 +187,31 @@ export function RelationshipGraph2D({
         </g>
 
         <g className={styles.nodeLayer}>
-          {view.nodes.map((node) => {
+          {view.nodes.map((node, index) => {
             const point = mapPoint(node);
             const selected = node.id === selectedNodeId;
             const color = entityColors[node.type];
+            const confidence = node.confidence.value === null
+              ? messages.confidenceBasis.unavailable
+              : `${confidenceFormat.format(node.confidence.value)} (${messages.confidenceBasis[node.confidence.basis]})`;
 
             return (
-              <g key={node.id}>
+              <g
+                key={node.id}
+                className={onSelectNode ? styles.mapNode : undefined}
+                ref={onSelectNode ? (element) => {
+                  if (element) nodeRefs.current.set(node.id, element);
+                  else nodeRefs.current.delete(node.id);
+                } : undefined}
+                role={onSelectNode ? "button" : undefined}
+                tabIndex={onSelectNode ? (selected || (!selectedNodeVisible && index === 0) ? 0 : -1) : undefined}
+                aria-label={onSelectNode
+                  ? `${safeDisplayText(node.label)}, ${messages.entityTypes[node.type]}, ${messages.verificationStatuses[node.verificationStatus]}, ${messages.confidence}: ${confidence}`
+                  : undefined}
+                aria-pressed={onSelectNode ? selected : undefined}
+                onClick={onSelectNode ? () => onSelectNode(node.id) : undefined}
+                onKeyDown={onSelectNode ? (event) => handleNodeKeyDown(event, node) : undefined}
+              >
                 {selected && (
                   <circle
                     className={styles.nodeHalo}

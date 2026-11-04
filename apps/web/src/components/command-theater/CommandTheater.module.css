@@ -333,6 +333,7 @@
 .entityButton:focus-visible,
 .entityButtonSelected:focus-visible,
 .showMoreRelationships:focus-visible,
+.historyButton:focus-visible,
 .fallbackButton:focus-visible {
   outline: 3px solid #f3bf68;
   outline-offset: 3px;
@@ -447,6 +448,23 @@
   stroke: #07101b;
   stroke-width: 5;
   filter: drop-shadow(0 0 12px rgb(86 206 220 / 24%));
+}
+
+.mapNode {
+  cursor: pointer;
+}
+
+.mapNode:focus-visible {
+  outline: none;
+}
+
+.mapNode:focus-visible .node {
+  stroke: #f3bf68;
+  stroke-width: 8;
+}
+
+.mapNode:focus-visible .nodeHalo {
+  stroke-width: 4;
 }
 
 .nodeCore {
@@ -679,6 +697,53 @@
   font-size: 0.88rem;
 }
 
+.detailHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.historyControls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.historyButton {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #315064;
+  border-radius: 0.55rem;
+  color: #c5e4eb;
+  background: #0b202d;
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.historyButton:hover:not(:disabled) {
+  border-color: #58b4b9;
+  background: #10313c;
+}
+
+.historyButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.historyPosition {
+  min-width: 4.5rem;
+  color: #91a6bc;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .selectedName {
   margin: 0.45rem 0 0.8rem;
   color: #81e4dc;
@@ -762,6 +827,11 @@
 }
 
 @media (max-width: 640px) {
+  .detailHeading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
   .filterBar {
     grid-template-columns: minmax(0, 1fr);
   }

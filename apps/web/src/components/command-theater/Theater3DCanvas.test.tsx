@@ -2,7 +2,10 @@ import type { ReactNode } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO_NODES, DEMO_RELATIONSHIPS } from "./demo-graph";
+import { selectGraphView } from "./graph-view";
 import { Theater3DCanvas } from "./Theater3DCanvas";
+
+const DEMO_GRAPH_VIEW = selectGraphView(DEMO_NODES, DEMO_RELATIONSHIPS, "actor-demo");
 
 const canvasState = vi.hoisted(() => ({ throwsOnMount: false }));
 
@@ -27,8 +30,7 @@ describe("Theater3DCanvas", () => {
     const onFallback = vi.fn();
     render(
       <Theater3DCanvas
-        nodes={DEMO_NODES}
-        relationships={DEMO_RELATIONSHIPS}
+        graphView={DEMO_GRAPH_VIEW}
         selectedNodeId="actor-demo"
         locale="ar"
         onSelectNode={vi.fn()}
@@ -49,8 +51,7 @@ describe("Theater3DCanvas", () => {
 
     render(
       <Theater3DCanvas
-        nodes={DEMO_NODES}
-        relationships={DEMO_RELATIONSHIPS}
+        graphView={DEMO_GRAPH_VIEW}
         selectedNodeId="actor-demo"
         locale="en"
         onSelectNode={vi.fn()}

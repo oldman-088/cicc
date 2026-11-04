@@ -39,6 +39,10 @@ export type TheaterMessages = {
   showMoreEntities: string;
   relationshipsTitle: string;
   selectedEntity: string;
+  investigationNavigation: string;
+  previousEntity: string;
+  nextEntity: string;
+  investigationPosition: string;
   entityType: string;
   confidence: string;
   verificationStatusLabel: string;
@@ -57,8 +61,10 @@ export type TheaterMessages = {
   graphicsChecking: string;
   graphicsReady: string;
   graphicsUnavailable: string;
+  graphicsContextLost: string;
   loading3d: string;
   canvasFallback: string;
+  canvasLostFallback: string;
   switchTo2d: string;
   language: string;
   recordMetadata: string;
@@ -114,6 +120,10 @@ const messages: Record<Locale, TheaterMessages> = {
     showMoreEntities: "Show more entities",
     relationshipsTitle: "Relationships",
     selectedEntity: "Selected entity",
+    investigationNavigation: "Investigation history",
+    previousEntity: "Previous entity in investigation",
+    nextEntity: "Next entity in investigation",
+    investigationPosition: "Step {current} of {total}.",
     entityType: "Entity type",
     confidence: "Confidence",
     verificationStatusLabel: "Verification status",
@@ -143,8 +153,10 @@ const messages: Record<Locale, TheaterMessages> = {
     graphicsChecking: "Checking graphics support…",
     graphicsReady: "WebGL is available. The 3D scene loads only when selected.",
     graphicsUnavailable: "3D is unavailable in this browser. The 2D map and graph explorer remain available.",
+    graphicsContextLost: "The WebGL context was lost. Continue in 2D; the 3D view is unavailable.",
     loading3d: "Loading the 3D theater…",
     canvasFallback: "A WebGL context could not be created. Continue with the 2D relationship map.",
+    canvasLostFallback: "The WebGL context was lost. Continue with the 2D relationship map.",
     switchTo2d: "Switch to 2D map",
     language: "Interface language",
     recordMetadata: "Record metadata",
@@ -209,6 +221,10 @@ const messages: Record<Locale, TheaterMessages> = {
     showMoreEntities: "عرض المزيد من الكيانات",
     relationshipsTitle: "العلاقات",
     selectedEntity: "الكيان المحدد",
+    investigationNavigation: "سجل التنقل في التحقيق",
+    previousEntity: "الكيان السابق في التحقيق",
+    nextEntity: "الكيان التالي في التحقيق",
+    investigationPosition: "الخطوة {current} من {total}.",
     entityType: "نوع الكيان",
     confidence: "درجة الثقة",
     verificationStatusLabel: "حالة التحقق",
@@ -238,8 +254,10 @@ const messages: Record<Locale, TheaterMessages> = {
     graphicsChecking: "جارٍ التحقق من دعم الرسومات…",
     graphicsReady: "WebGL متاح. لن يُحمّل المشهد ثلاثي الأبعاد إلا عند اختياره.",
     graphicsUnavailable: "العرض ثلاثي الأبعاد غير متاح في هذا المتصفح. تظل الخريطة ومستكشف العلاقات متاحين.",
+    graphicsContextLost: "فُقد سياق WebGL. تابع باستخدام العرض ثنائي الأبعاد؛ العرض ثلاثي الأبعاد غير متاح.",
     loading3d: "جارٍ تحميل المسرح ثلاثي الأبعاد…",
     canvasFallback: "تعذّر إنشاء سياق WebGL. يمكنك المتابعة باستخدام خريطة العلاقات ثنائية الأبعاد.",
+    canvasLostFallback: "فُقد سياق WebGL. يمكنك المتابعة باستخدام خريطة العلاقات ثنائية الأبعاد.",
     switchTo2d: "الانتقال إلى الخريطة ثنائية الأبعاد",
     language: "لغة الواجهة",
     recordMetadata: "بيانات السجل الوصفية",
@@ -304,6 +322,10 @@ const messages: Record<Locale, TheaterMessages> = {
     showMoreEntities: "نمایش موجودیت‌های بیشتر",
     relationshipsTitle: "پیوندها",
     selectedEntity: "موجودیت انتخاب‌شده",
+    investigationNavigation: "تاریخچهٔ بررسی",
+    previousEntity: "موجودیت پیشین در بررسی",
+    nextEntity: "موجودیت بعدی در بررسی",
+    investigationPosition: "گام {current} از {total}.",
     entityType: "نوع موجودیت",
     confidence: "میزان اطمینان",
     verificationStatusLabel: "وضعیت تأیید",
@@ -333,8 +355,10 @@ const messages: Record<Locale, TheaterMessages> = {
     graphicsChecking: "در حال بررسی پشتیبانی گرافیکی…",
     graphicsReady: "WebGL در دسترس است. صحنهٔ سه‌بعدی فقط هنگام انتخاب بارگیری می‌شود.",
     graphicsUnavailable: "نمای سه‌بعدی در این مرورگر در دسترس نیست. نقشه و کاوشگر پیوندها همچنان قابل استفاده‌اند.",
+    graphicsContextLost: "زمینهٔ WebGL از دست رفت. با نمای دوبعدی ادامه دهید؛ نمای سه‌بعدی در دسترس نیست.",
     loading3d: "در حال بارگیری تالار سه‌بعدی…",
     canvasFallback: "ایجاد زمینهٔ WebGL ممکن نشد. از نقشهٔ دوبعدی پیوندها استفاده کنید.",
+    canvasLostFallback: "زمینهٔ WebGL از دست رفت. از نقشهٔ دوبعدی پیوندها استفاده کنید.",
     switchTo2d: "رفتن به نقشهٔ دوبعدی",
     language: "زبان رابط کاربری",
     recordMetadata: "فرادادهٔ رکورد",

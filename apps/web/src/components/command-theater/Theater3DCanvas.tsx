@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { Html, OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { createRelationshipLineGeometry, toScenePosition } from "./graph-geometry";
 import type {
   IntelligenceNode,
@@ -19,16 +19,16 @@ import type {
 } from "./types";
 import { getMessages } from "./translations";
 import { safeDisplayText } from "./display-text";
-import { selectGraphView } from "./graph-view";
+import type { GraphViewSlice } from "./graph-view";
+import { subscribeToWebGLContextLoss } from "./webgl-context";
 import styles from "./Theater3DCanvas.module.css";
 
 type Theater3DCanvasProps = {
-  nodes: PositionedIntelligenceNode[];
-  relationships: IntelligenceRelationship[];
+  graphView: GraphViewSlice;
   selectedNodeId: string;
   locale: Locale;
   onSelectNode: (nodeId: string) => void;
-  onFallback: () => void;
+  onFallback: (reason?: "context-lost") => void;
 };
 
 const entityColors: Record<IntelligenceNode["type"], string> = {
@@ -39,39 +39,46 @@ const entityColors: Record<IntelligenceNode["type"], string> = {
   asset: "#9be3a7",
 };
 
+function WebGLContextLossGuard({ onContextLost }: { onContextLost: () => void }) {
+  const { gl } = useThree();
+  useEffect(
+    () => subscribeToWebGLContextLoss(gl.domElement, onContextLost),
+    [gl, onContextLost],
+  );
+  return null;
+}
+
 function RelationshipScene({
   nodes,
   relationships,
   selectedNodeId,
   onSelectNode,
-}: Pick<
-  Theater3DCanvasProps,
-  "nodes" | "relationships" | "selectedNodeId" | "onSelectNode"
->) {
-  const view = useMemo(
-    () => selectGraphView(nodes, relationships, selectedNodeId),
-    [nodes, relationships, selectedNodeId],
-  );
+}: {
+  nodes: PositionedIntelligenceNode[];
+  relationships: IntelligenceRelationship[];
+  selectedNodeId: string;
+  onSelectNode: (nodeId: string) => void;
+}) {
   const positions = useMemo(
-    () => new Map(view.nodes.map((node) => [node.id, toScenePosition(node)])),
-    [view.nodes],
+    () => new Map(nodes.map((node) => [node.id, toScenePosition(node)])),
+    [nodes],
   );
   const selectedRelationships = useMemo(
     () =>
-      view.relationships.filter(
+      relationships.filter(
         (relationship) =>
           relationship.sourceId === selectedNodeId ||
           relationship.targetId === selectedNodeId,
       ),
-    [view.relationships, selectedNodeId],
+    [relationships, selectedNodeId],
   );
   const allEdgeGeometry = useMemo(
-    () => createRelationshipLineGeometry(view.nodes, view.relationships),
-    [view.nodes, view.relationships],
+    () => createRelationshipLineGeometry(nodes, relationships),
+    [nodes, relationships],
   );
   const selectedEdgeGeometry = useMemo(
-    () => createRelationshipLineGeometry(view.nodes, selectedRelationships),
-    [view.nodes, selectedRelationships],
+    () => createRelationshipLineGeometry(nodes, selectedRelationships),
+    [nodes, selectedRelationships],
   );
 
   useEffect(() => () => allEdgeGeometry.dispose(), [allEdgeGeometry]);
@@ -84,7 +91,7 @@ function RelationshipScene({
       <pointLight position={[0, 4, 7]} intensity={24} color="#7ddde2" />
       <pointLight position={[-5, -3, 2]} intensity={9} color="#648fff" />
 
-      {view.relationships.length > 0 && (
+      {relationships.length > 0 && (
         <lineSegments geometry={allEdgeGeometry}>
           <lineBasicMaterial color="#3f8296" transparent opacity={0.58} />
         </lineSegments>
@@ -95,7 +102,7 @@ function RelationshipScene({
         </lineSegments>
       )}
 
-      {view.nodes.map((node) => {
+      {nodes.map((node) => {
         const position = positions.get(node.id);
         if (!position) return null;
         const selected = selectedNodeId === node.id;
@@ -157,6 +164,8 @@ type ErrorBoundaryState = {
   hasError: boolean;
 };
 
+type CanvasFailure = "initialization" | "context-lost";
+
 function CanvasUnavailable({ onUnavailable }: { onUnavailable: () => void }) {
   useEffect(() => {
     onUnavailable();
@@ -181,29 +190,36 @@ class SceneErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryStat
 }
 
 export function Theater3DCanvas({
-  nodes,
-  relationships,
+  graphView,
   selectedNodeId,
   locale,
   onSelectNode,
   onFallback,
 }: Theater3DCanvasProps) {
   const messages = getMessages(locale);
-  const [canvasUnavailable, setCanvasUnavailable] = useState(false);
-  const reportCanvasUnavailable = useCallback(() => {
-    setCanvasUnavailable(true);
-    onFallback();
+  const [canvasFailure, setCanvasFailure] = useState<CanvasFailure | null>(null);
+  const reportCanvasFailure = useCallback((failure: CanvasFailure) => {
+    setCanvasFailure(failure);
+    onFallback(failure === "context-lost" ? "context-lost" : undefined);
   }, [onFallback]);
+  const reportCanvasUnavailable = useCallback(
+    () => reportCanvasFailure("initialization"),
+    [reportCanvasFailure],
+  );
+  const reportContextLost = useCallback(
+    () => reportCanvasFailure("context-lost"),
+    [reportCanvasFailure],
+  );
   const fallback = (
     <div className={styles.fallback} role="alert">
-      <p>{messages.canvasFallback}</p>
-      <button type="button" onClick={onFallback}>
+      <p>{canvasFailure === "context-lost" ? messages.canvasLostFallback : messages.canvasFallback}</p>
+      <button type="button" onClick={() => onFallback()}>
         {messages.switchTo2d}
       </button>
     </div>
   );
 
-  if (canvasUnavailable) {
+  if (canvasFailure) {
     return <div className={styles.canvasFrame}>{fallback}</div>;
   }
 
@@ -218,9 +234,10 @@ export function Theater3DCanvas({
             gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
             fallback={<CanvasUnavailable onUnavailable={reportCanvasUnavailable} />}
           >
+            <WebGLContextLossGuard onContextLost={reportContextLost} />
             <RelationshipScene
-              nodes={nodes}
-              relationships={relationships}
+              nodes={graphView.nodes}
+              relationships={graphView.relationships}
               selectedNodeId={selectedNodeId}
               onSelectNode={onSelectNode}
             />

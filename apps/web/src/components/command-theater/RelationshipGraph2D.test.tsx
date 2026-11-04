@@ -30,6 +30,11 @@ const explorerDefaults = {
   hasMoreData: false,
   loadingMore: false,
   pageError: null,
+  historyPosition: "Step 1 of 1.",
+  canNavigateBack: false,
+  canNavigateForward: false,
+  onNavigateBack: vi.fn(),
+  onNavigateForward: vi.fn(),
   onLoadMore: vi.fn(),
   onRetryMore: vi.fn(),
 };
@@ -49,6 +54,56 @@ describe("RelationshipGraph2D", () => {
     expect(map).toHaveAttribute("viewBox", "0 0 1000 520");
     expect(map.querySelectorAll("line")).toHaveLength(DEMO_RELATIONSHIPS.length);
     expect(map.querySelectorAll("circle").length).toBeGreaterThan(DEMO_NODES.length);
+  });
+
+  it("supports pointer and LTR keyboard selection from the accessible 2D map", () => {
+    const onSelectNode = vi.fn();
+    render(
+      <RelationshipGraph2D
+        nodes={DEMO_NODES}
+        relationships={DEMO_RELATIONSHIPS}
+        selectedNodeId="actor-demo"
+        locale="en"
+        onSelectNode={onSelectNode}
+      />,
+    );
+
+    const map = screen.getByRole("group", { name: /2D intelligence relationship map/ });
+    const actor = within(map).getByRole("button", { name: /Demo threat actor/ });
+    const campaign = within(map).getByRole("button", { name: /Demo campaign/ });
+    expect(actor).toHaveAttribute("aria-pressed", "true");
+    expect(actor).toHaveAttribute("tabindex", "0");
+    expect(campaign).toHaveAttribute("tabindex", "-1");
+
+    actor.focus();
+    fireEvent.keyDown(actor, { key: "ArrowRight" });
+    expect(onSelectNode).toHaveBeenCalledWith("campaign-demo");
+    expect(campaign).toHaveFocus();
+
+    fireEvent.click(campaign);
+    expect(onSelectNode).toHaveBeenLastCalledWith("campaign-demo");
+  });
+
+  it("uses the left arrow for forward selection in an RTL 2D map", () => {
+    const onSelectNode = vi.fn();
+    render(
+      <RelationshipGraph2D
+        nodes={DEMO_NODES}
+        relationships={DEMO_RELATIONSHIPS}
+        selectedNodeId="actor-demo"
+        locale="fa"
+        onSelectNode={onSelectNode}
+      />,
+    );
+
+    const map = screen.getByRole("group", { name: /نقشهٔ دوبعدی/ });
+    const actor = within(map).getByRole("button", { name: /Demo threat actor/ });
+    const campaign = within(map).getByRole("button", { name: /Demo campaign/ });
+    actor.focus();
+    fireEvent.keyDown(actor, { key: "ArrowLeft" });
+
+    expect(onSelectNode).toHaveBeenCalledWith("campaign-demo");
+    expect(campaign).toHaveFocus();
   });
 
   it("bounds SVG rendering to 250 edges for a 5,000-relationship graph", () => {

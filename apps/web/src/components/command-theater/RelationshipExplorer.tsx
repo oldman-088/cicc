@@ -25,6 +25,11 @@ type RelationshipExplorerProps = {
   hasMoreData: boolean;
   loadingMore: boolean;
   pageError: CommandTheaterGraphState["pageError"];
+  historyPosition: string;
+  canNavigateBack: boolean;
+  canNavigateForward: boolean;
+  onNavigateBack: () => void;
+  onNavigateForward: () => void;
   onSelectNode: (nodeId: string) => void;
   onLoadMore: () => void;
   onRetryMore: () => void;
@@ -62,6 +67,11 @@ export function RelationshipExplorer({
   hasMoreData,
   loadingMore,
   pageError,
+  historyPosition,
+  canNavigateBack,
+  canNavigateForward,
+  onNavigateBack,
+  onNavigateForward,
   onSelectNode,
   onLoadMore,
   onRetryMore,
@@ -320,7 +330,30 @@ export function RelationshipExplorer({
       {selectedNode && (
         <section className={styles.detailCard} aria-labelledby={ids.selected}>
           <p className={styles.sectionEyebrow}>{messages.recordMetadata}</p>
-          <h3 id={ids.selected}>{messages.selectedEntity}</h3>
+          <div className={styles.detailHeading}>
+            <h3 id={ids.selected}>{messages.selectedEntity}</h3>
+            <div className={styles.historyControls} role="group" aria-label={messages.investigationNavigation}>
+              <button
+                className={styles.historyButton}
+                type="button"
+                aria-label={messages.previousEntity}
+                disabled={!canNavigateBack}
+                onClick={onNavigateBack}
+              >
+                <span aria-hidden="true">{locale === "en" ? "←" : "→"}</span>
+              </button>
+              <span className={styles.historyPosition} aria-live="polite">{historyPosition}</span>
+              <button
+                className={styles.historyButton}
+                type="button"
+                aria-label={messages.nextEntity}
+                disabled={!canNavigateForward}
+                onClick={onNavigateForward}
+              >
+                <span aria-hidden="true">{locale === "en" ? "→" : "←"}</span>
+              </button>
+            </div>
+          </div>
           <p className={styles.selectedName} aria-live="polite">
             <bdi dir="auto">{safeDisplayText(selectedNode.label)}</bdi>
           </p>

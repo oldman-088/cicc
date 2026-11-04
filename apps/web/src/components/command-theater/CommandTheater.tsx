@@ -7,6 +7,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -63,6 +64,17 @@ type FilterDraft = {
   relationshipType: string;
 };
 
+type SelectionHistory = {
+  ids: string[];
+  index: number;
+};
+
+const MAX_INVESTIGATION_HISTORY = 50;
+
+function createEmptySelectionHistory(): SelectionHistory {
+  return { ids: [], index: -1 };
+}
+
 class SceneChunkErrorBoundary extends Component<
   SceneChunkErrorBoundaryProps,
   { hasError: boolean }
@@ -89,8 +101,13 @@ export function CommandTheater({
 }: CommandTheaterProps) {
   const [locale, setLocale] = useState<Locale>(initialLocale ?? "en");
   const [graphicsSupport, setGraphicsSupport] = useState<GraphicsSupport>("checking");
+  const [graphicsFailureReason, setGraphicsFailureReason] = useState<"context-lost" | null>(null);
   const [view, setView] = useState<"2d" | "3d">("2d");
   const [selectedNodeId, setSelectedNodeId] = useState("");
+  const selectionHistoryRef = useRef<SelectionHistory>(createEmptySelectionHistory());
+  const [selectionHistory, setSelectionHistory] = useState(selectionHistoryRef.current);
+  const sourceIdentityRef = useRef({ dataSource, demoMode });
+  const twoDButtonRef = useRef<HTMLButtonElement>(null);
   const [filters, setFilters] = useState<GraphFilters>({});
   const [filterDraft, setFilterDraft] = useState<FilterDraft>({
     search: "",
@@ -109,11 +126,33 @@ export function CommandTheater({
   };
   const graph = useCommandTheaterGraph({ dataSource, demoMode, filters });
   const graphState = graph.state;
-  const filterResetKey = [filters.search ?? "", filters.entityType ?? "", filters.relationshipType ?? ""].join("\u001f");
+  const filterResetKey = JSON.stringify([
+    filters.search ?? "",
+    filters.entityType ?? "",
+    filters.relationshipType ?? "",
+  ]);
   const graphView = useMemo(
-    () => selectGraphView(graphState.nodes, graphState.relationships, selectedNodeId),
-    [graphState.nodes, graphState.relationships, selectedNodeId],
+    () => view === "3d"
+      ? selectGraphView(graphState.nodes, graphState.relationships, selectedNodeId)
+      : null,
+    [view, graphState.nodes, graphState.relationships, selectedNodeId],
   );
+  const updateSelectionHistory = useCallback((next: SelectionHistory) => {
+    selectionHistoryRef.current = next;
+    setSelectionHistory(next);
+  }, []);
+  const resetSelectionHistory = useCallback(() => {
+    updateSelectionHistory(createEmptySelectionHistory());
+  }, [updateSelectionHistory]);
+  const navigateToNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    const current = selectionHistoryRef.current;
+    if (current.ids[current.index] === nodeId) return;
+
+    const ids = [...current.ids.slice(0, current.index + 1), nodeId]
+      .slice(-MAX_INVESTIGATION_HISTORY);
+    updateSelectionHistory({ ids, index: ids.length - 1 });
+  }, [updateSelectionHistory]);
 
   useEffect(() => {
     if (initialLocale) {
@@ -126,24 +165,45 @@ export function CommandTheater({
   }, [initialLocale]);
 
   useEffect(() => {
+    setGraphicsFailureReason(null);
     setGraphicsSupport(detectWebGLAvailability() ? "available" : "unavailable");
   }, []);
 
   useEffect(() => {
-    if (graphState.status === "ready" && graphState.nodes.length > 0) {
-      setSelectedNodeId((current) =>
-        graphState.nodes.some((node) => node.id === current)
-          ? current
-          : graphState.nodes[0]!.id,
-      );
-    } else if (graphState.status !== "loading") {
-      setSelectedNodeId("");
-    }
-  }, [graphState.nodes, graphState.status]);
+    if (
+      sourceIdentityRef.current.dataSource === dataSource &&
+      sourceIdentityRef.current.demoMode === demoMode
+    ) return;
+    sourceIdentityRef.current = { dataSource, demoMode };
+    resetSelectionHistory();
+  }, [dataSource, demoMode, resetSelectionHistory]);
 
-  const handleGraphicsFallback = useCallback(() => {
+  useEffect(() => {
+    if (graphState.status === "ready" && graphState.nodes.length > 0) {
+      const nextSelected = graphState.nodes.some((node) => node.id === selectedNodeId)
+        ? selectedNodeId
+        : graphState.nodes[0]!.id;
+      if (nextSelected !== selectedNodeId) setSelectedNodeId(nextSelected);
+      if (selectionHistoryRef.current.ids.length === 0) {
+        updateSelectionHistory({ ids: [nextSelected], index: 0 });
+      }
+    } else if (graphState.status !== "loading") {
+      if (selectedNodeId) setSelectedNodeId("");
+      if (selectionHistoryRef.current.ids.length > 0) resetSelectionHistory();
+    }
+  }, [
+    graphState.nodes,
+    graphState.status,
+    selectedNodeId,
+    resetSelectionHistory,
+    updateSelectionHistory,
+  ]);
+
+  const handleGraphicsFallback = useCallback((reason?: "context-lost") => {
+    setGraphicsFailureReason(reason ?? null);
     setGraphicsSupport("unavailable");
     setView("2d");
+    twoDButtonRef.current?.focus();
   }, []);
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
@@ -157,14 +217,30 @@ export function CommandTheater({
         ? { relationshipType: filterDraft.relationshipType as IntelligenceRelationshipType }
         : {}),
     };
+    resetSelectionHistory();
     setView("2d");
     setFilters(next);
   }
 
   function clearFilters() {
     setFilterDraft({ search: "", entityType: "", relationshipType: "" });
+    resetSelectionHistory();
     setView("2d");
     setFilters({});
+  }
+
+  function navigateSelectionHistory(direction: -1 | 1) {
+    const current = selectionHistoryRef.current;
+    const nextIndex = current.index + direction;
+    const nextNodeId = current.ids[nextIndex];
+    if (!nextNodeId) return;
+    if (!graphState.nodes.some((node) => node.id === nextNodeId)) {
+      resetSelectionHistory();
+      return;
+    }
+
+    updateSelectionHistory({ ...current, index: nextIndex });
+    setSelectedNodeId(nextNodeId);
   }
 
   const graphicsMessage =
@@ -172,7 +248,9 @@ export function CommandTheater({
       ? messages.graphicsChecking
       : graphicsSupport === "available"
         ? messages.graphicsReady
-        : messages.graphicsUnavailable;
+        : graphicsFailureReason === "context-lost"
+          ? messages.graphicsContextLost
+          : messages.graphicsUnavailable;
   const hasGraph = graphState.status === "ready" && graphState.nodes.length > 0;
   const hasActiveFilters = Object.keys(filters).length > 0;
   const connectedData = graphState.status === "ready" || graphState.status === "empty";
@@ -182,20 +260,28 @@ export function CommandTheater({
   const relationshipCountLabel = graphState.sourceKind === "demo"
     ? messages.sampleRelationshipsCount
     : messages.relationshipsCount;
+  const historyNumberFormat = new Intl.NumberFormat(locale);
+  const historyPosition = messages.investigationPosition
+    .replace("{current}", historyNumberFormat.format(Math.max(1, selectionHistory.index + 1)))
+    .replace("{total}", historyNumberFormat.format(Math.max(1, selectionHistory.ids.length)));
+  const canNavigateBack = selectionHistory.index > 0;
+  const canNavigateForward =
+    selectionHistory.index >= 0 && selectionHistory.index < selectionHistory.ids.length - 1;
   const sceneNodeTotal = Math.max(graphState.totalNodes ?? graphState.nodes.length, graphState.nodes.length);
   const sceneRelationshipTotal = Math.max(
     graphState.totalRelationships ?? graphState.relationships.length,
     graphState.relationships.length,
   );
-  const sceneLimitNotice =
+  const sceneLimitNotice = graphView && (
     sceneNodeTotal > graphView.nodes.length ||
     sceneRelationshipTotal > graphView.relationships.length
-      ? messages.sceneLimitNotice
-          .replace("{shownNodes}", new Intl.NumberFormat(locale).format(graphView.nodes.length))
-          .replace("{totalNodes}", new Intl.NumberFormat(locale).format(sceneNodeTotal))
-          .replace("{shownRelationships}", new Intl.NumberFormat(locale).format(graphView.relationships.length))
-          .replace("{totalRelationships}", new Intl.NumberFormat(locale).format(sceneRelationshipTotal))
-      : null;
+  )
+    ? messages.sceneLimitNotice
+        .replace("{shownNodes}", new Intl.NumberFormat(locale).format(graphView.nodes.length))
+        .replace("{totalNodes}", new Intl.NumberFormat(locale).format(sceneNodeTotal))
+        .replace("{shownRelationships}", new Intl.NumberFormat(locale).format(graphView.relationships.length))
+        .replace("{totalRelationships}", new Intl.NumberFormat(locale).format(sceneRelationshipTotal))
+    : null;
 
   return (
     <section
@@ -314,6 +400,7 @@ export function CommandTheater({
               <h2 id={ids.stage}>{messages.stageTitle}</h2>
               <div className={styles.viewControls} role="group" aria-label={messages.viewMode}>
                 <button
+                  ref={twoDButtonRef}
                   type="button"
                   className={view === "2d" ? styles.viewButtonActive : styles.viewButton}
                   aria-pressed={view === "2d"}
@@ -396,9 +483,10 @@ export function CommandTheater({
                   locale={locale}
                   totalNodes={graphState.totalNodes}
                   totalRelationships={graphState.totalRelationships}
+                  onSelectNode={navigateToNode}
                 />
               )}
-              {hasGraph && view === "3d" && (
+              {hasGraph && view === "3d" && graphView && (
                 <>
                   {sceneLimitNotice && <p className={styles.mapHint} role="note">{sceneLimitNotice}</p>}
                   <div className={styles.canvas3dFrame}>
@@ -410,7 +498,7 @@ export function CommandTheater({
                           <button
                             className={styles.fallbackButton}
                             type="button"
-                            onClick={handleGraphicsFallback}
+                            onClick={() => handleGraphicsFallback()}
                           >
                             {messages.switchTo2d}
                           </button>
@@ -418,11 +506,10 @@ export function CommandTheater({
                       }
                     >
                       <LazyTheater3DCanvas
-                        nodes={graphView.nodes}
-                        relationships={graphView.relationships}
+                        graphView={graphView}
                         selectedNodeId={selectedNodeId}
                         locale={locale}
-                        onSelectNode={setSelectedNodeId}
+                        onSelectNode={navigateToNode}
                         onFallback={handleGraphicsFallback}
                       />
                     </SceneChunkErrorBoundary>
@@ -445,7 +532,12 @@ export function CommandTheater({
               hasMoreData={graphState.nextCursor !== null}
               loadingMore={graphState.loadingMore}
               pageError={graphState.pageError}
-              onSelectNode={setSelectedNodeId}
+              historyPosition={historyPosition}
+              canNavigateBack={canNavigateBack}
+              canNavigateForward={canNavigateForward}
+              onNavigateBack={() => navigateSelectionHistory(-1)}
+              onNavigateForward={() => navigateSelectionHistory(1)}
+              onSelectNode={navigateToNode}
               onLoadMore={graph.loadMore}
               onRetryMore={graph.loadMore}
             />

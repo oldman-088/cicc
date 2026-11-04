@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandTheater } from "./CommandTheater";
 import { detectWebGLAvailability } from "./webgl-support";
@@ -14,11 +15,12 @@ const theaterMock = vi.hoisted(() => ({ throwsOnRender: false }));
 
 vi.mock("next/dynamic", () => ({
   default: () =>
-    function MockTheater3D({ onFallback }: { onFallback: () => void }) {
+    function MockTheater3D({ onFallback }: { onFallback: (reason?: "context-lost") => void }) {
       if (theaterMock.throwsOnRender) throw new Error("3D chunk initialization failed");
       return (
         <div data-testid="mock-3d-theater">
-          <button type="button" onClick={onFallback}>simulate WebGL failure</button>
+          <button type="button" onClick={() => onFallback()}>simulate WebGL failure</button>
+          <button type="button" onClick={() => onFallback("context-lost")}>simulate WebGL context loss</button>
           3D scene mounted
         </div>
       );
@@ -107,16 +109,31 @@ describe("CommandTheater", () => {
   it("loads synthetic fixtures only when demo mode is explicitly enabled", async () => {
     render(<CommandTheater demoMode />);
 
-    expect(await screen.findByRole("img", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
     expect(screen.getByText(/Synthetic sample only · no live feeds/i)).toBeInTheDocument();
     expect(screen.getAllByText("Demo threat actor").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/illustrative only/i).length).toBeGreaterThan(0);
   });
 
+  it("passes automated axe checks in the accessible 2D demo state", async () => {
+    const { container } = render(
+      <main><CommandTheater demoMode /></main>,
+    );
+    await screen.findByRole("group", { name: /2D intelligence relationship map/i });
+
+    // jsdom has no canvas implementation; color contrast is intentionally left for browser QA.
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockImplementation(() => null as never);
+    const results = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    }).finally(() => canvasContext.mockRestore());
+    expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  });
+
   it("starts with the 2D map and keeps it available when WebGL is unavailable", async () => {
     render(<CommandTheater demoMode />);
 
-    expect(await screen.findByRole("img", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "2D map" })).toHaveAttribute("aria-pressed", "true");
 
     const threeDButton = screen.getByRole("button", { name: "3D theater" });
@@ -129,7 +146,7 @@ describe("CommandTheater", () => {
     vi.mocked(detectWebGLAvailability).mockReturnValue(true);
     render(<CommandTheater demoMode />);
 
-    expect(await screen.findByRole("img", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
     const threeDButton = screen.getByRole("button", { name: "3D theater" });
     await waitFor(() => expect(threeDButton).toBeEnabled());
     expect(screen.queryByTestId("mock-3d-theater")).not.toBeInTheDocument();
@@ -147,8 +164,23 @@ describe("CommandTheater", () => {
     fireEvent.click(threeDButton);
     fireEvent.click(await screen.findByRole("button", { name: "simulate WebGL failure" }));
 
-    expect(screen.getByRole("img", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2D map" })).toHaveFocus();
     expect(screen.getByText(/3D is unavailable/i)).toBeInTheDocument();
+  });
+
+  it("announces WebGL context loss and restores focus to the 2D view", async () => {
+    vi.mocked(detectWebGLAvailability).mockReturnValue(true);
+    render(<CommandTheater demoMode />);
+
+    const threeDButton = screen.getByRole("button", { name: "3D theater" });
+    await waitFor(() => expect(threeDButton).toBeEnabled());
+    fireEvent.click(threeDButton);
+    fireEvent.click(await screen.findByRole("button", { name: "simulate WebGL context loss" }));
+
+    expect(screen.getByRole("group", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2D map" })).toHaveFocus();
+    expect(screen.getByText(/The WebGL context was lost/i)).toBeInTheDocument();
   });
 
   it("falls back to 2D if the lazy 3D scene throws during initialization", async () => {
@@ -161,7 +193,8 @@ describe("CommandTheater", () => {
     theaterMock.throwsOnRender = true;
     fireEvent.click(threeDButton);
 
-    expect(await screen.findByRole("img", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2D map" })).toHaveFocus();
     expect(screen.getByText(/3D is unavailable/i)).toBeInTheDocument();
     consoleError.mockRestore();
   });
@@ -251,6 +284,57 @@ describe("CommandTheater", () => {
     expect(loadPage).toHaveBeenCalledTimes(2);
   });
 
+  it("preserves an in-session investigation trail with back, forward, and branch navigation", async () => {
+    render(<CommandTheater demoMode />);
+
+    const entityList = await screen.findByRole("list", { name: /Entities/ });
+    const actor = within(entityList).getByRole("button", { name: /Demo threat actor/ });
+    const campaign = within(entityList).getByRole("button", { name: /Demo campaign/ });
+    const domain = within(entityList).getByRole("button", { name: /example.net/ });
+    const asset = within(entityList).getByRole("button", { name: /Demo research workstation/ });
+    const previous = screen.getByRole("button", { name: "Previous entity in investigation" });
+    const next = screen.getByRole("button", { name: "Next entity in investigation" });
+
+    await waitFor(() => expect(screen.getByText("Step 1 of 1.")).toBeInTheDocument());
+    fireEvent.click(campaign);
+    fireEvent.click(domain);
+    expect(domain).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Step 3 of 3.")).toBeInTheDocument();
+
+    fireEvent.click(previous);
+    expect(campaign).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Step 2 of 3.")).toBeInTheDocument();
+    fireEvent.click(next);
+    expect(domain).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(previous);
+    fireEvent.click(asset);
+    expect(asset).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Step 3 of 3.")).toBeInTheDocument();
+    expect(next).toBeDisabled();
+    expect(actor).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("caps the in-session investigation trail at 50 selected entities", async () => {
+    const nodes = Array.from({ length: 55 }, (_, index) =>
+      backendNode(`entity-${index}`, `Entity ${index}`),
+    );
+    const source = backendSource(vi.fn(async () => backendPage(nodes)));
+    render(<CommandTheater dataSource={source} />);
+
+    const entityList = await screen.findByRole("list", { name: /Entities/ });
+    fireEvent.click(await screen.findByRole("button", { name: /Show more entities/ }));
+    await waitFor(() => expect(screen.getByText("Step 1 of 1.")).toBeInTheDocument());
+
+    for (let index = 1; index <= 50; index += 1) {
+      fireEvent.click(within(entityList).getByRole("button", { name: new RegExp(`^Entity ${index},`) }));
+    }
+
+    expect(screen.getByText("Step 50 of 50.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Previous entity in investigation" }));
+    expect(screen.getByText("Step 49 of 50.")).toBeInTheDocument();
+  });
+
   it("loads cursor pages without losing nodes and never falls back to demo data on failure", async () => {
     const actor = backendNode("actor-1", "Threat actor", "threat-actor");
     const domain = backendNode("domain-1", "example.org", "domain");
@@ -296,6 +380,7 @@ describe("CommandTheater", () => {
     const theater = screen.getByRole("region", { name: "مسرح قيادة الاستخبارات" });
     expect(theater).toHaveAttribute("dir", "rtl");
     expect((await screen.findAllByText(/توضيحية فقط/)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "الكيان السابق في التحقيق" })).toBeDisabled();
 
     fireEvent.change(screen.getByRole("combobox", { name: "لغة الواجهة" }), {
       target: { value: "fa" },
@@ -305,6 +390,7 @@ describe("CommandTheater", () => {
     expect(theater).toHaveAttribute("dir", "rtl");
     expect(screen.getByRole("heading", { name: "تالار فرماندهی اطلاعات" })).toBeInTheDocument();
     expect((await screen.findAllByText(/صرفاً نمایشی/)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "موجودیت پیشین در بررسی" })).toBeDisabled();
   });
 
   it("creates unique accessible ids for multiple embedded theaters", async () => {

@@ -72,15 +72,28 @@ describe("Command Theater graph data boundary", () => {
     const startedAt = performance.now();
     const first = layoutGraphNodes(unpositioned);
     const elapsedMs = performance.now() - startedAt;
-    const second = layoutGraphNodes(unpositioned.slice(0, 20));
+    const repeated = layoutGraphNodes(unpositioned);
+    const xCoordinates = first.map((node) => node.position.x);
+    const yCoordinates = first.map((node) => node.position.y);
+    const spatialBuckets = new Set(first.map((node) =>
+      `${node.position.x.toFixed(1)},${node.position.y.toFixed(1)}`,
+    ));
 
     expect(first).toHaveLength(10_000);
     expect(first.every((node) =>
       Number.isFinite(node.position.x) &&
       Number.isFinite(node.position.y) &&
-      Number.isFinite(node.position.z),
+      Number.isFinite(node.position.z) &&
+      node.position.x >= 0 && node.position.x <= 100 &&
+      node.position.y >= 0 && node.position.y <= 100,
     )).toBe(true);
-    expect(first[0]?.position).toEqual(second[0]?.position);
+    expect(first.map((node) => node.position)).toEqual(repeated.map((node) => node.position));
+    expect(Math.min(...xCoordinates)).toBeLessThan(10);
+    expect(Math.max(...xCoordinates)).toBeGreaterThan(90);
+    expect(Math.min(...yCoordinates)).toBeLessThan(14);
+    expect(Math.max(...yCoordinates)).toBeGreaterThan(86);
+    expect(spatialBuckets.size).toBeGreaterThan(9_000);
+    expect(new Set(first.map((node) => node.position.z)).size).toBeGreaterThan(100);
     expect(elapsedMs).toBeLessThan(2_000);
   });
 
