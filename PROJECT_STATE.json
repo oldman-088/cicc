@@ -1,0 +1,21 @@
+{
+  "schema": "cicc-project-state/1",
+  "updated": "2026-11-04",
+  "maintainer": "Agent 1 — Central Coordination & System Health/Operations",
+  "branch": "arena/961971ed-cicc",
+  "pr": 4,
+  "domains": {
+    "coordination": {
+      "status": "implemented+tested; live-verified vs api.github.com; broker delivery environment-blocked",
+      "components": ["webhook (HMAC/replay/allowlist)", "github api sync (LIVE)", "task registry (14 states, audited)", "agent registry", "workload-aware explainable routing", "approvals", "delivery records", "progress", "DAG", "sweep"],
+      "tests": "API 112/112 (incl. 7 real-PG + 1 live-GitHub)"
+    },
+    "ops": {
+      "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
+      "components": ["health/metrics/alerts/maintenance/workers/tasks/system", "escalation+flap", "retention", "platform-auth adapter (inert)"],
+      "tests": "included in 112/112; web 17/17 + tsc + build"
+    }
+  },
+  "not_production_ready": ["tenant isolation (plan only, owner decision)", "real RabbitMQ broker verification (env-blocked)", "outbound notifications (disabled until authorized)"],
+  "repo_rules": {"never_push_main": true, "never_self_merge": true, "never_touch_other_branches": true}
+}

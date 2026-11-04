@@ -202,3 +202,29 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 4. Tenant isolation execution after owner DB-model decision; per-tenant rate
    buckets; ops audit adapter into platform audit table.
 5. Notification channel adapters — only after explicit owner authorization.
+
+
+## Done — Milestone 8 (PR #4 update)
+
+- LIVE GitHub API integration (api.github.com reachable from sandbox — real,
+  not mocked): repo status probe + sync creating tasks from failed CI on
+  arena branches and open PRs; idempotent; rate-limit + CB guarded; token
+  header-only. Live-verified: probe ok (PRs #1–4, 20 check runs), sync
+  created 4 tasks; suite has a live test (skips honestly if unreachable).
+- Progress reports (audited, 0–100), dependency DAG endpoint, OSS research
+  decisions doc, security review doc, root deliverables
+  (MASTER_TASK_QUEUE.md / DEVELOPMENT_LOG.md / PROJECT_STATE.json, Agent-1
+  scoped with merge-coordination note).
+- Dashboard: live GitHub panel in Coordination tab (EN/AR 174 keys).
+- Tests: API 112/112 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
+
+## Next (backlog, priority order)
+
+1. Real RabbitMQ verification + broker delivery loop where Docker exists
+   (env-blocked here; procedure committed; attach evidence to PR #4).
+2. Agent 4 contract confirmation (PR #4 comment / issue #5) -> wire ops_client.
+3. Retry backoff (CICC_COORD_RETRY_BACKOFF_S), prefetch=1 runbook, webhook
+   secret rotation + timestamp freshness.
+4. Tenant isolation execution after owner DB-model decision; per-tenant rate
+   buckets; ops audit adapter.
+5. Notification adapters only after explicit owner authorization.

@@ -3,7 +3,7 @@
 import Section from "./Section";
 import { useLocale } from "../lib/i18n";
 import { formatTime } from "../lib/format";
-import type { CoordinationAgent, CoordinationTask, GitHubEventItem } from "../lib/types";
+import type { CoordinationAgent, CoordinationTask, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
 
 const STATE_COLORS: Record<string, string> = {
   NEW: "border-slate-500/50 text-slate-300",
@@ -21,10 +21,12 @@ export default function CoordinationView({
   tasks,
   events,
   agents,
+  gh,
 }: {
   tasks: CoordinationTask[];
   events: GitHubEventItem[];
   agents: CoordinationAgent[];
+  gh: GitHubRepoStatus | null;
 }) {
   const { t, locale } = useLocale();
   return (
@@ -110,6 +112,47 @@ export default function CoordinationView({
             </table>
           </div>
         )}
+      </Section>
+
+      <Section title={t("ghLiveTitle")}>
+        {!gh ? (
+          <p className="text-sm text-slate-400">—</p>
+        ) : gh.status !== "ok" ? (
+          <p className="text-sm text-slate-400">{t("ghUnavailable")}: {gh.detail ?? gh.status}</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+              <h4 className="mb-1 text-xs uppercase tracking-wider text-slate-400">{t("ghOpenPRs")}</h4>
+              <ul className="text-sm text-slate-200">
+                {(gh.open_prs ?? []).map((p) => (
+                  <li key={p.number}>#{p.number} {p.title} <span className="text-slate-500">({p.head})</span></li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="mb-1 text-xs uppercase tracking-wider text-slate-400">{t("ghOpenIssues")}</h4>
+              <ul className="text-sm text-slate-200">
+                {(gh.open_issues ?? []).map((i) => (
+                  <li key={i.number}>#{i.number} {i.title}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="mb-1 text-xs uppercase tracking-wider text-slate-400">{t("ghCheckRuns")}</h4>
+              <ul className="text-sm text-slate-200">
+                {(gh.check_runs ?? []).slice(0, 8).map((c, i) => (
+                  <li key={i}>
+                    <span className={c.conclusion === "failure" ? "text-red-300" : c.conclusion === "success" ? "text-emerald-300" : "text-slate-300"}>
+                      {c.conclusion ?? c.status}
+                    </span>{" "}
+                    {c.name} <span className="text-slate-500">({c.head_branch})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-slate-500">{t("ghLiveNote")}</p>
       </Section>
 
       <Section title={t("coordEventsTitle")}>

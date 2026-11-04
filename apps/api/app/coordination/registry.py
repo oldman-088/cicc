@@ -183,6 +183,7 @@ def list_tasks(s, state: str | None = None, agent: str | None = None, limit: int
             "timeout_s": t.timeout_s, "expires_at": _iso(t.expires_at),
             "dead_letter": bool(t.dead_letter),
             "routing_explanation": json.loads(t.routing_explanation) if t.routing_explanation else None,
+            "progress": getattr(t, "progress", 0) or 0,
             "payload": json.loads(t.payload) if t.payload else None,
             "handoff": t.handoff,
             "created_at": _iso(t.created_at), "updated_at": _iso(t.updated_at),
@@ -217,3 +218,35 @@ def task_stats_by_agent(s, agent: str) -> dict:
         "retries": by_state.get("RETRYING", 0),
         "by_state": by_state,
     }
+
+
+def dag(s, limit: int = 500) -> dict:
+    """Dependency DAG over tasks: nodes + edges from depends_on."""
+    rows = s.execute(select(models.CoordinationTask).limit(limit)).scalars().all()
+    nodes, edges = [], []
+    ids = set()
+    for t in rows:
+        ids.add(t.task_id)
+        nodes.append({"task_id": t.task_id, "kind": t.kind, "state": normalize_state(t.state),
+                      "agent": t.agent, "priority": t.priority})
+        if t.depends_on:
+            try:
+                deps = json.loads(t.depends_on)
+            except Exception:
+                deps = []
+            for d in deps:
+                edges.append({"from": d, "to": t.task_id})
+    return {"nodes": nodes, "edges": edges, "known_ids": sorted(ids)}
+
+
+def progress(s, task_id: str, percent: int, note: str | None = None) -> dict | None:
+    """Structured progress report (0..100). Audited as an event."""
+    t = s.execute(select(models.CoordinationTask).where(models.CoordinationTask.task_id == task_id)).scalar_one_or_none()
+    if t is None:
+        return None
+    percent = max(0, min(100, int(percent)))
+    t.progress = percent
+    t.updated_at = utcnow()
+    record_event(s, task_id, "progress", f"{percent}%" + (f" {note}" if note else ""))
+    s.flush()
+    return {"task_id": task_id, "progress": percent, "state": normalize_state(t.state)}

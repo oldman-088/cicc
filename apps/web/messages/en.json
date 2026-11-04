@@ -166,5 +166,11 @@
   "capabilities": "Capabilities",
   "activeTasks": "Active",
   "done": "Done",
-  "failedCol": "Failed"
+  "failedCol": "Failed",
+  "ghLiveTitle": "GitHub (live api.github.com)",
+  "ghUnavailable": "GitHub API unavailable",
+  "ghOpenPRs": "Open PRs",
+  "ghOpenIssues": "Open issues",
+  "ghCheckRuns": "Recent CI runs",
+  "ghLiveNote": "Live data from api.github.com (real call, circuit-breaker guarded). POST /api/v1/coordination/github/sync ingests PR/CI events as tasks."
 }

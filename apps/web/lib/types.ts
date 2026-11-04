@@ -215,3 +215,12 @@ export interface CoordinationAgent {
 export interface CoordinationAgentsResponse {
   agents: CoordinationAgent[];
 }
+
+export interface GitHubRepoStatus {
+  status: string;
+  detail?: string;
+  repo?: string;
+  open_prs?: { number: number; title: string; head: string; user: string; url: string }[];
+  open_issues?: { number: number; title: string; user: string; labels: string[] }[];
+  check_runs?: { name: string; status: string; conclusion: string | null; head_branch: string; html_url: string }[];
+}

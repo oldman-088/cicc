@@ -69,3 +69,15 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   policy gap, coord_tasks additive migration for pre-existing dev DB.
 - API 107/107 (7 real-PG), web 17/17 + tsc + build; live smoke full lifecycle.
 - Still environment-blocked: real RabbitMQ broker verification/delivery.
+
+## 2026-11-04 — Milestone 8 (branch arena/961971ed-cicc, PR #4)
+
+- OSS research documented (docs/OSS_RESEARCH.md): adapt patterns from
+  Dramatiq/RabbitMQ (quorum+confirms), LangGraph/Temporal (state machine,
+  interrupts≈approvals); reject whole-platform adoption at current scale.
+- LIVE GitHub API sync implemented + verified live (api.github.com reachable):
+  probe, PR/issue/check-run ingestion as tasks, idempotent, CB+rate-limit.
+- Progress reports + DAG endpoint; SECURITY_REVIEW.md; root deliverable docs.
+- Fixed: check-runs 404 fallback to actions/runs; sync idempotency on CI path;
+  dag route shadowing; CB reset ordering in live test.
+- API 112/112 (7 real-PG + 1 live GitHub), web 17/17 + tsc + build.

@@ -166,5 +166,11 @@
   "capabilities": "القدرات",
   "activeTasks": "نشطة",
   "done": "منجزة",
-  "failedCol": "فاشلة"
+  "failedCol": "فاشلة",
+  "ghLiveTitle": "GitHub (مباشر api.github.com)",
+  "ghUnavailable": "GitHub API غير متاح",
+  "ghOpenPRs": "طلبات/pull مفتوحة",
+  "ghOpenIssues": "Issues مفتوحة",
+  "ghCheckRuns": "أحدث نتائج CI",
+  "ghLiveNote": "بيانات مباشرة من api.github.com (استدعاء حقيقي محمي بـ circuit breaker). POST /api/v1/coordination/github/sync يستورد أحداث PR/CI كمهام."
 }

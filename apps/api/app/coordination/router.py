@@ -26,7 +26,7 @@ from sqlalchemy import select
 from app import models, ops
 from app.ratelimit import read_token_dependency, require_write_token, write_rate_limit_dependency
 from . import agents as agent_registry
-from . import approvals, handoff, registry, routing, webhook
+from . import approvals, github_sync, handoff, registry, routing, webhook
 
 router = APIRouter(prefix="/api/v1/coordination", tags=["coordination"])
 
@@ -41,6 +41,11 @@ class RuleIn(BaseModel):
 
 class ReportIn(BaseModel):
     result: str | None = Field(default=None, max_length=4000)
+
+
+class ProgressIn(BaseModel):
+    percent: int = Field(ge=0, le=100)
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class DecisionIn(BaseModel):
@@ -113,6 +118,12 @@ def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None =
                agent: str | None = Query(None), limit: int = Query(100, ge=1, le=500)):
     with ops.SessionLocal() as s:
         return {"tasks": registry.list_tasks(s, state, agent, limit)}
+
+
+@router.get("/tasks/dag")
+def get_dag(_gate: None = Depends(read_token_dependency), limit: int = Query(500, ge=1, le=2000)):
+    with ops.SessionLocal() as s:
+        return registry.dag(s, limit)
 
 
 @router.get("/tasks/{task_id}")
@@ -355,3 +366,33 @@ def add_rule(body: RuleIn, request: Request, _gate: None = Depends(read_token_de
         s.add(r)
         s.commit()
         return {"id": r.id, "name": r.name, "agent": r.agent, "enabled": r.enabled}
+
+
+# ---------------- progress, DAG, live GitHub sync (M8) ----------------
+
+@router.post("/tasks/{task_id}/progress")
+def report_progress(task_id: str, body: ProgressIn, _gate: None = Depends(read_token_dependency),
+                    authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        r = registry.progress(s, task_id, body.percent, body.note)
+        s.commit()
+        if r is None:
+            raise HTTPException(status_code=404, detail="task_not_found")
+        return r
+
+
+@router.get("/github/status")
+def github_status(_gate: None = Depends(read_token_dependency)):
+    """LIVE probe of api.github.com (real call, circuit-breaker guarded)."""
+    with ops.SessionLocal() as s:
+        return github_sync.fetch_repo_status(s)
+
+
+@router.post("/github/sync")
+def github_sync_run(_gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+    """REAL GitHub API sync: polls repo PRs/issues/check-runs and creates
+    coordination tasks (CI failures on arena branches, open PRs)."""
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        return github_sync.sync(s)

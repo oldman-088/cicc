@@ -273,6 +273,7 @@ class CoordinationTask(Base):
     idempotency_key = Column(String(128), nullable=True, index=True)
     dead_letter = Column(Boolean, default=False, nullable=False)
     routing_explanation = Column(Text, nullable=True)      # why this agent was chosen
+    progress = Column(Integer, default=0, nullable=False)  # 0..100 structured progress (M8)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

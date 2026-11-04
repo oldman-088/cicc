@@ -145,6 +145,7 @@ def _ensure_alert_columns() -> None:
             ("idempotency_key", "ALTER TABLE coord_tasks ADD COLUMN idempotency_key VARCHAR(128)"),
             ("dead_letter", "ALTER TABLE coord_tasks ADD COLUMN dead_letter BOOLEAN NOT NULL DEFAULT FALSE"),
             ("routing_explanation", "ALTER TABLE coord_tasks ADD COLUMN routing_explanation TEXT"),
+            ("progress", "ALTER TABLE coord_tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0"),
         ],
     }
     insp = _inspect(engine)

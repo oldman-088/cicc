@@ -117,3 +117,23 @@ bypasses are used anywhere.
 Verified: API 107/107 (incl. 7 real-PG), web 17/17 + tsc + build; live smoke of
 webhook→approval→route→deliver→ack/start/complete + sweep on :8000/:3000.
 Still environment-blocked: real-broker delivery/confirm (no Docker/broker here).
+
+
+## v3 (Milestone 8)
+
+- **LIVE GitHub API sync** (`app/coordination/github_sync.py`,
+  `GET /github/status`, `POST /github/sync`): real calls to api.github.com
+  (reachable egress), circuit-breaker guarded, rate-limit aware, token used
+  header-only and never logged/returned. Creates coordination tasks for
+  failed CI on arena/* branches (`ci_failed`, priority 2) and open PRs;
+  idempotent via idempotency keys; check-runs endpoint falls back to
+  workflow runs on 404. **Verified live in-sandbox**: probe ok, PRs #1–#4,
+  20 check runs, sync created 4 PR tasks; API suite includes 1 live test
+  (skips honestly if unreachable).
+- **Progress reports**: `POST /tasks/{id}/progress {percent, note}` (0–100,
+  audited event, stored on task).
+- **Dependency DAG**: `GET /tasks/dag` → nodes+edges from depends_on.
+- **OSS research decisions**: docs/OSS_RESEARCH.md (queues, orchestration,
+  registries, approvals; reuse/adapt/reject rationale + re-evaluation triggers).
+- **Security review**: docs/SECURITY_REVIEW.md (controls table + findings).
+- Dashboard: live GitHub panel (PRs/issues/CI) in Coordination tab.
