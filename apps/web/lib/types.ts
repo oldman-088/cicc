@@ -7,6 +7,7 @@ export interface ComponentInfo {
   status: string;
   detail: string;
   last_check_at: string | null;
+  check?: Record<string, unknown> | null;
 }
 
 export interface Metrics {
@@ -38,4 +39,44 @@ export interface Overview {
 export interface HealthResponse {
   web: { status: string; response_ms: number };
   backend: { status: string; detail: unknown };
+}
+
+export interface Snapshot {
+  ts: string | null;
+  entities: number;
+  vulnerabilities: number;
+  campaigns: number;
+  recent_updates_24h: number;
+}
+
+export interface HistoryResponse {
+  window_hours: number;
+  snapshots: Snapshot[];
+}
+
+export interface DependencyEdge {
+  from: string;
+  to: string;
+  label: string;
+}
+
+export interface DependencyGraph {
+  nodes: ComponentInfo[];
+  edges: DependencyEdge[];
+}
+
+export interface TaskStats {
+  window_hours: number;
+  completed: number;
+  failed: number;
+  pending: number;
+  avg_duration_ms: number | null;
+  oldest_pending_started: string | null;
+}
+
+export interface Alert {
+  key: string;
+  status: string;
+  name: string;
+  detail: string;
 }

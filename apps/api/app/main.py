@@ -1,9 +1,14 @@
 """CICC Operations API — System Health & Operations backend.
 
-Exposes REAL health checks and operational metrics. It never claims a
-service is healthy without performing an actual check, and never serves
-synthetic data as live intelligence.
+Exposes REAL health checks and operational metrics:
+- /live   — liveness: the process is up (always 200 while running)
+- /ready  — readiness: core dependencies (database) are actually usable
+- /health — liveness + detailed check results (informational)
+
+Never claims a service is healthy without performing an actual check,
+and never serves synthetic data as live intelligence.
 """
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -16,7 +21,10 @@ from app import ops
 from app.routers import ops as ops_router
 from app.schemas import HealthResponse
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
+
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logger = logging.getLogger("cicc.ops")
 
 _STARTED = datetime.now(timezone.utc)
 _STARTED_TS = _STARTED.timestamp()
@@ -26,7 +34,10 @@ _STARTED_TS = _STARTED.timestamp()
 async def lifespan(app: FastAPI):
     ops.init_db()
     ops.record_event("info", "api", "CICC operations service started")
+    logger.info("operations service started")
     yield
+    ops.record_event("info", "api", "CICC operations service stopped")
+    logger.info("operations service stopped")
 
 
 app = FastAPI(title="CICC Operations API", version=__version__, lifespan=lifespan)
@@ -37,7 +48,7 @@ _origins = os.getenv(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _origins if o.strip()],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -49,10 +60,30 @@ def root():
     return {"service": "cicc-operations-api", "version": __version__, "docs": "/docs"}
 
 
+@app.get("/live")
+def live():
+    """Liveness probe: 200 iff the process is running. Not rate limited."""
+    return {"status": "alive", "service": "cicc-api", "version": __version__}
+
+
+@app.get("/ready")
+def ready():
+    """Readiness probe: 200 only if the database check actually passes."""
+    db = ops.check_database()
+    if db["status"] == "ok":
+        return {"status": "ready", "checks": {"database": db}}
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=503,
+        content={"status": "not_ready", "checks": {"database": db}},
+    )
+
+
 @app.get("/health", response_model=HealthResponse)
 def health():
-    """Real health check: this endpoint responding means the API is up;
-    the database check performs an actual round trip."""
+    """Liveness + informational checks. The database check is a real round
+    trip; /health never claims health without performing the check."""
     db = ops.check_database()
     return {
         "status": "ok" if db["status"] == "ok" else "degraded",

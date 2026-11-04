@@ -12,12 +12,24 @@ apps/api   FastAPI operations service  (real health checks + ops DB)
 apps/web   Next.js 14 dashboard         (/api/* proxied server-side to the API)
 ```
 
+- `GET /live` — liveness (always 200 while the process runs; not rate limited).
+- `GET /ready` — readiness: 200 only if the **real** DB check passes, else 503.
 - `GET /health` (API) — liveness + a **real** database round trip (`SELECT 1`).
 - `GET /api/health` (web route) — web UI status + proxied backend check.
-- `GET /api/v1/ops/overview` — services, modules, metrics, recent activity.
-- `GET /api/v1/ops/components` — component registry with truthful statuses.
+- `GET /api/v1/ops/overview` — services, modules, metrics, recent activity (cached ≤2 s).
+- `GET /api/v1/ops/components` — component registry with live, truthful statuses.
 - `GET /api/v1/ops/metrics` — real counters (COUNT/MAX on the ops database).
+- `GET /api/v1/ops/metrics/history?hours=1..168` — real recorded snapshots for trends.
 - `GET /api/v1/ops/activity?limit=N` — real recorded events, newest first.
+- `GET /api/v1/ops/dependencies` — service dependency graph with live node statuses.
+- `GET /api/v1/ops/tasks/stats?hours=N` — stats over real worker-reported task runs.
+- `POST /api/v1/ops/tasks` — worker task-run ingestion (token-gated when
+  `CICC_OPS_WRITE_TOKEN` is set). See `docs/MONITORING_CONTRACTS.md`.
+
+Ops endpoints are rate limited per client (default 120/min, `OPS_RATE_LIMIT`,
+429 beyond); `/live`, `/ready`, `/health` are exempt for orchestrators.
+RabbitMQ is monitored via `RABBITMQ_MANAGEMENT_URL` (broker + queue totals
+only — never credentials, and never any claim about Arena session control).
 
 ## Data honesty rules
 

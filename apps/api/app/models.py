@@ -1,9 +1,10 @@
 """Operational database models.
 
 These tables hold the platform's *own* operational state (component
-registry, real events, real counters). Intelligence tables (entities,
-vulnerabilities, campaigns, sync attempts) stay empty until a real,
-authorized ingestion source writes to them. No synthetic rows are seeded.
+registry, real events, real counters, real task runs, real metric
+snapshots). Intelligence tables (entities, vulnerabilities, campaigns,
+sync attempts) stay empty until a real, authorized ingestion source
+writes to them. No synthetic rows are seeded.
 """
 from datetime import datetime, timezone
 
@@ -88,3 +89,39 @@ class SyncAttempt(Base):
     finished_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(32), nullable=False)  # running | success | failed
     records = Column(Integer, default=0)
+
+
+class TaskRun(Base):
+    """A real background task execution, reported by a worker via
+    POST /api/v1/ops/tasks (see docs/MONITORING_CONTRACTS.md).
+
+    This records *task execution* only. It does NOT prove that any Arena
+    agent session is being controlled by RabbitMQ — that integration is
+    not implemented or verified.
+    """
+
+    __tablename__ = "task_runs"
+
+    id = Column(Integer, primary_key=True)
+    worker = Column(String(128), nullable=False)
+    queue = Column(String(128), nullable=False, index=True)
+    status = Column(String(32), nullable=False)  # running | success | failed
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class MetricSnapshot(Base):
+    """Point-in-time operational counters, recorded at most once per
+    SNAPSHOT_MIN_INTERVAL seconds from real COUNT queries."""
+
+    __tablename__ = "metric_snapshots"
+
+    id = Column(Integer, primary_key=True)
+    ts = Column(DateTime(timezone=True), default=utcnow, index=True)
+    entities = Column(Integer, nullable=False)
+    vulnerabilities = Column(Integer, nullable=False)
+    campaigns = Column(Integer, nullable=False)
+    recent_updates_24h = Column(Integer, nullable=False)

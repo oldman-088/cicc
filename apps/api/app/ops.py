@@ -1,18 +1,25 @@
-"""Operational registry, health checks and metrics logic.
+"""Operational registry, health aggregation, metrics, history, tasks.
 
 Honesty rules enforced here:
-- Service statuses come from *live* checks (e.g. a real database round
-  trip), never from assumptions.
-- Module statuses are explicit (e.g. "not_implemented") when the module
-  does not exist in this build.
-- Metrics are real COUNT/MAX queries against the operations database.
-  No synthetic numbers, no fabricated CVEs/campaigns/events.
+- Service statuses come from *live* checks (real DB round trip, real HTTP
+  probes with bounded timeouts), never from assumptions.
+- A failing check degrades only its own component — the overview endpoint
+  keeps working (failure isolation).
+- Module statuses are explicit (e.g. "not_implemented") for anything not
+  implemented in this build.
+- Metrics are real COUNT/MAX/AVG queries. Snapshots are real counters.
+- No synthetic numbers, no fabricated CVEs/campaigns/events.
+- RabbitMQ checks report broker availability only. Nothing here claims
+  that RabbitMQ controls Arena agent sessions (not implemented/verified).
 """
+import os
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
-from app import models
+from app import checks, models
 from app.db import SessionLocal, engine
 
 # Modules of the full CICC platform. Statuses are truthful for THIS build:
@@ -64,6 +71,12 @@ MODULE_REGISTRY = [
 
 SEVERITY = {"ok": 0, "not_configured": 1, "not_implemented": 1, "degraded": 2, "down": 3}
 
+SNAPSHOT_MIN_INTERVAL_S = 60
+OVERVIEW_CACHE_TTL_S = 2.0
+
+_cache_lock = threading.Lock()
+_overview_cache: dict = {"ts": 0.0, "data": None}
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -104,19 +117,7 @@ def record_event(level: str, source: str, message: str) -> None:
 
 
 def check_database() -> dict:
-    """Perform a REAL database health check (round trip SELECT 1)."""
-    started = utcnow()
-    try:
-        with engine.connect() as conn:
-            conn.exec_driver_sql("SELECT 1")
-        latency_ms = round((utcnow() - started).total_seconds() * 1000, 2)
-        return {
-            "status": "ok",
-            "detail": engine.url.render_as_string(hide_password=True),
-            "latency_ms": latency_ms,
-        }
-    except Exception as exc:  # noqa: BLE001 - report any failure honestly
-        return {"status": "down", "detail": f"connection failed: {type(exc).__name__}"}
+    return checks.check_database(engine)
 
 
 def _iso(dt) -> str | None:
@@ -147,6 +148,85 @@ def _module_rows(s) -> list[dict]:
     return [_component_dict(r) for r in rows]
 
 
+def _workers_status(s) -> dict:
+    """Worker component status, derived from REAL reported task runs.
+
+    Never claims Arena agent control: it only reflects task runs that a
+    worker explicitly reported through POST /api/v1/ops/tasks.
+    """
+    cutoff = utcnow() - timedelta(minutes=5)
+    recent = s.execute(
+        select(func.count(models.TaskRun.id)).where(models.TaskRun.created_at >= cutoff)
+    ).scalar_one()
+    if recent:
+        return {
+            "status": "ok",
+            "detail": f"{int(recent)} task run(s) reported in the last 5 minutes",
+        }
+    return {
+        "status": "not_configured",
+        "detail": (
+            "no worker has reported task runs yet (POST /api/v1/ops/tasks); "
+            "RabbitMQ does NOT control Arena sessions unless explicitly integrated — not verified"
+        ),
+    }
+
+
+def _service_components(s) -> list[dict]:
+    """Live-checked service components. Each check is failure-isolated."""
+    services: list[dict] = [
+        {
+            "key": "api",
+            "kind": "service",
+            "name": "CICC API Service",
+            "status": "ok",
+            "detail": "responding to requests",
+            "last_check_at": _iso(utcnow()),
+        }
+    ]
+
+    def _add(key: str, name: str, check: dict) -> None:
+        services.append(
+            {
+                "key": key,
+                "kind": "service",
+                "name": name,
+                "status": check.get("status", "unknown"),
+                "detail": check.get("detail", ""),
+                "last_check_at": _iso(utcnow()),
+                "check": {k: v for k, v in check.items() if k not in ("detail",)},
+            }
+        )
+
+    try:
+        _add("database", "Database", check_database())
+    except Exception as exc:  # noqa: BLE001 - isolation
+        _add("database", "Database", {"status": "unknown", "detail": type(exc).__name__})
+    try:
+        _add("rabbitmq", "RabbitMQ Broker", checks.check_rabbitmq())
+    except Exception as exc:  # noqa: BLE001
+        _add("rabbitmq", "RabbitMQ Broker", {"status": "unknown", "detail": type(exc).__name__})
+    try:
+        _add("platform_api", "Platform API (integration)", checks.check_external_api("CICC_PLATFORM_API_URL"))
+    except Exception as exc:  # noqa: BLE001
+        _add("platform_api", "Platform API (integration)", {"status": "unknown", "detail": type(exc).__name__})
+    try:
+        w = _workers_status(s)
+        services.append(
+            {
+                "key": "workers",
+                "kind": "service",
+                "name": "Task Workers",
+                "status": w["status"],
+                "detail": w["detail"],
+                "last_check_at": _iso(utcnow()),
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        _add("workers", "Task Workers", {"status": "unknown", "detail": type(exc).__name__})
+    return services
+
+
 def _metrics(s) -> dict:
     entities = s.execute(select(func.count(models.Entity.id))).scalar_one()
     vulnerabilities = s.execute(select(func.count(models.Vulnerability.id))).scalar_one()
@@ -172,6 +252,22 @@ def _metrics(s) -> dict:
     }
 
 
+def _maybe_record_snapshot(s, metrics: dict) -> None:
+    """Record a real metric snapshot at most once per SNAPSHOT_MIN_INTERVAL_S."""
+    last = s.execute(select(func.max(models.MetricSnapshot.ts))).scalar_one()
+    if last is not None and (utcnow() - last.replace(tzinfo=timezone.utc)).total_seconds() < SNAPSHOT_MIN_INTERVAL_S:
+        return
+    s.add(
+        models.MetricSnapshot(
+            entities=metrics["entities"],
+            vulnerabilities=metrics["vulnerabilities"],
+            campaigns=metrics["campaigns"],
+            recent_updates_24h=metrics["recent_updates_24h"],
+        )
+    )
+    s.commit()
+
+
 def _activity(s, limit: int) -> list[dict]:
     rows = (
         s.execute(
@@ -195,29 +291,12 @@ def _activity(s, limit: int) -> list[dict]:
 
 
 def build_overview(limit: int = 50) -> dict:
-    db_check = check_database()
     with SessionLocal() as s:
+        services = _service_components(s)
         modules = _module_rows(s)
         metrics = _metrics(s)
+        _maybe_record_snapshot(s, metrics)
         activity = _activity(s, limit)
-    services = [
-        {
-            "key": "api",
-            "kind": "service",
-            "name": "CICC API Service",
-            "status": "ok",
-            "detail": "responding to requests",
-            "last_check_at": _iso(utcnow()),
-        },
-        {
-            "key": "database",
-            "kind": "service",
-            "name": "Database",
-            "status": db_check["status"],
-            "detail": db_check["detail"],
-            "last_check_at": _iso(utcnow()),
-        },
-    ]
     overall = compute_overall([svc["status"] for svc in services])
     return {
         "generated_at": utcnow().isoformat(),
@@ -230,28 +309,22 @@ def build_overview(limit: int = 50) -> dict:
     }
 
 
+def build_overview_cached() -> dict:
+    """Short-TTL cache so a polling dashboard cannot hammer the database."""
+    now = time.monotonic()
+    with _cache_lock:
+        if _overview_cache["data"] is not None and now - _overview_cache["ts"] < OVERVIEW_CACHE_TTL_S:
+            return _overview_cache["data"]
+        data = build_overview()
+        _overview_cache["ts"] = now
+        _overview_cache["data"] = data
+        return data
+
+
 def build_components() -> dict:
-    db_check = check_database()
     with SessionLocal() as s:
+        services = _service_components(s)
         modules = _module_rows(s)
-    services = [
-        {
-            "key": "api",
-            "kind": "service",
-            "name": "CICC API Service",
-            "status": "ok",
-            "detail": "responding to requests",
-            "last_check_at": _iso(utcnow()),
-        },
-        {
-            "key": "database",
-            "kind": "service",
-            "name": "Database",
-            "status": db_check["status"],
-            "detail": db_check["detail"],
-            "last_check_at": _iso(utcnow()),
-        },
-    ]
     return {"services": services, "modules": modules}
 
 
@@ -263,3 +336,84 @@ def build_metrics() -> dict:
 def build_activity(limit: int) -> list[dict]:
     with SessionLocal() as s:
         return _activity(s, limit)
+
+
+def build_history(hours: int) -> list[dict]:
+    cutoff = utcnow() - timedelta(hours=hours)
+    with SessionLocal() as s:
+        rows = (
+            s.execute(
+                select(models.MetricSnapshot)
+                .where(models.MetricSnapshot.ts >= cutoff.replace(tzinfo=None))
+                .order_by(models.MetricSnapshot.ts)
+            )
+            .scalars()
+            .all()
+        )
+        return [
+            {
+                "ts": _iso(r.ts),
+                "entities": r.entities,
+                "vulnerabilities": r.vulnerabilities,
+                "campaigns": r.campaigns,
+                "recent_updates_24h": r.recent_updates_24h,
+            }
+            for r in rows
+        ]
+
+
+def build_dependencies() -> dict:
+    """Service dependency graph. Nodes carry live statuses; edges are the
+    declared dependencies of the operations API."""
+    comps = build_components()
+    nodes = comps["services"] + comps["modules"]
+    keys = {n["key"] for n in nodes}
+    edges = [
+        {"from": "api", "to": "database", "label": "SQL queries"},
+        {"from": "api", "to": "rabbitmq", "label": "task queue (broker check only)"},
+        {"from": "api", "to": "platform_api", "label": "platform integration API"},
+        {"from": "api", "to": "workers", "label": "task run reports"},
+    ]
+    edges = [e for e in edges if e["from"] in keys and e["to"] in keys]
+    return {"nodes": nodes, "edges": edges}
+
+
+def build_task_stats(hours: int) -> dict:
+    cutoff = utcnow() - timedelta(hours=hours)
+    with SessionLocal() as s:
+        base = select(models.TaskRun).where(models.TaskRun.created_at >= cutoff.replace(tzinfo=None))
+        completed = s.execute(base.where(models.TaskRun.status == "success")).scalars().all()
+        failed = s.execute(base.where(models.TaskRun.status == "failed")).scalars().all()
+        pending = s.execute(base.where(models.TaskRun.status == "running")).scalars().all()
+        durations = [r.duration_ms for r in completed + failed if r.duration_ms is not None]
+        avg = round(sum(durations) / len(durations), 2) if durations else None
+        oldest_pending = min((r.started_at for r in pending if r.started_at), default=None)
+        return {
+            "window_hours": hours,
+            "completed": len(completed),
+            "failed": len(failed),
+            "pending": len(pending),
+            "avg_duration_ms": avg,
+            "oldest_pending_started": _iso(oldest_pending),
+        }
+
+
+def record_task_run(payload: dict) -> int:
+    """Record a real worker-reported task run (integration contract)."""
+    with SessionLocal() as s:
+        run = models.TaskRun(
+            worker=payload["worker"],
+            queue=payload["queue"],
+            status=payload["status"],
+            started_at=payload.get("started_at"),
+            finished_at=payload.get("finished_at"),
+            duration_ms=payload.get("duration_ms"),
+            error=payload.get("error"),
+        )
+        s.add(run)
+        s.commit()
+        return int(run.id)
+
+
+def write_token_required() -> str | None:
+    return os.getenv("CICC_OPS_WRITE_TOKEN") or None

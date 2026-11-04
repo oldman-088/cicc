@@ -9,9 +9,11 @@ import type { ComponentInfo } from "../lib/types";
 export default function ComponentsTable({
   title,
   rows,
+  nameOf,
 }: {
   title: string;
   rows: ComponentInfo[];
+  nameOf: (key: string) => string;
 }) {
   const { t, locale } = useLocale();
   return (
@@ -30,7 +32,9 @@ export default function ComponentsTable({
           <tbody>
             {rows.map((r) => (
               <tr key={r.key} className="border-b border-slate-800/60">
-                <td className="td font-medium text-slate-100">{r.name}</td>
+                <td className="td font-medium text-slate-100">
+                  {nameOf(r.key)}
+                </td>
                 <td className="td text-slate-400">{t(`kind_${r.kind}`)}</td>
                 <td className="td">
                   <StatusBadge status={r.status} />

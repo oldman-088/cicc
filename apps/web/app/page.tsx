@@ -3,21 +3,42 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ActivityTimeline from "../components/ActivityTimeline";
+import ActivityView from "../components/ActivityView";
+import AlertsBanner from "../components/AlertsBanner";
 import ComponentsTable from "../components/ComponentsTable";
+import DependencyGraph from "../components/DependencyGraph";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import MetricsGrid from "../components/MetricsGrid";
+import NavTabs, { type Tab } from "../components/NavTabs";
 import OverviewCards from "../components/OverviewCards";
 import Section from "../components/Section";
+import TrendChart from "../components/TrendChart";
+import { deriveAlerts } from "../lib/alerts.mjs";
+import { formatTime } from "../lib/format";
 import { useLocale } from "../lib/i18n";
 import { overallStatus } from "../lib/status.mjs";
-import { formatTime } from "../lib/format";
-import type { ComponentInfo, HealthResponse, Overview } from "../lib/types";
+import type {
+  ActivityEvent,
+  ComponentInfo,
+  DependencyGraph as Deps,
+  HealthResponse,
+  Overview,
+  Snapshot,
+  TaskStats,
+} from "../lib/types";
 
 const REFRESH_MS = 15000;
 
+type View = "overview" | "components" | "metrics" | "activity" | "dependencies";
+
 export default function DashboardPage() {
   const { t, locale } = useLocale();
+  const [view, setView] = useState<View>("overview");
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [deps, setDeps] = useState<Deps | null>(null);
+  const [history, setHistory] = useState<Snapshot[]>([]);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,18 +47,22 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [hRes, oRes] = await Promise.all([
+      const [h, o, d, hi, a, ts] = await Promise.all([
         fetch("/api/health", { cache: "no-store" }),
         fetch("/api/v1/ops/overview", { cache: "no-store" }),
+        fetch("/api/v1/ops/dependencies", { cache: "no-store" }),
+        fetch("/api/v1/ops/metrics/history?hours=24", { cache: "no-store" }),
+        fetch("/api/v1/ops/activity?limit=100", { cache: "no-store" }),
+        fetch("/api/v1/ops/tasks/stats?hours=24", { cache: "no-store" }),
       ]);
-      setHealth(hRes.ok ? await hRes.json() : null);
-      if (oRes.ok) {
-        setOverview(await oRes.json());
-        setLastRefresh(new Date().toISOString());
-      } else {
-        setOverview(null);
-        setError(`overview_http_${oRes.status}`);
-      }
+      setHealth(h.ok ? await h.json() : null);
+      if (!o.ok) throw new Error(`overview_http_${o.status}`);
+      setOverview(await o.json());
+      setDeps(d.ok ? await d.json() : null);
+      setHistory(hi.ok ? (await hi.json()).snapshots : []);
+      setActivity(a.ok ? (await a.json()).events : []);
+      setTaskStats(ts.ok ? await ts.json() : null);
+      setLastRefresh(new Date().toISOString());
     } catch {
       setHealth(null);
       setOverview(null);
@@ -53,6 +78,15 @@ export default function DashboardPage() {
     return () => window.clearInterval(id);
   }, [load]);
 
+  const nameOf = useCallback(
+    (key: string) => {
+      const k = `name_${key}`;
+      const tr = t(k);
+      return tr === k ? key : tr;
+    },
+    [t]
+  );
+
   // Web UI is "ok" whenever this page can reach its own health route.
   const webComponent: ComponentInfo = {
     key: "web",
@@ -62,11 +96,10 @@ export default function DashboardPage() {
     detail: health ? `HTTP 200 · ${health.web.response_ms} ms` : "—",
     last_check_at: lastRefresh,
   };
-  const services: ComponentInfo[] = [
-    webComponent,
-    ...(overview?.services ?? []),
-  ];
+  const services: ComponentInfo[] = [webComponent, ...(overview?.services ?? [])];
   const modules = overview?.modules ?? [];
+  const components = [...services, ...modules];
+  const alerts = deriveAlerts(components);
   const overall = overview
     ? overview.overall_status
     : overallStatus(services.map((s) => s.status));
@@ -74,6 +107,14 @@ export default function DashboardPage() {
     (m) => m.status === "ok" || m.status === "degraded"
   ).length;
   const servicesUp = services.filter((s) => s.status === "ok").length;
+
+  const tabs: Tab[] = [
+    { id: "overview", label: t("navOverview") },
+    { id: "components", label: t("navComponents") },
+    { id: "metrics", label: t("navMetrics") },
+    { id: "activity", label: t("navActivity") },
+    { id: "dependencies", label: t("navDependencies") },
+  ];
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -93,50 +134,108 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      <NavTabs tabs={tabs} active={view} onChange={(id) => setView(id as View)} />
+
       {loading && !overview ? (
-        <div className="card p-8 text-center text-slate-400">
+        <div className="card p-8 text-center text-slate-400" aria-live="polite">
           {t("loading")}
         </div>
       ) : error && !overview ? (
         <div className="card border-red-900/60 p-8 text-center">
           <p className="mb-2 font-medium text-red-300">{t("loadError")}</p>
-          <p className="mb-4 text-sm text-slate-400">
-            {t("backendUnavailable")}
-          </p>
+          <p className="mb-4 text-sm text-slate-400">{t("backendUnavailable")}</p>
           <button type="button" className="btn" onClick={load}>
             {t("retry")}
           </button>
         </div>
       ) : (
-        overview && (
-          <div className="space-y-6">
-            <Section title={t("systemOverview")}>
-              <OverviewCards
-                overall={overall}
-                activeModules={activeModules}
-                totalModules={modules.length}
-                servicesUp={servicesUp}
-                servicesTotal={services.length}
-                activityCount={overview.activity.length}
-              />
-            </Section>
+        <div className="space-y-6" aria-live="polite">
+          <AlertsBanner alerts={alerts} nameOf={nameOf} />
 
-            <ComponentsTable
-              title={t("moduleHealth")}
-              rows={[...services, ...modules]}
-            />
+          {view === "overview" && overview && (
+            <>
+              <Section title={t("systemOverview")}>
+                <OverviewCards
+                  overall={overall}
+                  activeModules={activeModules}
+                  totalModules={modules.length}
+                  servicesUp={servicesUp}
+                  servicesTotal={services.length}
+                  activityCount={overview.activity.length}
+                />
+              </Section>
+              <ActivityTimeline events={overview.activity.slice(0, 8)} />
+            </>
+          )}
 
-            <Section title={t("operationalMetrics")}>
-              <MetricsGrid metrics={overview.metrics} />
-            </Section>
+          {view === "components" && (
+            <ComponentsTable title={t("moduleHealth")} rows={components} nameOf={nameOf} />
+          )}
 
-            <ActivityTimeline events={overview.activity} />
+          {view === "metrics" && overview && (
+            <>
+              <Section title={t("operationalMetrics")}>
+                <MetricsGrid metrics={overview.metrics} />
+              </Section>
+              <Section title={t("trendsTitle")}>
+                {history.length === 0 ? (
+                  <p className="text-sm text-slate-400">{t("noHistory")}</p>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <TrendChart snapshots={history} metricKey="entities" label={t("trendEntities")} color="#22d3ee" />
+                    <TrendChart snapshots={history} metricKey="vulnerabilities" label={t("trendVulnerabilities")} color="#f59e0b" />
+                    <TrendChart snapshots={history} metricKey="campaigns" label={t("trendCampaigns")} color="#a78bfa" />
+                  </div>
+                )}
+              </Section>
+              <Section title={t("tasksTitle")}>
+                {taskStats ? (
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                    {[
+                      { label: t("completed"), value: taskStats.completed },
+                      { label: t("failed"), value: taskStats.failed },
+                      { label: t("pending"), value: taskStats.pending },
+                      {
+                        label: t("avgDuration"),
+                        value: taskStats.avg_duration_ms ?? "—",
+                      },
+                      {
+                        label: t("oldestPending"),
+                        value: taskStats.oldest_pending_started
+                          ? formatTime(taskStats.oldest_pending_started, locale)
+                          : t("never"),
+                      },
+                    ].map((it) => (
+                      <div
+                        key={it.label}
+                        className="rounded-lg border border-slate-800 bg-slate-900/70 p-4"
+                      >
+                        <div className="text-xs uppercase tracking-wider text-slate-400">
+                          {it.label}
+                        </div>
+                        <div className="mt-2 truncate text-lg font-semibold text-slate-100">
+                          {String(it.value)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">—</p>
+                )}
+              </Section>
+            </>
+          )}
 
-            <p className="text-center text-xs text-slate-500">
-              {t("dataSourceNote")}
-            </p>
-          </div>
-        )
+          {view === "activity" && <ActivityView events={activity} />}
+
+          {view === "dependencies" && (
+            <DependencyGraph deps={deps} nameOf={nameOf} />
+          )}
+
+          <p className="text-center text-xs text-slate-500">
+            {t("dataSourceNote")}
+          </p>
+        </div>
       )}
     </main>
   );
