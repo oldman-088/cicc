@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Mapping
 
 from .errors import SourceRateLimited, SourceResponseError, ValidationError, sanitize
@@ -78,7 +78,7 @@ class KevEntry:
     product: str | None
     name: str | None
     ransomware_use: str | None
-    due_date: str | None
+    due_date: date | None
 
     @property
     def known_ransomware(self) -> bool | None:
@@ -166,7 +166,7 @@ def _catalog_from_document(
                 field_name="knownRansomwareCampaignUse",
                 limit=50,
             ),
-            due_date=coerce_text(row.get("dueDate"), field_name="dueDate", limit=50),
+            due_date=_safe_calendar_date(row.get("dueDate")),
         )
 
     return KevCatalog(
@@ -195,6 +195,18 @@ def _aware(moment: datetime) -> datetime:
     if moment.tzinfo is None:
         raise ValidationError("timestamps must be timezone-aware", field="fetched_at")
     return moment.astimezone(timezone.utc)
+
+
+def _safe_calendar_date(value: object) -> date | None:
+    """Parse a ``YYYY-MM-DD`` deadline without inventing a time of day."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value.strip()[:10])
+    except ValueError as exc:
+        raise ValidationError("KEV dueDate is not a calendar date", field="dueDate") from exc
 
 
 def _safe_date(value: object) -> datetime | None:

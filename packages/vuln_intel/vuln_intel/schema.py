@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -253,6 +253,11 @@ class NormalizedVulnerability:
     affected: tuple[AffectedPackage, ...] = ()
     kev: bool | None = None
     kev_date_added: datetime | None = None
+    #: CISA's binding remediation deadline.  Stored because it is the single most
+    #: actionable field in the catalogue: it turns "patch this" into "patch this
+    #: by the 21st".  Kept as ``date`` — the feed publishes a calendar day, and
+    #: rendering it as a midnight UTC timestamp implies a precision it lacks.
+    kev_due_date: date | None = None
     known_exploited: bool | None = None
     epss_score: float | None = None
     epss_percentile: float | None = None
@@ -529,6 +534,7 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
         sources=tuple(sorted({*[s for i in items for s in i.sources]})),
         kev=kev,
         kev_date_added=pick("kev_date_added"),
+        kev_due_date=pick("kev_due_date"),
         known_exploited=pick("known_exploited"),
         epss_score=max(epss_scores) if epss_scores else None,
         epss_percentile=max(

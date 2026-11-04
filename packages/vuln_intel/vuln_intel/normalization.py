@@ -15,7 +15,7 @@ Conflict policy (deliberate and conservative):
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime
 from typing import Iterable, Mapping, Sequence
 
 from .errors import MixedOriginError, ValidationError
@@ -57,7 +57,7 @@ class KevSignal:
     forbids.
     """
 
-    __slots__ = ("catalog_version", "checked", "cve", "date_added", "listed")
+    __slots__ = ("catalog_version", "checked", "cve", "date_added", "due_date", "listed")
 
     def __init__(
         self,
@@ -65,12 +65,14 @@ class KevSignal:
         *,
         listed: bool,
         date_added: datetime | None = None,
+        due_date: date | None = None,
         checked: bool = True,
         catalog_version: str | None = None,
     ) -> None:
         self.cve = cve
         self.listed = listed
         self.date_added = date_added
+        self.due_date = due_date
         self.checked = checked
         self.catalog_version = catalog_version
 
@@ -113,10 +115,23 @@ def index_kev(payload: Mapping[str, object]) -> dict[str, KevSignal]:
                 raise ValidationError(
                     f"unparseable KEV dateAdded: {added_raw!r}", field="dateAdded"
                 ) from exc
+        due_raw = entry.get("dueDate")
+        due: date | None = None
+        if isinstance(due_raw, str) and due_raw.strip():
+            try:
+                # CISA publishes a calendar day.  A malformed deadline is a data
+                # error worth surfacing, but it must not discard the membership
+                # fact, which is the part that changes prioritisation.
+                due = date.fromisoformat(due_raw.strip())
+            except ValueError as exc:
+                raise ValidationError(
+                    f"unparseable KEV dueDate: {due_raw!r}", field="dueDate"
+                ) from exc
         index[str(cve)] = KevSignal(
             cve,
             listed=True,
             date_added=added,
+            due_date=due,
             checked=True,
             catalog_version=catalog_version,
         )
@@ -190,6 +205,7 @@ def attach_kev(
         record,
         kev=signal.listed,
         kev_date_added=signal.date_added,
+        kev_due_date=signal.due_date,
         known_exploited=signal.listed,
         provenance=provenance,
         sources=sources,

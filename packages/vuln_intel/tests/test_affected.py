@@ -15,7 +15,7 @@ from vuln_intel.affected import (
     normalize_ecosystem,
 )
 from vuln_intel.connectors.osv import _parse_affected
-from vuln_intel.schema import AffectedPackage
+from vuln_intel.schema import AffectedPackage, CveId, NormalizedVulnerability, Origin
 from vuln_intel.versions import (
     SCHEME_BY_ECOSYSTEM,
     VersionScheme,
@@ -275,3 +275,123 @@ class TestAffectedEvaluation:
     def test_unknown_verdict_has_no_remediation(self):
         result = assess_affected([], ecosystem="npm", name="pkg", version="1.0")
         assert result.remediation is None
+
+
+class TestWatchlistAndExposure:
+    """Exposure analysis: which of *our* packages an advisory actually hits."""
+
+    def test_affected_dependency_is_reported_with_its_asset(self):
+        from vuln_intel.watchlist import Dependency, Inventory, analyse_exposure
+
+        inventory = Inventory(
+            dependencies=(
+                Dependency(ecosystem="npm", name="lodash", version="4.17.20", asset="web"),
+                Dependency(ecosystem="npm", name="lodash", version="4.17.21", asset="api"),
+            )
+        )
+        advisory = NormalizedVulnerability(
+            cve=CveId.parse("CVE-2019-10744"),
+            origin=Origin.LIVE,
+            affected=(
+                AffectedPackage(
+                    ecosystem="npm", name="lodash", range_type="SEMVER",
+                    introduced="0", fixed="4.17.21",
+                ),
+            ),
+            sources=("osv",),
+        )
+        report = analyse_exposure(inventory, [advisory])
+        assert len(report.affected) == 1
+        assert report.affected[0].dependency.asset == "web"
+        assert report.assets_at_risk == ("web",)
+        assert report.clean is False
+
+    def test_clean_inventory_with_no_advisories(self):
+        from vuln_intel.watchlist import Inventory, analyse_exposure
+
+        report = analyse_exposure(Inventory(), [])
+        assert report.clean is True
+        assert report.advisories_considered == 0
+
+    def test_advisory_without_affected_data_is_unexplorable_not_clean(self):
+        from vuln_intel.watchlist import Inventory, analyse_exposure
+
+        advisory = NormalizedVulnerability(
+            cve=CveId.parse("CVE-2024-1000"), origin=Origin.LIVE, affected=(), sources=("nvd",)
+        )
+        report = analyse_exposure(Inventory(), [advisory])
+        assert report.unexplorable == ("CVE-2024-1000",)
+        # Nothing is known to be affected, and that is stated explicitly.
+        assert report.as_dict()["unexplorable"] == ["CVE-2024-1000"]
+
+    def test_unorderable_version_is_unverified_not_silently_dropped(self):
+        from vuln_intel.watchlist import Dependency, Inventory, analyse_exposure
+
+        inventory = Inventory(
+            dependencies=(Dependency(ecosystem="npm", name="pkg", version="not-a-version"),)
+        )
+        advisory = NormalizedVulnerability(
+            cve=CveId.parse("CVE-2024-1001"),
+            origin=Origin.LIVE,
+            affected=(AffectedPackage(ecosystem="npm", name="pkg", introduced="0", fixed="1.0"),),
+            sources=("osv",),
+        )
+        report = analyse_exposure(inventory, [advisory])
+        assert report.affected == ()
+        assert len(report.unverified) == 1
+        assert report.clean is False
+
+    def test_package_name_normalisation(self):
+        from vuln_intel.watchlist import Dependency, Inventory, analyse_exposure
+
+        inventory = Inventory(
+            dependencies=(Dependency(ecosystem="PyPI", name="some_package", version="1.0"),)
+        )
+        advisory = NormalizedVulnerability(
+            cve=CveId.parse("CVE-2024-1002"),
+            origin=Origin.LIVE,
+            affected=(
+                AffectedPackage(ecosystem="pypi", name="some-package", introduced="0", fixed="2.0"),
+            ),
+            sources=("osv",),
+        )
+        assert len(analyse_exposure(inventory, [advisory]).affected) == 1
+
+    def test_purl_parsing(self):
+        from vuln_intel.watchlist import dependency_from_purl
+
+        dep = dependency_from_purl("pkg:npm/lodash@4.17.20", asset="web")
+        assert dep is not None
+        assert (dep.ecosystem, dep.name, dep.version, dep.asset) == (
+            "npm", "lodash", "4.17.20", "web",
+        )
+
+    def test_malformed_purl_returns_none(self):
+        from vuln_intel.watchlist import dependency_from_purl
+
+        assert dependency_from_purl("lodash@1.0") is None
+        assert dependency_from_purl("pkg:npm/lodash") is None
+        assert dependency_from_purl("") is None
+
+    def test_watchlist_builds_deduplicated_osv_queries(self):
+        from vuln_intel.watchlist import Dependency, Inventory, Watchlist
+
+        inventory = Inventory(
+            dependencies=(
+                Dependency(ecosystem="npm", name="lodash", version="4.17.20"),
+                Dependency(ecosystem="npm", name="lodash", version="4.17.20"),
+                Dependency(ecosystem="npm", name="lodash", version="4.17.21"),
+            )
+        )
+        watchlist = Watchlist()
+        watchlist.add_inventory(inventory)
+        queries = watchlist.as_osv_queries(inventory)
+        assert len(queries) == 2
+        assert len(watchlist) == 1
+        assert watchlist.covers("node", "Lodash")
+
+    def test_empty_dependency_is_rejected(self):
+        from vuln_intel.watchlist import Dependency
+
+        with pytest.raises(ValueError):
+            Dependency(ecosystem="npm", name="  ", version="1.0")
