@@ -36,3 +36,7 @@ strict_equality = true
 check_untyped_defs = true
 show_error_codes = true
 files = ["vuln_intel"]
+# httpx is an OPTIONAL live-only extra and is deliberately absent from the test
+# environment (the suite must run with pytest alone). Type checking must not
+# depend on whether that extra happens to be installed.
+ignore_missing_imports = true
