@@ -154,3 +154,130 @@ def test_query_uses_the_documented_endpoint() -> None:
     osv.get_vulnerability("GHSA-0000-aaaa-bbbb")
     urls = [c["url"] for c in transport.calls if "url" in c]
     assert urls == [f"{OSV_API}/vulns/GHSA-0000-aaaa-bbbb"]
+
+
+class TestQueryBatch:
+    """`POST /v1/querybatch` — documented at
+    https://google.github.io/osv.dev/post-v1-querybatch/.
+
+    The endpoint returns ids and a `modified` timestamp only. Two documented
+    properties are load-bearing: results are ordered to match the input, and
+    pagination is *per query* — only entries carrying a `next_page_token` need a
+    follow-up, and the follow-up must resend the same query with the token added.
+    """
+
+    QUERY = {"package": {"ecosystem": "PyPI", "name": "jinja2"}, "version": "2.4.1"}
+
+    def _batch(self, *payloads: dict):
+        """Build a connector scripted with the given raw JSON payloads."""
+        return connector([response(p) for p in payloads])
+
+    def test_ids_are_returned_per_query(self):
+        body = {
+            "results": [
+                {"vulns": [{"id": "GHSA-a", "modified": "2026-01-01T00:00:00Z"}]},
+                {"vulns": []},
+            ]
+        }
+        groups, warnings = self._batch(body).query_batch([self.QUERY, self.QUERY])
+        assert groups[0] == (("GHSA-a", "2026-01-01T00:00:00Z"),)
+        assert groups[1] == ()
+        assert warnings == ()
+
+    def test_posts_to_the_batch_endpoint(self):
+        transport = FakeTransport(
+            script=[response({"results": [{"vulns": []}]})]
+        )
+        osv = OsvConnector(
+            transport=transport,
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=no_wait),
+            retry=RetryPolicy(attempts=1),
+            sleep=no_wait,
+            origin=Origin.FIXTURE,
+        )
+        osv.query_batch([self.QUERY])
+        assert transport.calls[0]["method"] == "POST"
+        assert transport.calls[0]["json"] == {"queries": [self.QUERY]}
+
+    def test_per_query_pagination_resends_only_the_paginated_query(self):
+        """Requesting page two for every query would refetch complete results."""
+        transport = FakeTransport(
+            script=[
+                response(
+                    {
+                        "results": [
+                            {"vulns": [{"id": "GHSA-a"}], "next_page_token": "tok-a"},
+                            {"vulns": [{"id": "GHSA-b"}]},
+                        ]
+                    }
+                ),
+                response({"results": [{"vulns": [{"id": "GHSA-c"}]}]}),
+            ]
+        )
+        osv = OsvConnector(
+            transport=transport,
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=no_wait),
+            retry=RetryPolicy(attempts=1),
+            sleep=no_wait,
+            origin=Origin.FIXTURE,
+        )
+        groups, warnings = osv.query_batch([self.QUERY, self.QUERY])
+        assert groups[0] == (("GHSA-a", None), ("GHSA-c", None))
+        assert groups[1] == (("GHSA-b", None),)
+        assert warnings == ()
+        # The follow-up carries exactly one query, and it is the paginated one.
+        second = transport.calls[1]["json"]["queries"]
+        assert len(second) == 1
+        assert second[0]["page_token"] == "tok-a"
+
+    def test_result_count_mismatch_is_refused(self):
+        """Misattributing ids to the wrong package is worse than failing."""
+        body = {"results": [{"vulns": [{"id": "GHSA-a"}]}]}  # 1 result for 2 queries
+        with pytest.raises(SourceResponseError):
+            self._batch(body).query_batch([self.QUERY, self.QUERY])
+
+    def test_page_budget_exhaustion_is_reported(self):
+        paginated = {
+            "results": [{"vulns": [{"id": "GHSA-a"}], "next_page_token": "tok"}]
+        }
+        _groups, warnings = self._batch(paginated, paginated).query_batch(
+            [self.QUERY], max_pages=2
+        )
+        assert any("incomplete" in warning for warning in warnings)
+
+    def test_missing_post_on_transport_is_explicit(self):
+        """A GET-only transport must fail loudly, not silently return nothing."""
+
+        class GetOnly:
+            def get(self, url, **kwargs):
+                return response({})
+
+        osv = OsvConnector(
+            transport=GetOnly(),
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=no_wait),
+            retry=RetryPolicy(attempts=1),
+            sleep=no_wait,
+            origin=Origin.FIXTURE,
+        )
+        with pytest.raises(SourceResponseError):
+            osv.query_batch([self.QUERY])
+
+    def test_empty_query_list_makes_no_request(self):
+        transport = FakeTransport(script=[])
+        osv = OsvConnector(
+            transport=transport,
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=no_wait),
+            retry=RetryPolicy(attempts=1),
+            sleep=no_wait,
+            origin=Origin.FIXTURE,
+        )
+        assert osv.query_batch([]) == ((), ())
+        assert transport.calls == []
+
+    def test_batch_ids_are_not_treated_as_full_records(self):
+        """A batch hit carries no summary, versions or severity."""
+        body = {"results": [{"vulns": [{"id": "GHSA-a", "modified": "2026-01-01"}]}]}
+        groups, _ = self._batch(body).query_batch([self.QUERY])
+        (identifier, modified), = groups[0]
+        assert identifier == "GHSA-a"
+        assert modified == "2026-01-01"

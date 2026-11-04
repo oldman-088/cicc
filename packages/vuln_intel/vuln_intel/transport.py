@@ -120,6 +120,37 @@ class HttpxTransport:
         headers: Mapping[str, str] | None = None,
         timeout: float = 30.0,
     ) -> TransportResponse:
+        return self._request("GET", url, params=params, headers=headers, timeout=timeout)
+
+    def post(
+        self,
+        url: str,
+        *,
+        json_body: object | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 30.0,
+    ) -> TransportResponse:
+        """POST with a JSON body (OSV ``/v1/query`` and ``/v1/querybatch``).
+
+        Shares :meth:`_request` with GET so the byte ceiling, redirect refusal and
+        error mapping cannot drift between the two verbs — a limit enforced on one
+        and forgotten on the other is how a "safe" transport quietly stops being
+        one.
+        """
+        return self._request(
+            "POST", url, json_body=json_body, headers=headers, timeout=timeout
+        )
+
+    def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: Mapping[str, str] | None = None,
+        json_body: object | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 30.0,
+    ) -> TransportResponse:
         try:
             import httpx
         except ImportError as exc:  # pragma: no cover - dependency present in prod
@@ -129,9 +160,10 @@ class HttpxTransport:
 
         try:
             with httpx.stream(
-                "GET",
+                method,
                 url,
                 params=dict(params or {}),
+                json=json_body,
                 headers=dict(headers or {}),
                 timeout=timeout,
                 follow_redirects=False,

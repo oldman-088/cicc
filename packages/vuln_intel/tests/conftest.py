@@ -43,7 +43,14 @@ class FakeTransport:
     _index: int = 0
 
     def _next(self, url: str, params: Mapping[str, str] | None) -> TransportResponse:
-        self.calls.append({"url": url, "params": dict(params or {})})
+        # One entry per call, carrying both the request (method/json/headers) and
+        # the address it went to. This used to append here *and* in get/post, so
+        # every call produced two entries and `calls[1]` was not the second call —
+        # an easy trap for assertions. The *request* url is recorded, not the
+        # response's, which is a placeholder in fixtures.
+        if self.calls:
+            self.calls[-1].setdefault("url", url)
+            self.calls[-1].setdefault("params", dict(params or {}))
         if not self.script:
             raise AssertionError("FakeTransport has no scripted responses")
         entry = self.script[min(self._index, len(self.script) - 1)]
@@ -65,6 +72,19 @@ class FakeTransport:
     ) -> TransportResponse:
         self.calls.append({"method": "GET", "headers": dict(headers or {})})
         return self._next(url, params)
+
+    def post(
+        self,
+        url: str,
+        *,
+        json_body: object | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 30.0,
+    ) -> TransportResponse:
+        self.calls.append(
+            {"method": "POST", "headers": dict(headers or {}), "json": json_body}
+        )
+        return self._next(url, None)
 
 
 def no_wait(_: float) -> None:

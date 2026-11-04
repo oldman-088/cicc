@@ -195,6 +195,15 @@ Guarantees:
 - the NVD key is unwrapped from `Secret` in exactly one place and never appears in
   `describe()`, `startup_report()`, a repr or an error message (asserted).
 
+`OsvConnector.query_batch()` implements `POST /v1/querybatch` per the official
+contract, including **per-query** pagination (only entries that return a
+`next_page_token` are retried, and the follow-up resends the same query with the
+token). Results are ordered to match the input per the documentation; a
+result-count mismatch **raises** rather than risk attributing an advisory id to
+the wrong package. The endpoint returns ids and a `modified` timestamp only — it is
+a lookup index, not intelligence, so full records still come from
+`get_vulnerability()`.
+
 `nvd_collector()` and `osv_collector()` adapt the connectors to the pipeline's
 collector protocol. They exist mostly for one reason: a **failed** collection
 raises, so the pipeline records `FAILED` with the provider's error, while a

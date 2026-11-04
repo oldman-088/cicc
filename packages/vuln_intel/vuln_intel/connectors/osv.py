@@ -187,6 +187,50 @@ class OsvConnector:
             attempt, policy=self.retry, sleep=self.sleep or __import__("time").sleep
         )
 
+    def _post(self, path: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        """POST JSON to OSV, mapping status the same way :meth:`_get` does."""
+        if self.transport is None:
+            raise SourceResponseError("no transport configured", source="osv")
+        poster = getattr(self.transport, "post", None)
+        if poster is None:
+            raise SourceResponseError(
+                "transport does not implement post; OSV query endpoints need it",
+                source="osv",
+            )
+        url = f"{OSV_API}/{path.lstrip('/')}"
+
+        def attempt() -> Mapping[str, Any]:
+            assert self.gate is not None
+            self.gate.wait()
+            response = poster(
+                url, json_body=dict(payload), headers=self._headers(), timeout=self.timeout
+            )
+            if response.status == 400:
+                raise SourceResponseError(
+                    "OSV rejected the query payload", status=400, source="osv"
+                )
+            if response.status == 429:
+                raise SourceRateLimited(
+                    "OSV rate limited",
+                    retry_after=_retry_after(response.headers),
+                    status=429,
+                    source="osv",
+                )
+            if response.status != 200:
+                raise SourceResponseError(
+                    f"unexpected OSV status {response.status}",
+                    status=response.status,
+                    source="osv",
+                )
+            body = response.json()
+            if not isinstance(body, Mapping):
+                raise SourceResponseError("OSV body is not an object", source="osv")
+            return body
+
+        return call_with_retry(
+            attempt, policy=self.retry, sleep=self.sleep or __import__("time").sleep
+        )
+
     # -- public API -------------------------------------------------------
     def get_vulnerability(self, osv_id: str) -> tuple[NormalizedVulnerability | None, AdvisoryOnly]:
         """Fetch one OSV record.
@@ -213,6 +257,86 @@ class OsvConnector:
                 "OSV returned a record for a different CVE", field="cve"
             )
         return record, advisory
+
+    def query_batch(
+        self, queries: Sequence[Mapping[str, Any]], *, max_pages: int = 5
+    ) -> tuple[tuple[tuple[tuple[str, str | None], ...], ...], tuple[str, ...]]:
+        """POST ``/v1/querybatch`` and return ids, honouring per-query pagination.
+
+        Each returned element is ``(advisory_id, modified_or_None)``, grouped per
+        input query by index so the caller can attribute an id to the package that
+        produced it.
+
+        Two documented properties are relied on rather than assumed:
+
+        * results are ordered to match the input, so index *i* belongs to
+          ``queries[i]``;
+        * pagination is **per query** — only the entries that returned a
+          ``next_page_token`` need a follow-up request, and those follow-ups must
+          resend the *same* query with the token added. Requesting page two for
+          every query would re-fetch complete results and multiply load for
+          nothing.
+
+        The endpoint returns ids and a ``modified`` timestamp only, not whole
+        records: callers must fetch any id they actually need via
+        :meth:`get_vulnerability`. Treating a batch hit as full intelligence would
+        mean reporting a vulnerability with no severity, versions or summary.
+        """
+        if not queries:
+            return (), ()
+        warnings: list[str] = []
+        collected: list[list[tuple[str, str | None]]] = [[] for _ in queries]
+        pending = list(range(len(queries)))
+        tokens: dict[int, str] = {}
+
+        for page in range(max_pages):
+            payload_queries: list[dict[str, Any]] = []
+            for index in pending:
+                item = dict(queries[index])
+                if index in tokens:
+                    item["page_token"] = tokens[index]
+                payload_queries.append(item)
+            body = self._post("querybatch", {"queries": payload_queries})
+            results = body.get("results")
+            if not isinstance(results, list) or len(results) != len(pending):
+                raise SourceResponseError(
+                    "OSV querybatch returned a result count that does not match "
+                    "the request; refusing to misattribute ids",
+                    source="osv",
+                )
+
+            next_pending: list[int] = []
+            next_tokens: dict[int, str] = {}
+            for position, index in enumerate(pending):
+                entry = results[position]
+                if not isinstance(entry, Mapping):
+                    warnings.append(f"query {index}: malformed batch result ignored")
+                    continue
+                for vuln in mapping_list(entry.get("vulns"), field_name="vulns"):
+                    identifier = coerce_text(
+                        vuln.get("id"), field_name="vulns.id", limit=200
+                    )
+                    if identifier:
+                        modified = coerce_text(
+                            vuln.get("modified"), field_name="vulns.modified", limit=64
+                        )
+                        collected[index].append((identifier, modified))
+                token = entry.get("next_page_token")
+                if isinstance(token, str) and token:
+                    next_pending.append(index)
+                    next_tokens[index] = token
+
+            if not next_pending:
+                return tuple(tuple(items) for items in collected), tuple(warnings)
+            pending, tokens = next_pending, next_tokens
+            if page == max_pages - 1:
+                warnings.append(
+                    f"querybatch page budget ({max_pages}) exhausted with "
+                    f"{len(pending)} quer{'y' if len(pending) == 1 else 'ies'} "
+                    "still paginating; results are incomplete"
+                )
+
+        return tuple(tuple(items) for items in collected), tuple(warnings)
 
     def collect(
         self, osv_ids: Sequence[str]
