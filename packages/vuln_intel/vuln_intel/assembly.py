@@ -22,15 +22,15 @@ Design constraints:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Sequence
 
 from .config import ENV_PREFIX, Secret, Settings
 from .connectors.epss import UnavailableEpssProvider
 from .connectors.nvd import NvdConnector
 from .connectors.osv import OsvConnector
-from .errors import ValidationError
+from .errors import SourceError, SourceNotFound, SourceResponseError, ValidationError
 from .kev import CachedKevCatalog, KevConnector
-from .schema import Origin
+from .schema import CollectionStatus, NormalizedVulnerability, Origin
 from .transport import Transport
 
 #: Marker kept on every bundle so health/summary output can state, truthfully,
@@ -210,3 +210,78 @@ def startup_report(settings: Settings) -> dict[str, object]:
     described["warnings"] = list(settings.warnings())
     described["live_transport_available"] = LIVE_TRANSPORT_INSTALLED
     return described
+
+
+# ---------------------------------------------------------------------------
+# Collectors
+# ---------------------------------------------------------------------------
+def nvd_collector(
+    connector: NvdConnector,
+    *,
+    cve_ids: Sequence[str] | None = None,
+) -> Callable[[], Sequence[NormalizedVulnerability]]:
+    """A pipeline collector over NVD.
+
+    With ``cve_ids`` it fetches exactly those; without, it walks NVD's window up
+    to the configured page budget.
+
+    A failed collection **raises** instead of returning an empty list. The
+    pipeline distinguishes the two: an exception becomes ``FAILED`` with the
+    provider's error, while an empty list is recorded as "an empty answer, not a
+    failure". Returning ``[]`` from a 403 would therefore turn an outage into a
+    statement that NVD has nothing to report — the precise confusion this package
+    refuses elsewhere.
+    """
+
+    def collect() -> Sequence[NormalizedVulnerability]:
+        if cve_ids is None:
+            result = connector.search_all()
+            if not result.ok and not result.records:
+                raise SourceResponseError(
+                    result.state.error or "NVD collection failed without an error message",
+                    source="nvd",
+                )
+            return result.records
+
+        records: list[NormalizedVulnerability] = []
+        misses: list[str] = []
+        for raw in cve_ids:
+            try:
+                records.append(connector.get_cve(raw))
+            except SourceNotFound:
+                # Not an error: the CVE is simply unknown to NVD. Recorded so the
+                # absence is visible rather than silently equal to "no data".
+                misses.append(str(raw))
+            except SourceError:
+                raise
+        if not records and misses:
+            raise SourceNotFound(
+                "none of the requested CVEs are known to NVD: " + ", ".join(misses[:5]),
+                source="nvd",
+            )
+        return records
+
+    return collect
+
+
+def osv_collector(
+    connector: OsvConnector,
+    osv_ids: Sequence[str],
+) -> Callable[[], Sequence[NormalizedVulnerability]]:
+    """A pipeline collector over a fixed set of OSV ids.
+
+    Advisory-only records (no CVE alias) are excluded here, not dropped silently:
+    they are the caller's *advisory* stream and are surfaced by
+    :meth:`OsvConnector.collect` on the result object.
+    """
+
+    def collect() -> Sequence[NormalizedVulnerability]:
+        result = connector.collect(osv_ids)
+        if not result.records and result.state.status is CollectionStatus.FAILED:
+            raise SourceResponseError(
+                result.state.error or "OSV collection failed without an error message",
+                source="osv",
+            )
+        return result.records
+
+    return collect

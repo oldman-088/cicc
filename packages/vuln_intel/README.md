@@ -195,6 +195,13 @@ Guarantees:
 - the NVD key is unwrapped from `Secret` in exactly one place and never appears in
   `describe()`, `startup_report()`, a repr or an error message (asserted).
 
+`nvd_collector()` and `osv_collector()` adapt the connectors to the pipeline's
+collector protocol. They exist mostly for one reason: a **failed** collection
+raises, so the pipeline records `FAILED` with the provider's error, while a
+genuinely empty answer returns `[]` and is recorded as "an empty answer, not a
+failure". Swallowing a 403 into `[]` would turn an outage into a claim that the
+provider has nothing to report.
+
 ### CVSS is recomputed, not trusted
 
 `schema.cvss_from_source` prefers the vector and computes the score locally:

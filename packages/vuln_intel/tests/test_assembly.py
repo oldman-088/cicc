@@ -198,3 +198,103 @@ class TestAssemblyFailureModes:
         )
         for connector in (bundle.nvd, bundle.osv, bundle.kev):
             assert connector.transport is None
+
+
+class TestCollectors:
+    """Collectors must keep "failed" and "empty" distinct.
+
+    The pipeline maps an exception to FAILED-with-error and an empty list to
+    "an empty answer, not a failure". A collector that swallows a provider error
+    and returns [] therefore converts an outage into a claim that the provider has
+    nothing to report.
+    """
+
+    def _nvd(self, script):
+        from vuln_intel.connectors.nvd import NvdConnector
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+
+        return NvdConnector(
+            transport=FakeTransport(script=list(script)),
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=lambda _s: None),
+            retry=RetryPolicy(attempts=1),
+            sleep=lambda _s: None,
+            origin=Origin.FIXTURE,
+        )
+
+    def test_provider_failure_raises_instead_of_looking_empty(self):
+        from vuln_intel.assembly import nvd_collector
+        from vuln_intel.errors import SourceError
+
+        connector = self._nvd([response({"message": "forbidden"}, status=403)])
+        collector = nvd_collector(connector)
+        with pytest.raises(SourceError):
+            collector()
+
+    def test_unknown_cve_is_a_miss_not_a_crash(self):
+        from vuln_intel.assembly import nvd_collector
+        from vuln_intel.errors import SourceNotFound
+
+        empty = {"resultsPerPage": 0, "startIndex": 0, "totalResults": 0, "vulnerabilities": []}
+        connector = self._nvd([response(empty)])
+        collector = nvd_collector(connector, cve_ids=["CVE-2026-9999"])
+        # Every requested CVE is unknown: reported as not-found, not as [].
+        with pytest.raises(SourceNotFound):
+            collector()
+
+    def test_osv_failure_raises(self):
+        from vuln_intel.assembly import osv_collector
+        from vuln_intel.connectors.osv import OsvConnector
+        from vuln_intel.errors import SourceError
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+
+        connector = OsvConnector(
+            transport=FakeTransport(script=[response({"message": "nope"}, status=500)]),
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=lambda _s: None),
+            retry=RetryPolicy(attempts=1),
+            sleep=lambda _s: None,
+            origin=Origin.FIXTURE,
+        )
+        with pytest.raises(SourceError):
+            osv_collector(connector, ["GHSA-0000-aaaa-bbbb"])()
+
+    def test_osv_success_returns_records(self):
+        from tests import fixtures as fx
+        from vuln_intel.assembly import osv_collector
+        from vuln_intel.connectors.osv import OsvConnector
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+
+        connector = OsvConnector(
+            transport=FakeTransport(script=[response(fx.OSV_CVE)]),
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=lambda _s: None),
+            retry=RetryPolicy(attempts=1),
+            sleep=lambda _s: None,
+            origin=Origin.FIXTURE,
+        )
+        records = osv_collector(connector, ["GHSA-0000-aaaa-bbbb"])()
+        assert len(records) == 1
+        assert str(records[0].cve) == "CVE-2026-0001"
+
+    def test_collector_feeds_the_pipeline(self):
+        """End to end: an assembled collector drives a real pipeline run."""
+        from tests import fixtures as fx
+        from vuln_intel.assembly import osv_collector
+        from vuln_intel.connectors.osv import OsvConnector
+        from vuln_intel.pipeline import EnrichmentPipeline
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+
+        connector = OsvConnector(
+            transport=FakeTransport(script=[response(fx.OSV_CVE)]),
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=lambda _s: None),
+            retry=RetryPolicy(attempts=1),
+            sleep=lambda _s: None,
+            origin=Origin.FIXTURE,
+        )
+        report = EnrichmentPipeline().run(
+            {"osv": osv_collector(connector, ["GHSA-0000-aaaa-bbbb"])}
+        )
+        assert report.outcomes[0].status.value in ("ok", "partial")
+        assert report.outcomes[0].records == 1
