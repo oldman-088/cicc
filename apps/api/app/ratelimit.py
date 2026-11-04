@@ -52,9 +52,17 @@ def rate_limit_dependency(request: Request) -> None:
 
 
 def read_token_dependency(authorization: str | None = Header(default=None)) -> None:
+    """Read gate. When both tokens are configured, the WRITE token also
+    satisfies read access (write is strictly stronger than read), so a single
+    Authorization header can authorize writer clients for reads+writes."""
     token = os.getenv("CICC_OPS_READ_TOKEN")
-    if token and authorization != f"Bearer {token}":
-        raise HTTPException(status_code=401, detail="invalid or missing read token")
+    if token:
+        write_token = os.getenv("CICC_OPS_WRITE_TOKEN")
+        ok = authorization == f"Bearer {token}" or (
+            write_token and authorization == f"Bearer {write_token}"
+        )
+        if not ok:
+            raise HTTPException(status_code=401, detail="invalid or missing read token")
 
 
 def require_write_token(authorization: str | None) -> None:

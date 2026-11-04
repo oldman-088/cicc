@@ -127,5 +127,17 @@
   "pythonVer": "Python",
   "diagnostics": "Diagnostics",
   "noCheckData": "No detailed check data.",
-  "severity": "Severity"
+  "severity": "Severity",
+  "recentTasks": "Recent task runs (latest 25)",
+  "failuresTitle": "Top failure groups (24h)",
+  "colId": "ID",
+  "colQueue": "Queue",
+  "colStatus": "Status",
+  "colDuration": "Duration (ms)",
+  "colError": "Error",
+  "colCreated": "Created",
+  "colCount": "Count",
+  "colLastSeen": "Last seen",
+  "noTasks": "No task runs recorded yet — POST /api/v1/ops/tasks",
+  "noFailures": "No failures in the last 24h."
 }

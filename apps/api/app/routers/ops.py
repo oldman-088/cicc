@@ -13,14 +13,21 @@ from app.schemas import (
     ComponentListResponse,
     DependencyResponse,
     HistoryResponse,
+    MaintenanceCancelled,
+    MaintenanceCreated,
+    MaintenanceListResponse,
+    MaintenanceWindowIn,
     Metrics,
     OverviewResponse,
     SystemResponse,
+    TaskFailuresResponse,
+    TaskListResponse,
     TaskRunCreated,
     TaskRunIn,
     TaskStatsResponse,
     WorkerHeartbeatCreated,
     WorkerHeartbeatIn,
+    WorkerHistoryResponse,
     WorkersResponse,
 )
 
@@ -141,3 +148,59 @@ def get_broker_history(hours: int = Query(24, ge=1, le=168)):
 def get_system():
     """REAL process-level resource metrics of this API process."""
     return ops.build_system()
+
+
+# ---------- milestone 4 endpoints ----------
+
+@router.get("/tasks", response_model=TaskListResponse)
+def list_tasks(
+    worker: str | None = Query(None, max_length=128),
+    queue: str | None = Query(None, max_length=128),
+    status: str | None = Query(None, pattern="^(running|success|failed)$"),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Real task-run history with filters (worker/queue/status)."""
+    return {"tasks": ops.build_task_list(worker, queue, status, limit)}
+
+
+@router.get("/tasks/failures", response_model=TaskFailuresResponse)
+def task_failures(hours: int = Query(24, ge=1, le=168), limit: int = Query(20, ge=1, le=100)):
+    """Repeated-failure analytics: failed runs grouped by (worker, error)."""
+    return ops.build_task_failures(hours, limit)
+
+
+@router.get("/workers/history", response_model=WorkerHistoryResponse)
+def worker_history(worker: str | None = Query(None, max_length=128), hours: int = Query(24, ge=1, le=168)):
+    """Worker availability history from real throttled heartbeat samples."""
+    return ops.build_worker_history(worker, hours)
+
+
+@router.get("/maintenance", response_model=MaintenanceListResponse)
+def list_maintenance(active: bool = Query(False)):
+    """Maintenance windows (active ones suppress matching alerts)."""
+    return {"windows": ops.list_windows(active_only=active)}
+
+
+@router.post("/maintenance", response_model=MaintenanceCreated, status_code=201)
+def create_maintenance(payload: MaintenanceWindowIn, authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    wid = ops.create_window(
+        payload.label,
+        payload.starts_at,
+        payload.ends_at,
+        payload.component_keys,
+        payload.rule,
+        payload.created_by,
+    )
+    return {"id": wid}
+
+
+@router.post("/maintenance/{window_id}/cancel", response_model=MaintenanceCancelled)
+def cancel_maintenance(window_id: int, authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    res = ops.cancel_window(window_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail="window_not_found")
+    if res == "conflict":
+        raise HTTPException(status_code=409, detail="window_already_ended")
+    return res

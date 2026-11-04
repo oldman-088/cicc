@@ -15,6 +15,7 @@ Honesty rules enforced here:
   here claims RabbitMQ controls Arena agent sessions (not implemented).
 - Worker heartbeats record local worker liveness only.
 """
+import json
 import os
 import resource
 import sys
@@ -22,7 +23,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app import checks, models
 from app.db import SessionLocal, engine
@@ -108,9 +109,26 @@ def compute_overall(statuses: list[str]) -> str:
     return "degraded"
 
 
+# Additive, idempotent, NON-DESTRUCTIVE performance indexes. CREATE INDEX
+# IF NOT EXISTS never alters or drops existing data; safe on live DBs.
+PERF_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS ix_task_runs_created_at ON task_runs (created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_task_runs_worker ON task_runs (worker)",
+    "CREATE INDEX IF NOT EXISTS ix_events_ts ON events (ts)",
+    "CREATE INDEX IF NOT EXISTS ix_metric_snapshots_ts ON metric_snapshots (ts)",
+    "CREATE INDEX IF NOT EXISTS ix_whh_worker_ts ON worker_heartbeat_history (worker, ts)",
+    "CREATE INDEX IF NOT EXISTS ix_alerts_status ON alerts (status)",
+]
+
+
 def init_db() -> None:
-    """Create tables and seed the (truthful) module registry."""
+    """Create tables, add perf indexes (idempotent), seed module registry."""
     models.Base.metadata.create_all(bind=engine)
+    from sqlalchemy import text as _text
+
+    with engine.begin() as conn:
+        for stmt in PERF_INDEXES:
+            conn.execute(_text(stmt))
     with SessionLocal() as s:
         for entry in MODULE_REGISTRY:
             row = s.execute(
@@ -376,6 +394,28 @@ def evaluate_alerts() -> dict:
     with SessionLocal() as s:
         services = _service_components(s)
         now = utcnow()
+        # active maintenance windows suppress matching alerts
+        windows = (
+            s.execute(
+                select(models.MaintenanceWindow).where(
+                    models.MaintenanceWindow.starts_at <= now,
+                    models.MaintenanceWindow.ends_at >= now,
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        def _suppressed(rule: str, ck: str) -> bool:
+            for w in windows:
+                if w.rule and w.rule != rule:
+                    continue
+                keys = json.loads(w.component_keys) if w.component_keys else []
+                if w.rule is None and keys and ck not in keys:
+                    continue
+                return True
+            return False
+
         firing: list[tuple[str, str, str, str]] = []
         for svc in services:
             if svc["status"] == "down":
@@ -409,6 +449,7 @@ def evaluate_alerts() -> dict:
             if mr is not None and mr > backlog_thr:
                 firing.append(("queue_backlog", "rabbitmq", "warning", f"{mr} ready messages exceed backlog threshold {backlog_thr}"))
 
+        firing = [f for f in firing if not _suppressed(f[0], f[1])]
         open_alerts = (
             s.execute(select(models.Alert).where(models.Alert.status.in_(["active", "acknowledged"])))
             .scalars()
@@ -437,10 +478,10 @@ def evaluate_alerts() -> dict:
                 )
                 record_event("warning", "alerts", f"alert raised [{sev}] {rule} {ck or '-'}: {msg}", s=s)
         for a in open_alerts:
-            if (a.rule, a.component_key or "") not in firing_keys:
+            if (a.rule, a.component_key or "") not in firing_keys and not _suppressed(a.rule, a.component_key or ""):
                 a.status = "resolved"
                 a.resolved_at = now
-                record_event("info", "alerts", f"alert resolved: {a.rule} {a.component_key or '-'}", s=s)
+                record_event("info", "alerts", f"alert resolved (recovery): {a.rule} {a.component_key or '-'}", s=s)
         s.commit()
         return {"firing": len(firing)}
 
@@ -505,6 +546,7 @@ def build_overview(limit: int = 50) -> dict:
             )
         activity = _activity(s, limit)
     evaluate_alerts()
+    purge_old_data()
     overall = compute_overall([svc["status"] for svc in services])
     return {
         "generated_at": utcnow().isoformat(),
@@ -653,21 +695,36 @@ def record_task_run(payload: dict) -> int:
         return int(run.id)
 
 
+HEARTBEAT_SAMPLE_INTERVAL_S = 60
+
+
 def post_heartbeat(worker: str, details: str = "") -> bool:
-    """Upsert a real worker heartbeat. Returns True if the worker is new."""
+    """Upsert a real worker heartbeat; also record a throttled history sample
+    (at most one per worker per HEARTBEAT_SAMPLE_INTERVAL_S). Returns True if
+    the worker is new."""
     with SessionLocal() as s:
+        now = utcnow()
         row = s.execute(
             select(models.WorkerHeartbeat).where(models.WorkerHeartbeat.worker == worker)
         ).scalar_one_or_none()
         if row is None:
-            s.add(models.WorkerHeartbeat(worker=worker, last_seen=utcnow(), details=details))
-            s.commit()
-            record_event("info", "workers", f"worker registered via heartbeat: {worker}")
-            return True
-        row.last_seen = utcnow()
-        row.details = details
+            s.add(models.WorkerHeartbeat(worker=worker, last_seen=now, details=details))
+            new = True
+        else:
+            row.last_seen = now
+            row.details = details
+            new = False
+        last_sample = s.execute(
+            select(func.max(models.WorkerHeartbeatHistory.ts)).where(
+                models.WorkerHeartbeatHistory.worker == worker
+            )
+        ).scalar_one()
+        if last_sample is None or (now - _aware(last_sample)).total_seconds() >= HEARTBEAT_SAMPLE_INTERVAL_S:
+            s.add(models.WorkerHeartbeatHistory(worker=worker, ts=now))
         s.commit()
-        return False
+        if new:
+            record_event("info", "workers", f"worker registered via heartbeat: {worker}")
+        return new
 
 
 def build_workers() -> dict:
@@ -711,3 +768,166 @@ def build_system() -> dict:
 
 def write_token_required() -> str | None:
     return os.getenv("CICC_OPS_WRITE_TOKEN") or None
+
+
+# ---------- maintenance windows ----------
+
+def create_window(label: str, starts_at, ends_at, component_keys: list[str] | None, rule: str | None, created_by: str | None) -> int:
+    with SessionLocal() as s:
+        w = models.MaintenanceWindow(
+            label=label,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            component_keys=json.dumps(component_keys or []),
+            rule=rule,
+            created_by=created_by,
+        )
+        s.add(w)
+        s.commit()
+        record_event("info", "maintenance", f"maintenance window created: {label} ({starts_at.isoformat()} -> {ends_at.isoformat()})")
+        return int(w.id)
+
+
+def _window_dict(w: models.MaintenanceWindow) -> dict:
+    return {
+        "id": w.id,
+        "label": w.label,
+        "starts_at": _iso(w.starts_at),
+        "ends_at": _iso(w.ends_at),
+        "component_keys": json.loads(w.component_keys) if w.component_keys else [],
+        "rule": w.rule,
+        "created_by": w.created_by,
+        "created_at": _iso(w.created_at),
+    }
+
+
+def list_windows(active_only: bool = False) -> list[dict]:
+    with SessionLocal() as s:
+        q = select(models.MaintenanceWindow)
+        if active_only:
+            now = utcnow()
+            q = q.where(models.MaintenanceWindow.starts_at <= now, models.MaintenanceWindow.ends_at >= now)
+        rows = s.execute(q.order_by(models.MaintenanceWindow.starts_at.desc())).scalars().all()
+        return [_window_dict(w) for w in rows]
+
+
+def cancel_window(window_id: int):
+    with SessionLocal() as s:
+        w = s.get(models.MaintenanceWindow, window_id)
+        if w is None:
+            return None
+        if w.ends_at and _aware(w.ends_at) <= utcnow():
+            return "conflict"
+        w.ends_at = utcnow()
+        record_event("info", "maintenance", f"maintenance window #{w.id} cancelled early", s=s)
+        s.commit()
+        return {"id": w.id, "ends_at": _iso(w.ends_at)}
+
+
+# ---------- worker availability history ----------
+
+def build_worker_history(worker: str | None, hours: int) -> dict:
+    cutoff = utcnow() - timedelta(hours=hours)
+    with SessionLocal() as s:
+        q = select(models.WorkerHeartbeatHistory).where(models.WorkerHeartbeatHistory.ts >= cutoff)
+        if worker:
+            q = q.where(models.WorkerHeartbeatHistory.worker == worker)
+        rows = s.execute(q.order_by(models.WorkerHeartbeatHistory.ts)).scalars().all()
+        return {
+            "window_hours": hours,
+            "worker": worker,
+            "sample_interval_s": HEARTBEAT_SAMPLE_INTERVAL_S,
+            "samples": [{"worker": r.worker, "ts": _iso(r.ts)} for r in rows],
+        }
+
+
+# ---------- task history / failure analytics ----------
+
+def build_task_list(worker: str | None, queue: str | None, status: str | None, limit: int) -> list[dict]:
+    with SessionLocal() as s:
+        q = select(models.TaskRun)
+        if worker:
+            q = q.where(models.TaskRun.worker == worker)
+        if queue:
+            q = q.where(models.TaskRun.queue == queue)
+        if status:
+            q = q.where(models.TaskRun.status == status)
+        rows = s.execute(q.order_by(models.TaskRun.created_at.desc(), models.TaskRun.id.desc()).limit(limit)).scalars().all()
+        return [
+            {
+                "id": r.id,
+                "worker": r.worker,
+                "queue": r.queue,
+                "status": r.status,
+                "started_at": _iso(r.started_at),
+                "finished_at": _iso(r.finished_at),
+                "duration_ms": r.duration_ms,
+                "error": r.error,
+                "created_at": _iso(r.created_at),
+            }
+            for r in rows
+        ]
+
+
+def build_task_failures(hours: int, limit: int = 20) -> dict:
+    """Group REAL failed task runs by (worker, error) — repeated-failure
+    visibility for diagnostics."""
+    cutoff = utcnow() - timedelta(hours=hours)
+    with SessionLocal() as s:
+        rows = s.execute(
+            select(
+                models.TaskRun.worker,
+                models.TaskRun.error,
+                func.count(models.TaskRun.id).label("n"),
+                func.max(models.TaskRun.created_at).label("last"),
+            )
+            .where(models.TaskRun.status == "failed", models.TaskRun.created_at >= cutoff)
+            .group_by(models.TaskRun.worker, models.TaskRun.error)
+            .order_by(func.count(models.TaskRun.id).desc())
+            .limit(limit)
+        ).all()
+        return {
+            "window_hours": hours,
+            "groups": [
+                {
+                    "worker": r.worker,
+                    "error": (r.error or "(no error message)")[:200],
+                    "count": int(r.n),
+                    "last_seen": _iso(r.last),
+                }
+                for r in rows
+            ],
+        }
+
+
+# ---------- retention / downsampling ----------
+
+_last_purge = {"ts": 0.0}
+
+
+def purge_old_data(force: bool = False) -> dict | None:
+    """Delete rows older than OPS_RETENTION_DAYS (default 30) from OUR OWN
+    operational tables only (snapshots, heartbeat history, events). Never
+    touches intelligence tables. Throttled to once per hour unless forced."""
+    global _last_purge
+    days = float(os.getenv("OPS_RETENTION_DAYS", "30"))
+    now_mono = time.monotonic()
+    if not force and now_mono - _last_purge["ts"] < 3600:
+        return None
+    _last_purge["ts"] = now_mono
+    cutoff = utcnow() - timedelta(days=days)
+    counts = {}
+    with SessionLocal() as s:
+        for tbl, col in (
+            (models.MetricSnapshot, models.MetricSnapshot.ts),
+            (models.BrokerSnapshot, models.BrokerSnapshot.ts),
+            (models.WorkerHeartbeatHistory, models.WorkerHeartbeatHistory.ts),
+            (models.Event, models.Event.ts),
+        ):
+            res = s.execute(delete(tbl).where(col < cutoff))
+            counts[tbl.__tablename__] = res.rowcount or 0
+        s.commit()
+    total = sum(counts.values())
+    if total:
+        record_event("info", "retention", f"retention purge ({days}d): {counts}")
+    return counts

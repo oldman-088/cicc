@@ -127,5 +127,17 @@
   "pythonVer": "Python",
   "diagnostics": "التشخيصات",
   "noCheckData": "لا توجد بيانات فحص تفصيلية.",
-  "severity": "الخطورة"
+  "severity": "الخطورة",
+  "recentTasks": "أحدث تشغيلات المهام (آخر 25)",
+  "failuresTitle": "أكثر مجموعات الفشل تكرارًا (24 ساعة)",
+  "colId": "المعرّف",
+  "colQueue": "الطابور",
+  "colStatus": "الحالة",
+  "colDuration": "المدة (ms)",
+  "colError": "الخطأ",
+  "colCreated": "أُنشئ",
+  "colCount": "العدد",
+  "colLastSeen": "آخر ظهور",
+  "noTasks": "لا توجد مهام مسجلة بعد — POST /api/v1/ops/tasks",
+  "noFailures": "لا أخطاء في آخر 24 ساعة."
 }

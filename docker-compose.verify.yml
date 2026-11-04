@@ -1,0 +1,32 @@
+# Verification overlay: adds a real RabbitMQ (with management API) so the
+# broker monitoring can be verified LIVE. Requires Docker.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.verify.yml up -d
+#   RABBITMQ_MANAGEMENT_URL=http://localhost:15672 \
+#     RABBITMQ_USER=guest RABBITMQ_PASS=guest \
+#     python scripts/verify_rabbitmq.py   # from apps/api venv
+#
+# Default guest/guest is for local disposable verification only.
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    environment:
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy

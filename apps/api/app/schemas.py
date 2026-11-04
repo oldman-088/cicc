@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ComponentInfo(BaseModel):
@@ -192,3 +192,84 @@ class HealthResponse(BaseModel):
     started_at: str
     uptime_seconds: float
     checks: dict
+
+
+# ---------- milestone 4: maintenance windows, task history, worker history ----------
+
+class MaintenanceWindowIn(BaseModel):
+    label: str = Field(min_length=1, max_length=128)
+    starts_at: datetime
+    ends_at: datetime
+    component_keys: Optional[list[str]] = Field(default=None, max_length=32)
+    rule: Optional[str] = Field(default=None, max_length=64)
+    created_by: Optional[str] = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def _ends_after_starts(self):
+        if self.ends_at <= self.starts_at:
+            raise ValueError("ends_at must be after starts_at")
+        return self
+
+
+class MaintenanceWindowItem(BaseModel):
+    id: int
+    label: str
+    starts_at: Optional[str] = None
+    ends_at: Optional[str] = None
+    component_keys: list[str] = []
+    rule: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class MaintenanceListResponse(BaseModel):
+    windows: list[MaintenanceWindowItem]
+
+
+class MaintenanceCreated(BaseModel):
+    id: int
+
+
+class MaintenanceCancelled(BaseModel):
+    id: int
+    ends_at: Optional[str] = None
+
+
+class TaskRunItem(BaseModel):
+    id: int
+    worker: str
+    queue: str
+    status: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    duration_ms: Optional[int] = None
+    error: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class TaskListResponse(BaseModel):
+    tasks: list[TaskRunItem]
+
+
+class TaskFailureGroup(BaseModel):
+    worker: str
+    error: str
+    count: int
+    last_seen: Optional[str] = None
+
+
+class TaskFailuresResponse(BaseModel):
+    window_hours: int
+    groups: list[TaskFailureGroup]
+
+
+class WorkerHistorySample(BaseModel):
+    worker: str
+    ts: Optional[str] = None
+
+
+class WorkerHistoryResponse(BaseModel):
+    window_hours: int
+    worker: Optional[str] = None
+    sample_interval_s: int
+    samples: list[WorkerHistorySample]

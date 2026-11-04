@@ -77,3 +77,45 @@ def test_pg_aware_timestamps_roundtrip(pg_engine):
     ops.record_event("info", "test", "pg timestamp roundtrip")
     events = ops.build_activity(10)
     assert events[0]["ts"].endswith("+00:00")  # timestamptz round trip
+
+
+def test_pg_concurrent_task_writes(pg_engine):
+    """REAL concurrency test on PostgreSQL: 8 threads x 10 task runs each;
+    all 80 rows must be visible afterwards (transactional integrity)."""
+    import threading
+
+    ops.init_db()
+    errors = []
+
+    def worker_fn(tid):
+        try:
+            for i in range(10):
+                ops.record_task_run({"worker": f"t{tid}", "queue": "pg-conc", "status": "success", "duration_ms": i})
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker_fn, args=(t,)) for t in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, f"concurrent write errors: {errors}"
+    stats = ops.build_task_stats(24)
+    assert stats["completed"] == 80
+    with ops.SessionLocal() as s:
+        from sqlalchemy import func, select
+        n = s.execute(select(func.count(models.TaskRun.id)).where(models.TaskRun.queue == "pg-conc")).scalar_one()
+        assert n == 80
+
+
+def test_pg_connection_failure_reported_as_down(pg_engine):
+    """Readiness semantics on PG: a dead engine reports down, not ok."""
+    from sqlalchemy import create_engine
+
+    dead = create_engine("postgresql+psycopg2://postgres@127.0.0.1:1/postgres", connect_args={"connect_timeout": 1})
+    result = ops.check_database.__wrapped__ if hasattr(ops.check_database, "__wrapped__") else None
+    from app import checks
+
+    r = checks.check_database(dead)
+    assert r["status"] == "down"
+    assert "connection failed" in r["detail"]

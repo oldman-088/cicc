@@ -180,3 +180,32 @@ class Alert(Base):
     acked_at = Column(DateTime(timezone=True), nullable=True)
     acked_by = Column(String(128), nullable=True)
     occurrences = Column(Integer, default=1)
+
+
+class MaintenanceWindow(Base):
+    """A scheduled maintenance window. While active, matching alert rules are
+    suppressed (not raised) and open matching alerts are not auto-resolved."""
+
+    __tablename__ = "maintenance_windows"
+
+    id = Column(Integer, primary_key=True)
+    label = Column(String(128), nullable=False)
+    starts_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    ends_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    # JSON list of component keys; empty = all components
+    component_keys = Column(Text, default="[]")
+    # optional rule filter; null = all rules
+    rule = Column(String(64), nullable=True)
+    created_by = Column(String(128), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+
+class WorkerHeartbeatHistory(Base):
+    """Throttled samples of worker heartbeats for availability history
+    (at most one sample per worker per ~60 s)."""
+
+    __tablename__ = "worker_heartbeat_history"
+
+    id = Column(Integer, primary_key=True)
+    worker = Column(String(128), nullable=False, index=True)
+    ts = Column(DateTime(timezone=True), default=utcnow, index=True)

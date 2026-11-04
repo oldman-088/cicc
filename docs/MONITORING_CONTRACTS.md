@@ -142,3 +142,43 @@ verified, and the API explicitly says so in the `workers` component detail.
 - Error details are exception type names, never raw connection strings.
 - Rate limiting on ops endpoints; probes exempt for orchestrators.
 - Write endpoint (`POST /tasks`) token-gated when `CICC_OPS_WRITE_TOKEN` set.
+
+
+## 9. Milestone-4 endpoints & contracts (ops API, all under read-token gate)
+
+Read gate: `CICC_OPS_READ_TOKEN` (when set) protects ALL ops endpoints. Write
+gate: `CICC_OPS_WRITE_TOKEN` (when set) protects mutations. **When both are
+set, the write token also satisfies the read gate** (write ⊇ read), so a
+single `Authorization: Bearer <write>` header authorizes writer clients.
+
+| Endpoint | Method | Notes |
+|---|---|---|
+| `/api/v1/ops/tasks?worker&queue&status&limit` | GET | `status` in running\|success\|failed, `limit` ≤ 500; rows: id/worker/queue/status/started_at/finished_at/duration_ms/error/created_at |
+| `/api/v1/ops/tasks/failures?hours&limit` | GET | failed runs grouped by (worker, error): count + last_seen |
+| `/api/v1/ops/workers/history?worker&hours` | GET | sampled heartbeat history, `sample_interval_s=60` (throttled writes) |
+| `/api/v1/ops/maintenance?active=` | GET | list maintenance windows (active-only filter) |
+| `/api/v1/ops/maintenance` | POST | 201; 422 if `ends_at <= starts_at`; write token |
+| `/api/v1/ops/maintenance/{id}/cancel` | POST | 200; 404 unknown; 409 already cancelled/ended |
+
+Maintenance-window alert suppression: an ACTIVE window suppresses firing of
+alerts whose rule matches `window.rule`, or — when `window.rule` is null — all
+rules (optionally narrowed by `component_keys`). Suppressed OPEN alerts are
+intentionally NOT auto-resolved (they resolve only on real recovery), so the
+alert history remains truthful. Cancelled windows re-enable firing.
+
+Retention: `build_overview` triggers a throttled (≥1h apart) `purge_old_data()`
+that deletes rows older than `OPS_RETENTION_DAYS` (default 30) from ONLY the
+ops-owned tables `metric_snapshots`, `broker_snapshots`,
+`worker_heartbeat_history`, `events` — never platform tables, and never a
+destructive migration. A `retention` event is logged for each purge.
+
+Performance: idempotent `CREATE INDEX IF NOT EXISTS` on task_runs(created_at,
+worker), events(ts), metric_snapshots(ts), worker_heartbeat_history(worker,ts),
+alerts(status) — additive only, safe on live DBs.
+
+Scale benchmark (scripts/bench_scale.py, real seeded data, SQLite):
+20k task runs / 5k events / 2k snapshots / 1k heartbeat samples →
+task list (limit 100) p50 1.6ms; failures(24h) p50 7.5ms; activity p50 1.2ms;
+history(168h) p50 19.5ms; worker history p50 8.0ms; evaluate_alerts p50 4.9ms;
+full overview p50 8.2ms; retention purge p50 0.9ms. task stats over the full
+20k-row window p50 ~224ms (documented; not on the overview hot path).

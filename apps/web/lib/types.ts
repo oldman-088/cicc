@@ -106,6 +106,34 @@ export interface WorkerInfo {
   details: string;
 }
 
+export interface TaskRunItem {
+  id: number;
+  worker: string;
+  queue: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  error: string | null;
+  created_at: string | null;
+}
+
+export interface TaskListResponse {
+  tasks: TaskRunItem[];
+}
+
+export interface TaskFailureGroup {
+  worker: string;
+  error: string;
+  count: number;
+  last_seen: string | null;
+}
+
+export interface TaskFailuresResponse {
+  window_hours: number;
+  groups: TaskFailureGroup[];
+}
+
 export interface WorkersResponse {
   stall_threshold_s: number;
   workers: WorkerInfo[];

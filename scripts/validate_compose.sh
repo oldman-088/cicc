@@ -5,6 +5,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+echo "== secret scan (deployment files) =="
+bash scripts/check_no_secrets.sh
+
+echo "== optional REAL RabbitMQ overlay (broker monitoring live verification) =="
+if [ "${VERIFY_RABBITMQ:-0}" = "1" ]; then
+  docker compose -f docker-compose.yml -f docker-compose.verify.yml build
+  docker compose -f docker-compose.yml -f docker-compose.verify.yml up -d
+  cd apps/api && RABBITMQ_MANAGEMENT_URL=http://127.0.0.1:15672 \
+    RABBITMQ_USER=guest RABBITMQ_PASS=guest \
+    python ../../scripts/verify_rabbitmq.py || { echo "BROKER VERIFY FAILED"; exit 1; }
+  cd ../..
+else
+  echo "SKIP: set VERIFY_RABBITMQ=1 to also verify a real RabbitMQ broker (docker-compose.verify.yml)"
+fi
+
 echo "== docker compose build =="
 docker compose build
 

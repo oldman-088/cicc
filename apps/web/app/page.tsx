@@ -30,6 +30,8 @@ import type {
   SystemMetrics,
   TaskStats,
   WorkersResponse,
+  TaskRunItem,
+  TaskFailuresResponse,
 } from "../lib/types";
 
 const REFRESH_MS = 15000;
@@ -54,6 +56,8 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [workers, setWorkers] = useState<WorkersResponse | null>(null);
   const [system, setSystem] = useState<SystemMetrics | null>(null);
+  const [tasks, setTasks] = useState<TaskRunItem[]>([]);
+  const [taskFailures, setTaskFailures] = useState<TaskFailuresResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +66,7 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [h, o, d, hi, a, ts, al, w, sy] = await Promise.all([
+      const [h, o, d, hi, a, ts, al, w, sy, tk, tf] = await Promise.all([
         fetch("/api/health", { cache: "no-store" }),
         fetch("/api/v1/ops/overview", { cache: "no-store" }),
         fetch("/api/v1/ops/dependencies", { cache: "no-store" }),
@@ -72,6 +76,8 @@ export default function DashboardPage() {
         fetch("/api/v1/ops/alerts?state=all&limit=100", { cache: "no-store" }),
         fetch("/api/v1/ops/workers", { cache: "no-store" }),
         fetch("/api/v1/ops/system", { cache: "no-store" }),
+        fetch("/api/v1/ops/tasks?limit=25", { cache: "no-store" }),
+        fetch("/api/v1/ops/tasks/failures?hours=24&limit=10", { cache: "no-store" }),
       ]);
       setHealth(h.ok ? await h.json() : null);
       if (!o.ok) throw new Error(`overview_http_${o.status}`);
@@ -83,6 +89,8 @@ export default function DashboardPage() {
       setAlerts(al.ok ? (await al.json()).alerts : []);
       setWorkers(w.ok ? await w.json() : null);
       setSystem(sy.ok ? await sy.json() : null);
+      setTasks(tk.ok ? (await tk.json()).tasks : []);
+      setTaskFailures(tf.ok ? await tf.json() : null);
       setLastRefresh(new Date().toISOString());
     } catch {
       setHealth(null);
@@ -250,7 +258,13 @@ export default function DashboardPage() {
           {view === "alerts" && <AlertsView alerts={alerts} onAction={load} />}
 
           {view === "workers" && (
-            <WorkersView workers={workers} broker={broker} taskStats={taskStats} />
+            <WorkersView
+            workers={workers}
+            broker={broker}
+            taskStats={taskStats}
+            tasks={tasks}
+            taskFailures={taskFailures}
+          />
           )}
 
           <p className="text-center text-xs text-slate-500">{t("dataSourceNote")}</p>
