@@ -26,6 +26,6 @@ def test_real_transport_cannot_be_used_in_tests(monkeypatch: pytest.MonkeyPatch)
     """Even the audited transport must fail here — no test may reach a source."""
     from vuln_intel.transport import HttpxTransport
 
-    httpx = pytest.importorskip("httpx", reason="httpx is an optional live extra")
+    pytest.importorskip("httpx", reason="httpx is an optional live extra")
     with pytest.raises(Exception):
         HttpxTransport().get("https://services.nvd.nist.gov/rest/json/cves/2.0")
