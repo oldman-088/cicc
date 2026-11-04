@@ -6,7 +6,9 @@ Exposes REAL health checks and operational metrics:
 - /health — liveness + detailed check results (informational)
 
 Never claims a service is healthy without performing an actual check,
-and never serves synthetic data as live intelligence.
+never serves synthetic data as live intelligence, never leaks internals:
+unhandled errors return a generic 500 and are logged server-side only.
+POST bodies are size-limited (413 beyond 16 KiB).
 """
 import logging
 import os
@@ -14,14 +16,16 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app import ops
+from app.checks import MAX_BODY_BYTES
 from app.routers import ops as ops_router
 from app.schemas import HealthResponse
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("cicc.ops")
@@ -41,6 +45,27 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CICC Operations API", version=__version__, lifespan=lifespan)
+
+
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    """Reject oversized bodies early (413) — protects write endpoints."""
+    if request.method in ("POST", "PUT", "PATCH"):
+        cl = request.headers.get("content-length")
+        try:
+            if cl and int(cl) > MAX_BODY_BYTES:
+                return JSONResponse({"detail": "payload_too_large"}, status_code=413)
+        except ValueError:
+            return JSONResponse({"detail": "invalid_content_length"}, status_code=400)
+    return await call_next(request)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Generic 500 — details are logged server-side, never sent to clients."""
+    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": "internal_error"}, status_code=500)
+
 
 _origins = os.getenv(
     "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
@@ -72,8 +97,6 @@ def ready():
     db = ops.check_database()
     if db["status"] == "ok":
         return {"status": "ready", "checks": {"database": db}}
-    from fastapi.responses import JSONResponse
-
     return JSONResponse(
         status_code=503,
         content={"status": "not_ready", "checks": {"database": db}},

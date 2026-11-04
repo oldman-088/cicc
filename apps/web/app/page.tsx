@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import ActivityTimeline from "../components/ActivityTimeline";
 import ActivityView from "../components/ActivityView";
 import AlertsBanner from "../components/AlertsBanner";
+import AlertsView from "../components/AlertsView";
 import ComponentsTable from "../components/ComponentsTable";
 import DependencyGraph from "../components/DependencyGraph";
 import LanguageSwitcher from "../components/LanguageSwitcher";
@@ -13,23 +14,34 @@ import NavTabs, { type Tab } from "../components/NavTabs";
 import OverviewCards from "../components/OverviewCards";
 import Section from "../components/Section";
 import TrendChart from "../components/TrendChart";
+import WorkersView from "../components/WorkersView";
 import { deriveAlerts } from "../lib/alerts.mjs";
 import { formatTime } from "../lib/format";
 import { useLocale } from "../lib/i18n";
 import { overallStatus } from "../lib/status.mjs";
 import type {
   ActivityEvent,
+  Alert,
   ComponentInfo,
   DependencyGraph as Deps,
   HealthResponse,
   Overview,
   Snapshot,
+  SystemMetrics,
   TaskStats,
+  WorkersResponse,
 } from "../lib/types";
 
 const REFRESH_MS = 15000;
 
-type View = "overview" | "components" | "metrics" | "activity" | "dependencies";
+type View =
+  | "overview"
+  | "components"
+  | "metrics"
+  | "activity"
+  | "dependencies"
+  | "alerts"
+  | "workers";
 
 export default function DashboardPage() {
   const { t, locale } = useLocale();
@@ -39,6 +51,9 @@ export default function DashboardPage() {
   const [history, setHistory] = useState<Snapshot[]>([]);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [workers, setWorkers] = useState<WorkersResponse | null>(null);
+  const [system, setSystem] = useState<SystemMetrics | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,13 +62,16 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [h, o, d, hi, a, ts] = await Promise.all([
+      const [h, o, d, hi, a, ts, al, w, sy] = await Promise.all([
         fetch("/api/health", { cache: "no-store" }),
         fetch("/api/v1/ops/overview", { cache: "no-store" }),
         fetch("/api/v1/ops/dependencies", { cache: "no-store" }),
         fetch("/api/v1/ops/metrics/history?hours=24", { cache: "no-store" }),
         fetch("/api/v1/ops/activity?limit=100", { cache: "no-store" }),
         fetch("/api/v1/ops/tasks/stats?hours=24", { cache: "no-store" }),
+        fetch("/api/v1/ops/alerts?state=all&limit=100", { cache: "no-store" }),
+        fetch("/api/v1/ops/workers", { cache: "no-store" }),
+        fetch("/api/v1/ops/system", { cache: "no-store" }),
       ]);
       setHealth(h.ok ? await h.json() : null);
       if (!o.ok) throw new Error(`overview_http_${o.status}`);
@@ -62,6 +80,9 @@ export default function DashboardPage() {
       setHistory(hi.ok ? (await hi.json()).snapshots : []);
       setActivity(a.ok ? (await a.json()).events : []);
       setTaskStats(ts.ok ? await ts.json() : null);
+      setAlerts(al.ok ? (await al.json()).alerts : []);
+      setWorkers(w.ok ? await w.json() : null);
+      setSystem(sy.ok ? await sy.json() : null);
       setLastRefresh(new Date().toISOString());
     } catch {
       setHealth(null);
@@ -99,7 +120,13 @@ export default function DashboardPage() {
   const services: ComponentInfo[] = [webComponent, ...(overview?.services ?? [])];
   const modules = overview?.modules ?? [];
   const components = [...services, ...modules];
-  const alerts = deriveAlerts(components);
+  // Prefer server-evaluated alerts; fall back to client-side derivation.
+  const bannerAlerts =
+    alerts.length > 0
+      ? alerts
+          .filter((a) => a.status !== "resolved")
+          .map((a) => ({ key: a.component_key ?? a.rule, status: a.severity === "critical" ? "down" : "degraded", name: a.component_key ?? a.rule, detail: a.message }))
+      : deriveAlerts(components);
   const overall = overview
     ? overview.overall_status
     : overallStatus(services.map((s) => s.status));
@@ -107,6 +134,7 @@ export default function DashboardPage() {
     (m) => m.status === "ok" || m.status === "degraded"
   ).length;
   const servicesUp = services.filter((s) => s.status === "ok").length;
+  const broker = services.find((s) => s.key === "rabbitmq") ?? null;
 
   const tabs: Tab[] = [
     { id: "overview", label: t("navOverview") },
@@ -114,6 +142,8 @@ export default function DashboardPage() {
     { id: "metrics", label: t("navMetrics") },
     { id: "activity", label: t("navActivity") },
     { id: "dependencies", label: t("navDependencies") },
+    { id: "alerts", label: `${t("navAlerts")}${alerts.filter((a) => a.status === "active").length ? ` (${alerts.filter((a) => a.status === "active").length})` : ""}` },
+    { id: "workers", label: t("navWorkers") },
   ];
 
   return (
@@ -150,7 +180,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="space-y-6" aria-live="polite">
-          <AlertsBanner alerts={alerts} nameOf={nameOf} />
+          <AlertsBanner alerts={bannerAlerts} nameOf={nameOf} />
 
           {view === "overview" && overview && (
             <>
@@ -164,6 +194,28 @@ export default function DashboardPage() {
                   activityCount={overview.activity.length}
                 />
               </Section>
+              {system && (
+                <Section title={t("capacityTitle")}>
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
+                    {[
+                      { label: t("rssMb"), value: system.process.rss_mb },
+                      { label: t("cpuUser"), value: system.process.cpu_user_s },
+                      { label: t("cpuSys"), value: system.process.cpu_system_s },
+                      { label: t("threads"), value: system.process.threads ?? "—" },
+                      { label: t("pid"), value: system.process.pid },
+                      { label: t("uptime"), value: system.process.uptime_s ?? "—" },
+                      { label: t("pythonVer"), value: system.python },
+                    ].map((it) => (
+                      <div key={it.label} className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+                        <div className="text-xs uppercase tracking-wider text-slate-400">{it.label}</div>
+                        <div className="mt-1 truncate text-base font-semibold text-slate-100">
+                          {String(it.value)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
               <ActivityTimeline events={overview.activity.slice(0, 8)} />
             </>
           )}
@@ -188,53 +240,20 @@ export default function DashboardPage() {
                   </div>
                 )}
               </Section>
-              <Section title={t("tasksTitle")}>
-                {taskStats ? (
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                    {[
-                      { label: t("completed"), value: taskStats.completed },
-                      { label: t("failed"), value: taskStats.failed },
-                      { label: t("pending"), value: taskStats.pending },
-                      {
-                        label: t("avgDuration"),
-                        value: taskStats.avg_duration_ms ?? "—",
-                      },
-                      {
-                        label: t("oldestPending"),
-                        value: taskStats.oldest_pending_started
-                          ? formatTime(taskStats.oldest_pending_started, locale)
-                          : t("never"),
-                      },
-                    ].map((it) => (
-                      <div
-                        key={it.label}
-                        className="rounded-lg border border-slate-800 bg-slate-900/70 p-4"
-                      >
-                        <div className="text-xs uppercase tracking-wider text-slate-400">
-                          {it.label}
-                        </div>
-                        <div className="mt-2 truncate text-lg font-semibold text-slate-100">
-                          {String(it.value)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-400">—</p>
-                )}
-              </Section>
             </>
           )}
 
           {view === "activity" && <ActivityView events={activity} />}
 
-          {view === "dependencies" && (
-            <DependencyGraph deps={deps} nameOf={nameOf} />
+          {view === "dependencies" && <DependencyGraph deps={deps} nameOf={nameOf} />}
+
+          {view === "alerts" && <AlertsView alerts={alerts} onAction={load} />}
+
+          {view === "workers" && (
+            <WorkersView workers={workers} broker={broker} taskStats={taskStats} />
           )}
 
-          <p className="text-center text-xs text-slate-500">
-            {t("dataSourceNote")}
-          </p>
+          <p className="text-center text-xs text-slate-500">{t("dataSourceNote")}</p>
         </div>
       )}
     </main>

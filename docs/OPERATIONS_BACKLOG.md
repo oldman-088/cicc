@@ -20,6 +20,27 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   history, tasks, token auth); web 15 node tests + tsc + next build.
 - Live smoke: all endpoints direct (:8000) and via web proxy (:3000).
 
+## Done — Milestone 3
+
+- Alert engine: 6 rules with env thresholds, dedup by (rule, component),
+  active/acknowledged/resolved states, occurrences, history, audit events,
+  REST endpoints + dashboard Alerts tab with ack/resolve actions.
+- Worker observability: POST /workers/heartbeat contract, workers list with
+  heartbeat age + stalled flag + 24h task stats; stalled-worker alerts.
+- RabbitMQ deep metrics when configured: queue totals, queue count,
+  consumer count, dead-letter queue count, broker history snapshots;
+  circuit breakers on all external probes (stale/unknown, never false ok).
+- Security: optional read-token gate, 413 body limit, generic 500 (no
+  internal leakage), host-only probe details, credential-leak tests.
+- REAL disposable PostgreSQL integration tests via pgserver (5 tests).
+- System capacity: real process metrics endpoint + dashboard cards.
+- Dashboard v3: 7 tabs (Overview/Components/Metrics/Activity/Dependencies/
+  Alerts/Workers & Queues), component diagnostics <details>, 129-key EN/AR
+  parity.
+- Perf (measured): overview uncached p50 5.6ms/p95 8.3ms; cached ~0ms;
+  metrics p50 1.5ms; HTTP via proxy p50 6ms.
+- API tests: 56 passed. Web tests: 17 passed; tsc clean; next build OK.
+
 ## Next priorities (P1)
 
 1. PostgreSQL integration test against a real disposable Postgres (CI or

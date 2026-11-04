@@ -1,10 +1,11 @@
 """Operational database models.
 
 These tables hold the platform's *own* operational state (component
-registry, real events, real counters, real task runs, real metric
-snapshots). Intelligence tables (entities, vulnerabilities, campaigns,
-sync attempts) stay empty until a real, authorized ingestion source
-writes to them. No synthetic rows are seeded.
+registry, real events, real counters, real task runs, real worker
+heartbeats, real alerts, real metric/broker snapshots). Intelligence
+tables (entities, vulnerabilities, campaigns, sync attempts) stay empty
+until a real, authorized ingestion source writes to them. No synthetic
+rows are seeded.
 """
 from datetime import datetime, timezone
 
@@ -103,7 +104,7 @@ class TaskRun(Base):
     __tablename__ = "task_runs"
 
     id = Column(Integer, primary_key=True)
-    worker = Column(String(128), nullable=False)
+    worker = Column(String(128), nullable=False, index=True)
     queue = Column(String(128), nullable=False, index=True)
     status = Column(String(32), nullable=False)  # running | success | failed
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -111,6 +112,21 @@ class TaskRun(Base):
     duration_ms = Column(Integer, nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class WorkerHeartbeat(Base):
+    """A real worker heartbeat, reported via POST /api/v1/ops/workers/heartbeat.
+
+    Records local worker process liveness only — never Arena session activity.
+    """
+
+    __tablename__ = "worker_heartbeats"
+
+    id = Column(Integer, primary_key=True)
+    worker = Column(String(128), unique=True, nullable=False, index=True)
+    last_seen = Column(DateTime(timezone=True), default=utcnow, index=True)
+    details = Column(Text, default="")
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class MetricSnapshot(Base):
@@ -125,3 +141,42 @@ class MetricSnapshot(Base):
     vulnerabilities = Column(Integer, nullable=False)
     campaigns = Column(Integer, nullable=False)
     recent_updates_24h = Column(Integer, nullable=False)
+
+
+class BrokerSnapshot(Base):
+    """Point-in-time RabbitMQ broker totals from a REAL management-API check
+    (recorded only when the broker check succeeds)."""
+
+    __tablename__ = "broker_snapshots"
+
+    id = Column(Integer, primary_key=True)
+    ts = Column(DateTime(timezone=True), default=utcnow, index=True)
+    messages_ready = Column(Integer, nullable=True)
+    messages_unacknowledged = Column(Integer, nullable=True)
+    queues = Column(Integer, nullable=True)
+    consumers = Column(Integer, nullable=True)
+    dead_letter_queues = Column(Integer, nullable=True)
+
+
+class Alert(Base):
+    """An operational alert derived from REAL check results.
+
+    Deduplicated by (rule, component_key): an open alert is updated
+    (occurrences+1) instead of duplicated; when the condition clears it is
+    marked resolved and kept for history.
+    """
+
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True)
+    rule = Column(String(64), nullable=False, index=True)
+    component_key = Column(String(64), nullable=True, index=True)
+    severity = Column(String(16), nullable=False)  # critical | warning | info
+    status = Column(String(16), nullable=False, index=True)  # active | acknowledged | resolved
+    message = Column(Text, nullable=False)
+    first_seen = Column(DateTime(timezone=True), default=utcnow)
+    last_seen = Column(DateTime(timezone=True), default=utcnow)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    acked_at = Column(DateTime(timezone=True), nullable=True)
+    acked_by = Column(String(128), nullable=True)
+    occurrences = Column(Integer, default=1)

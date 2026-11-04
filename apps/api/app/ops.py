@@ -1,18 +1,23 @@
-"""Operational registry, health aggregation, metrics, history, tasks.
+"""Operational registry, health aggregation, alerts, workers, metrics,
+history, tasks, broker snapshots, system metrics.
 
 Honesty rules enforced here:
-- Service statuses come from *live* checks (real DB round trip, real HTTP
-  probes with bounded timeouts), never from assumptions.
+- Service statuses come from *live* checks (real DB round trip, guarded HTTP
+  probes with bounded timeouts), never from assumptions. Circuit-open probes
+  return status 'unknown' + stale=True, never a false 'ok'.
 - A failing check degrades only its own component — the overview endpoint
   keeps working (failure isolation).
 - Module statuses are explicit (e.g. "not_implemented") for anything not
   implemented in this build.
-- Metrics are real COUNT/MAX/AVG queries. Snapshots are real counters.
+- Metrics/alerts are computed from REAL queries. Snapshots are real counters.
 - No synthetic numbers, no fabricated CVEs/campaigns/events.
-- RabbitMQ checks report broker availability only. Nothing here claims
-  that RabbitMQ controls Arena agent sessions (not implemented/verified).
+- RabbitMQ checks report broker availability and queue totals only. Nothing
+  here claims RabbitMQ controls Arena agent sessions (not implemented).
+- Worker heartbeats record local worker liveness only.
 """
 import os
+import resource
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -82,6 +87,13 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _aware(dt) -> datetime:
+    """Normalize a possibly-naive datetime (SQLite read-back) to aware UTC."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def compute_overall(statuses: list[str]) -> str:
     """Aggregate component statuses into an overall system status."""
     if not statuses:
@@ -109,11 +121,16 @@ def init_db() -> None:
         s.commit()
 
 
-def record_event(level: str, source: str, message: str) -> None:
-    """Record a real event in the operations database."""
-    with SessionLocal() as s:
-        s.add(models.Event(level=level, source=source, message=message))
-        s.commit()
+def record_event(level: str, source: str, message: str, s=None) -> None:
+    """Record a real event. Uses the given session if provided (avoids
+    nested-write locks), otherwise opens its own."""
+    event = models.Event(level=level, source=source, message=message)
+    if s is not None:
+        s.add(event)
+    else:
+        with SessionLocal() as own:
+            own.add(event)
+            own.commit()
 
 
 def check_database() -> dict:
@@ -121,7 +138,7 @@ def check_database() -> dict:
 
 
 def _iso(dt) -> str | None:
-    return dt.isoformat() if dt else None
+    return _aware(dt).isoformat() if dt else None
 
 
 def _component_dict(row: models.Component) -> dict:
@@ -148,26 +165,65 @@ def _module_rows(s) -> list[dict]:
     return [_component_dict(r) for r in rows]
 
 
-def _workers_status(s) -> dict:
-    """Worker component status, derived from REAL reported task runs.
+def _worker_rows(s) -> list[dict]:
+    rows = s.execute(select(models.WorkerHeartbeat)).scalars().all()
+    cutoff24 = utcnow() - timedelta(hours=24)
+    out = []
+    for r in rows:
+        age = (utcnow() - _aware(r.last_seen)).total_seconds() if r.last_seen else None
+        tasks = s.execute(
+            select(func.count(models.TaskRun.id)).where(
+                models.TaskRun.worker == r.worker, models.TaskRun.created_at >= cutoff24
+            )
+        ).scalar_one()
+        failed = s.execute(
+            select(func.count(models.TaskRun.id)).where(
+                models.TaskRun.worker == r.worker,
+                models.TaskRun.created_at >= cutoff24,
+                models.TaskRun.status == "failed",
+            )
+        ).scalar_one()
+        out.append(
+            {
+                "worker": r.worker,
+                "last_seen": _iso(r.last_seen),
+                "age_s": age,  # raw seconds (no rounding: stalled detection needs precision)
+                "tasks_24h": int(tasks),
+                "failed_24h": int(failed),
+                "details": r.details or "",
+            }
+        )
+    return out
 
-    Never claims Arena agent control: it only reflects task runs that a
-    worker explicitly reported through POST /api/v1/ops/tasks.
+
+def worker_stall_threshold_s() -> float:
+    return float(os.getenv("OPS_WORKER_STALL_S", "120"))
+
+
+def _workers_status(s) -> dict:
+    """Worker component status, derived from REAL heartbeats / task runs.
+
+    Never claims Arena agent control: it only reflects heartbeats and task
+    runs that workers explicitly reported.
     """
-    cutoff = utcnow() - timedelta(minutes=5)
+    stall_s = worker_stall_threshold_s()
+    workers = _worker_rows(s)
+    fresh = [w for w in workers if w["age_s"] is not None and w["age_s"] <= stall_s]
+    cutoff5 = utcnow() - timedelta(minutes=5)
     recent = s.execute(
-        select(func.count(models.TaskRun.id)).where(models.TaskRun.created_at >= cutoff)
+        select(func.count(models.TaskRun.id)).where(models.TaskRun.created_at >= cutoff5)
     ).scalar_one()
-    if recent:
+    if fresh or recent:
         return {
             "status": "ok",
-            "detail": f"{int(recent)} task run(s) reported in the last 5 minutes",
+            "detail": f"{len(fresh)} live worker heartbeat(s); {int(recent)} task run(s) in the last 5 minutes",
         }
     return {
         "status": "not_configured",
         "detail": (
-            "no worker has reported task runs yet (POST /api/v1/ops/tasks); "
-            "RabbitMQ does NOT control Arena sessions unless explicitly integrated — not verified"
+            "no worker heartbeat (POST /api/v1/ops/workers/heartbeat) or task run "
+            "(POST /api/v1/ops/tasks) yet; RabbitMQ does NOT control Arena sessions "
+            "unless explicitly integrated — not verified"
         ),
     }
 
@@ -186,30 +242,26 @@ def _service_components(s) -> list[dict]:
     ]
 
     def _add(key: str, name: str, check: dict) -> None:
-        services.append(
-            {
-                "key": key,
-                "kind": "service",
-                "name": name,
-                "status": check.get("status", "unknown"),
-                "detail": check.get("detail", ""),
-                "last_check_at": _iso(utcnow()),
-                "check": {k: v for k, v in check.items() if k not in ("detail",)},
-            }
-        )
+        comp = {
+            "key": key,
+            "kind": "service",
+            "name": name,
+            "status": check.get("status", "unknown"),
+            "detail": check.get("detail", ""),
+            "last_check_at": _iso(utcnow()),
+            "check": {k: v for k, v in check.items() if k != "detail"},
+        }
+        services.append(comp)
 
-    try:
-        _add("database", "Database", check_database())
-    except Exception as exc:  # noqa: BLE001 - isolation
-        _add("database", "Database", {"status": "unknown", "detail": type(exc).__name__})
-    try:
-        _add("rabbitmq", "RabbitMQ Broker", checks.check_rabbitmq())
-    except Exception as exc:  # noqa: BLE001
-        _add("rabbitmq", "RabbitMQ Broker", {"status": "unknown", "detail": type(exc).__name__})
-    try:
-        _add("platform_api", "Platform API (integration)", checks.check_external_api("CICC_PLATFORM_API_URL"))
-    except Exception as exc:  # noqa: BLE001
-        _add("platform_api", "Platform API (integration)", {"status": "unknown", "detail": type(exc).__name__})
+    for key, name, fn in (
+        ("database", "Database", check_database),
+        ("rabbitmq", "RabbitMQ Broker", checks.check_rabbitmq),
+        ("platform_api", "Platform API (integration)", lambda: checks.check_external_api("CICC_PLATFORM_API_URL")),
+    ):
+        try:
+            _add(key, name, fn())
+        except Exception as exc:  # noqa: BLE001 - isolation
+            _add(key, name, {"status": "unknown", "detail": type(exc).__name__})
     try:
         w = _workers_status(s)
         services.append(
@@ -252,19 +304,25 @@ def _metrics(s) -> dict:
     }
 
 
-def _maybe_record_snapshot(s, metrics: dict) -> None:
-    """Record a real metric snapshot at most once per SNAPSHOT_MIN_INTERVAL_S."""
-    last = s.execute(select(func.max(models.MetricSnapshot.ts))).scalar_one()
-    if last is not None and (utcnow() - last.replace(tzinfo=timezone.utc)).total_seconds() < SNAPSHOT_MIN_INTERVAL_S:
-        return
-    s.add(
-        models.MetricSnapshot(
-            entities=metrics["entities"],
-            vulnerabilities=metrics["vulnerabilities"],
-            campaigns=metrics["campaigns"],
-            recent_updates_24h=metrics["recent_updates_24h"],
+def _maybe_record_snapshot(s, metrics: dict, extra: dict | None = None) -> None:
+    """Record a real snapshot at most once per SNAPSHOT_MIN_INTERVAL_S."""
+    if extra is None:
+        last = s.execute(select(func.max(models.MetricSnapshot.ts))).scalar_one()
+        if last is not None and (utcnow() - _aware(last)).total_seconds() < SNAPSHOT_MIN_INTERVAL_S:
+            return
+        s.add(
+            models.MetricSnapshot(
+                entities=metrics["entities"],
+                vulnerabilities=metrics["vulnerabilities"],
+                campaigns=metrics["campaigns"],
+                recent_updates_24h=metrics["recent_updates_24h"],
+            )
         )
-    )
+    else:
+        last = s.execute(select(func.max(models.BrokerSnapshot.ts))).scalar_one()
+        if last is not None and (utcnow() - _aware(last)).total_seconds() < SNAPSHOT_MIN_INTERVAL_S:
+            return
+        s.add(models.BrokerSnapshot(**extra))
     s.commit()
 
 
@@ -279,15 +337,150 @@ def _activity(s, limit: int) -> list[dict]:
         .all()
     )
     return [
-        {
-            "id": r.id,
-            "ts": _iso(r.ts),
-            "level": r.level,
-            "source": r.source,
-            "message": r.message,
-        }
+        {"id": r.id, "ts": _iso(r.ts), "level": r.level, "source": r.source, "message": r.message}
         for r in rows
     ]
+
+
+def _alert_dict(a: models.Alert) -> dict:
+    return {
+        "id": a.id,
+        "rule": a.rule,
+        "component_key": a.component_key,
+        "severity": a.severity,
+        "status": a.status,
+        "message": a.message,
+        "first_seen": _iso(a.first_seen),
+        "last_seen": _iso(a.last_seen),
+        "resolved_at": _iso(a.resolved_at),
+        "acked_at": _iso(a.acked_at),
+        "acked_by": a.acked_by,
+        "occurrences": a.occurrences or 0,
+    }
+
+
+def evaluate_alerts() -> dict:
+    """Evaluate alert rules against REAL check results.
+
+    Rules (thresholds via env):
+    - component_down (critical) / component_degraded (warning), per service
+    - database_slow (warning): DB latency > OPS_DB_LATENCY_WARN_MS (1000)
+    - worker_stalled (warning): heartbeat older than OPS_WORKER_STALL_S (120)
+    - task_failures (warning): >= OPS_TASK_FAIL_THRESHOLD (5) failed runs/hour
+    - queue_backlog (warning): messages_ready > OPS_QUEUE_BACKLOG_THRESHOLD (1000)
+
+    Open alerts are deduplicated by (rule, component_key): updated in place
+    (occurrences+1). Alerts whose condition cleared are marked resolved and
+    kept for history.
+    """
+    with SessionLocal() as s:
+        services = _service_components(s)
+        now = utcnow()
+        firing: list[tuple[str, str, str, str]] = []
+        for svc in services:
+            if svc["status"] == "down":
+                firing.append(("component_down", svc["key"], "critical", f"{svc['name']} is DOWN: {svc['detail']}"))
+            elif svc["status"] == "degraded":
+                firing.append(("component_degraded", svc["key"], "warning", f"{svc['name']} is degraded: {svc['detail']}"))
+        db = next((x for x in services if x["key"] == "database"), None)
+        if db and db["status"] == "ok":
+            lat = (db.get("check") or {}).get("latency_ms")
+            if lat is not None and lat > float(os.getenv("OPS_DB_LATENCY_WARN_MS", "1000")):
+                firing.append(("database_slow", "database", "warning", f"database latency {lat} ms exceeds threshold"))
+        stall_s = worker_stall_threshold_s()
+        for w in _worker_rows(s):
+            if w["age_s"] is not None and w["age_s"] > stall_s:
+                firing.append(
+                    ("worker_stalled", w["worker"], "warning", f"worker '{w['worker']}' heartbeat stale: {int(w['age_s'])}s > {int(stall_s)}s")
+                )
+        fail_thr = int(os.getenv("OPS_TASK_FAIL_THRESHOLD", "5"))
+        cutoff1h = utcnow() - timedelta(hours=1)
+        failed = s.execute(
+            select(func.count(models.TaskRun.id)).where(
+                models.TaskRun.status == "failed", models.TaskRun.created_at >= cutoff1h
+            )
+        ).scalar_one()
+        if failed >= fail_thr:
+            firing.append(("task_failures", "", "warning", f"{int(failed)} failed task runs in the last hour (threshold {fail_thr})"))
+        backlog_thr = int(os.getenv("OPS_QUEUE_BACKLOG_THRESHOLD", "1000"))
+        mq = next((x for x in services if x["key"] == "rabbitmq"), None)
+        if mq and mq["status"] == "ok":
+            mr = (mq.get("check") or {}).get("messages_ready")
+            if mr is not None and mr > backlog_thr:
+                firing.append(("queue_backlog", "rabbitmq", "warning", f"{mr} ready messages exceed backlog threshold {backlog_thr}"))
+
+        open_alerts = (
+            s.execute(select(models.Alert).where(models.Alert.status.in_(["active", "acknowledged"])))
+            .scalars()
+            .all()
+        )
+        firing_keys = {(r, c) for (r, c, _, _) in firing}
+        for (rule, ck, sev, msg) in firing:
+            existing = next((a for a in open_alerts if (a.rule, a.component_key or "") == (rule, ck)), None)
+            if existing is not None:
+                existing.last_seen = now
+                existing.occurrences = (existing.occurrences or 1) + 1
+                existing.message = msg
+                existing.severity = sev
+            else:
+                s.add(
+                    models.Alert(
+                        rule=rule,
+                        component_key=ck or None,
+                        severity=sev,
+                        status="active",
+                        message=msg,
+                        first_seen=now,
+                        last_seen=now,
+                        occurrences=1,
+                    )
+                )
+                record_event("warning", "alerts", f"alert raised [{sev}] {rule} {ck or '-'}: {msg}", s=s)
+        for a in open_alerts:
+            if (a.rule, a.component_key or "") not in firing_keys:
+                a.status = "resolved"
+                a.resolved_at = now
+                record_event("info", "alerts", f"alert resolved: {a.rule} {a.component_key or '-'}", s=s)
+        s.commit()
+        return {"firing": len(firing)}
+
+
+def build_alerts(state: str = "active", limit: int = 100) -> list[dict]:
+    with SessionLocal() as s:
+        q = select(models.Alert)
+        if state != "all":
+            q = q.where(models.Alert.status == state)
+        rows = s.execute(q.order_by(models.Alert.last_seen.desc(), models.Alert.id.desc()).limit(limit)).scalars().all()
+        return [_alert_dict(a) for a in rows]
+
+
+def ack_alert(alert_id: int, acked_by: str | None):
+    with SessionLocal() as s:
+        a = s.get(models.Alert, alert_id)
+        if a is None:
+            return None
+        if a.status == "resolved":
+            return "conflict"
+        a.status = "acknowledged"
+        a.acked_at = utcnow()
+        a.acked_by = acked_by
+        record_event("info", "alerts", f"alert #{a.id} acknowledged by {acked_by or 'unknown'}", s=s)
+        s.commit()
+        return {"id": a.id, "status": a.status}
+
+
+def resolve_alert(alert_id: int):
+    with SessionLocal() as s:
+        a = s.get(models.Alert, alert_id)
+        if a is None:
+            return None
+        if a.status == "resolved":
+            return "conflict"
+        a.status = "resolved"
+        a.resolved_at = utcnow()
+        record_event("info", "alerts", f"alert #{a.id} manually resolved", s=s)
+        s.commit()
+        return {"id": a.id, "status": a.status}
 
 
 def build_overview(limit: int = 50) -> dict:
@@ -296,7 +489,22 @@ def build_overview(limit: int = 50) -> dict:
         modules = _module_rows(s)
         metrics = _metrics(s)
         _maybe_record_snapshot(s, metrics)
+        mq = next((x for x in services if x["key"] == "rabbitmq"), None)
+        if mq and mq["status"] == "ok":
+            c = mq.get("check") or {}
+            _maybe_record_snapshot(
+                s,
+                metrics,
+                extra={
+                    "messages_ready": c.get("messages_ready"),
+                    "messages_unacknowledged": c.get("messages_unacknowledged"),
+                    "queues": c.get("queues"),
+                    "consumers": c.get("consumers"),
+                    "dead_letter_queues": c.get("dead_letter_queues"),
+                },
+            )
         activity = _activity(s, limit)
+    evaluate_alerts()
     overall = compute_overall([svc["status"] for svc in services])
     return {
         "generated_at": utcnow().isoformat(),
@@ -314,8 +522,13 @@ def build_overview_cached() -> dict:
     now = time.monotonic()
     with _cache_lock:
         if _overview_cache["data"] is not None and now - _overview_cache["ts"] < OVERVIEW_CACHE_TTL_S:
-            return _overview_cache["data"]
+            data = dict(_overview_cache["data"])
+            data["cached"] = True
+            data["cache_age_s"] = round(now - _overview_cache["ts"], 2)
+            return data
         data = build_overview()
+        data["cached"] = False
+        data["cache_age_s"] = 0.0
         _overview_cache["ts"] = now
         _overview_cache["data"] = data
         return data
@@ -344,7 +557,7 @@ def build_history(hours: int) -> list[dict]:
         rows = (
             s.execute(
                 select(models.MetricSnapshot)
-                .where(models.MetricSnapshot.ts >= cutoff.replace(tzinfo=None))
+                .where(models.MetricSnapshot.ts >= cutoff)
                 .order_by(models.MetricSnapshot.ts)
             )
             .scalars()
@@ -362,6 +575,31 @@ def build_history(hours: int) -> list[dict]:
         ]
 
 
+def build_broker_history(hours: int) -> list[dict]:
+    cutoff = utcnow() - timedelta(hours=hours)
+    with SessionLocal() as s:
+        rows = (
+            s.execute(
+                select(models.BrokerSnapshot)
+                .where(models.BrokerSnapshot.ts >= cutoff)
+                .order_by(models.BrokerSnapshot.ts)
+            )
+            .scalars()
+            .all()
+        )
+        return [
+            {
+                "ts": _iso(r.ts),
+                "messages_ready": r.messages_ready,
+                "messages_unacknowledged": r.messages_unacknowledged,
+                "queues": r.queues,
+                "consumers": r.consumers,
+                "dead_letter_queues": r.dead_letter_queues,
+            }
+            for r in rows
+        ]
+
+
 def build_dependencies() -> dict:
     """Service dependency graph. Nodes carry live statuses; edges are the
     declared dependencies of the operations API."""
@@ -372,7 +610,7 @@ def build_dependencies() -> dict:
         {"from": "api", "to": "database", "label": "SQL queries"},
         {"from": "api", "to": "rabbitmq", "label": "task queue (broker check only)"},
         {"from": "api", "to": "platform_api", "label": "platform integration API"},
-        {"from": "api", "to": "workers", "label": "task run reports"},
+        {"from": "api", "to": "workers", "label": "heartbeats + task run reports"},
     ]
     edges = [e for e in edges if e["from"] in keys and e["to"] in keys]
     return {"nodes": nodes, "edges": edges}
@@ -381,7 +619,7 @@ def build_dependencies() -> dict:
 def build_task_stats(hours: int) -> dict:
     cutoff = utcnow() - timedelta(hours=hours)
     with SessionLocal() as s:
-        base = select(models.TaskRun).where(models.TaskRun.created_at >= cutoff.replace(tzinfo=None))
+        base = select(models.TaskRun).where(models.TaskRun.created_at >= cutoff)
         completed = s.execute(base.where(models.TaskRun.status == "success")).scalars().all()
         failed = s.execute(base.where(models.TaskRun.status == "failed")).scalars().all()
         pending = s.execute(base.where(models.TaskRun.status == "running")).scalars().all()
@@ -413,6 +651,62 @@ def record_task_run(payload: dict) -> int:
         s.add(run)
         s.commit()
         return int(run.id)
+
+
+def post_heartbeat(worker: str, details: str = "") -> bool:
+    """Upsert a real worker heartbeat. Returns True if the worker is new."""
+    with SessionLocal() as s:
+        row = s.execute(
+            select(models.WorkerHeartbeat).where(models.WorkerHeartbeat.worker == worker)
+        ).scalar_one_or_none()
+        if row is None:
+            s.add(models.WorkerHeartbeat(worker=worker, last_seen=utcnow(), details=details))
+            s.commit()
+            record_event("info", "workers", f"worker registered via heartbeat: {worker}")
+            return True
+        row.last_seen = utcnow()
+        row.details = details
+        s.commit()
+        return False
+
+
+def build_workers() -> dict:
+    stall_s = worker_stall_threshold_s()
+    with SessionLocal() as s:
+        workers = _worker_rows(s)
+    for w in workers:
+        w["stalled"] = w["age_s"] is not None and w["age_s"] > stall_s
+    return {"stall_threshold_s": stall_s, "workers": workers}
+
+
+def build_system() -> dict:
+    """REAL process-level resource metrics for THIS API process
+    (resource.getrusage / os.times — no fabricated values)."""
+    ru = resource.getrusage(resource.RUSAGE_SELF)
+    cpu = os.times()
+    try:
+        threads = len(os.listdir("/proc/self/task"))
+    except Exception:  # noqa: BLE001
+        threads = None
+    uptime = None
+    try:
+        from app.main import _STARTED_TS
+
+        uptime = round(time.time() - _STARTED_TS, 1)
+    except Exception:  # noqa: BLE001
+        pass
+    return {
+        "process": {
+            "pid": os.getpid(),
+            "rss_mb": round(ru.ru_maxrss / 1024, 1),  # KiB on Linux
+            "cpu_user_s": round(cpu.user, 2),
+            "cpu_system_s": round(cpu.system, 2),
+            "threads": threads,
+            "uptime_s": uptime,
+        },
+        "python": sys.version.split()[0],
+        "database": engine.url.render_as_string(hide_password=True),
+    }
 
 
 def write_token_required() -> str | None:

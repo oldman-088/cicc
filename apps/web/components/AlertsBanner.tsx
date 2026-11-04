@@ -2,13 +2,13 @@
 
 import StatusBadge from "./StatusBadge";
 import { useLocale } from "../lib/i18n";
-import type { Alert } from "../lib/types";
+import type { BannerAlert } from "../lib/types";
 
 export default function AlertsBanner({
   alerts,
   nameOf,
 }: {
-  alerts: Alert[];
+  alerts: BannerAlert[];
   nameOf: (key: string) => string;
 }) {
   const { t } = useLocale();

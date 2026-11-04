@@ -80,3 +80,53 @@ export interface Alert {
   name: string;
   detail: string;
 }
+
+export interface Alert {
+  id: number;
+  rule: string;
+  component_key: string | null;
+  severity: string;
+  status: string;
+  message: string;
+  first_seen: string | null;
+  last_seen: string | null;
+  resolved_at: string | null;
+  acked_at: string | null;
+  acked_by: string | null;
+  occurrences: number;
+}
+
+export interface WorkerInfo {
+  worker: string;
+  last_seen: string | null;
+  age_s: number | null;
+  stalled: boolean;
+  tasks_24h: number;
+  failed_24h: number;
+  details: string;
+}
+
+export interface WorkersResponse {
+  stall_threshold_s: number;
+  workers: WorkerInfo[];
+}
+
+export interface SystemMetrics {
+  process: {
+    pid: number;
+    rss_mb: number;
+    cpu_user_s: number;
+    cpu_system_s: number;
+    threads: number | null;
+    uptime_s: number | null;
+  };
+  python: string;
+  database: string;
+}
+
+export interface BannerAlert {
+  key: string;
+  status: string;
+  name: string;
+  detail: string;
+}

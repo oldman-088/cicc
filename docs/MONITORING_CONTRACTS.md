@@ -50,6 +50,40 @@ ComponentInfo schema:
 Overview adds: `{generated_at, overall_status, metrics, activity, data_source}`
 where `data_source` is always `live-ops-database`.
 
+
+## 3b. Milestone-3 endpoints (ops API)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/ops/alerts?state=active|acknowledged|resolved|all&limit=` | Evaluates rules, then lists. |
+| POST | `/api/v1/ops/alerts/{id}/ack` body `{acked_by?}` | 200 / 404 / 409 (resolved). |
+| POST | `/api/v1/ops/alerts/{id}/resolve` | 200 / 404 / 409. |
+| GET | `/api/v1/ops/workers` | Real heartbeats + per-worker 24h task stats + stalled flag. |
+| POST | `/api/v1/ops/workers/heartbeat` body `{worker, details?}` | Write-token gated like /tasks. Local worker liveness ONLY. |
+| GET | `/api/v1/ops/broker/history?hours=` | Real broker-total snapshots (recorded only on successful checks). |
+| GET | `/api/v1/ops/system` | Real process metrics (RSS/CPU/threads/pid/uptime) of the API process. |
+
+Alert rules (thresholds via env): `component_down` (critical),
+`component_degraded` (warning), `database_slow` (> `OPS_DB_LATENCY_WARN_MS`, 1000),
+`worker_stalled` (heartbeat older than `OPS_WORKER_STALL_S`, 120s),
+`task_failures` (>= `OPS_TASK_FAIL_THRESHOLD`, 5/hour),
+`queue_backlog` (`messages_ready` > `OPS_QUEUE_BACKLOG_THRESHOLD`, 1000).
+Dedup by (rule, component_key): open alerts update occurrences; cleared
+conditions resolve and keep history. Ack/resolve are audited in events.
+
+Circuit breakers: external probes (`rabbitmq`, `CICC_PLATFORM_API_URL`) are
+wrapped per-probe; after `OPS_CB_FAILURES` (3) consecutive failures the probe
+is skipped for `OPS_CB_COOLDOWN_S` (30s) and reports `status=unknown,
+stale=true` with the last observed status — never a false `ok`.
+
+Security additions: `CICC_OPS_READ_TOKEN` (optional Bearer gate on ops GETs;
+probes /live /ready /health stay open for orchestrators), 413 body limit
+(16 KiB) on writes, generic 500 (`internal_error`, details logged server-side
+only), host-only probe details, `hide_password` on DB URLs.
+
+PostgreSQL: integration-tested against a REAL disposable PostgreSQL
+(pgserver/pypi) — see apps/api/tests/test_postgres_integration.py.
+
 ## 4. Configuration (env)
 
 - `DATABASE_URL` — default `sqlite:///./data/ops.db`; PostgreSQL via

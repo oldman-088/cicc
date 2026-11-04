@@ -41,6 +41,16 @@ export default function ComponentsTable({
                 </td>
                 <td className="td max-w-md text-slate-400">
                   {r.detail || "—"}
+                  {r.check && Object.keys(r.check).length > 0 && (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-xs text-cyan-400 hover:text-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                        {t("diagnostics")}
+                      </summary>
+                      <pre className="mt-1 max-h-48 overflow-auto rounded-md border border-slate-800 bg-slate-950/80 p-2 text-xs text-slate-300">
+                        {JSON.stringify(r.check, null, 2)}
+                      </pre>
+                    </details>
+                  )}
                 </td>
                 <td className="td whitespace-nowrap text-slate-400">
                   {formatTime(r.last_check_at, locale)}
