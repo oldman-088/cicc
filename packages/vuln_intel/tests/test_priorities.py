@@ -361,3 +361,65 @@ class TestRankingPolicy:
         )
         results = rank_vulnerabilities([self._record()], policy=policy)
         assert results[0].policy == "tenant-a"
+
+
+class TestExplanationsReconcileWithTheScore:
+    """The reasons are part of the result, not decoration.
+
+    Every stated component figure must sum to the returned score.  A hidden
+    adjustment is indistinguishable from a scoring bug to anyone reading the
+    breakdown, which is exactly what this class of engine exists to prevent.
+    """
+
+    @staticmethod
+    def _record(**kwargs):
+        return NormalizedVulnerability(
+            cve=CveId.parse("CVE-2026-8888"),
+            origin=Origin.FIXTURE,
+            cvss=(CvssScore(version="3.1", base_score=9.8, severity=Severity.CRITICAL),),
+            modified=FIXED_NOW - timedelta(days=1),
+            sources=("nvd", "osv"),
+            **kwargs,
+        )
+
+    def _stated_points(self, result) -> float:
+        """Sum every 'x/y' component figure quoted in the reasons."""
+        import re
+
+        total = 0.0
+        for reason in result.reasons:
+            # Integers matter too: a full-budget award states "30/30".
+            match = re.search(r"(\d+(?:\.\d+)?)/\d+", reason)
+            if match:
+                total += float(match.group(1))
+        return total
+
+    def test_kev_record_reconciles(self) -> None:
+        result = score_vulnerability(
+            self._record(kev=True), context=PriorityContext(), now=FIXED_NOW
+        )
+        assert self._stated_points(result) == pytest.approx(result.score, abs=0.05)
+
+    def test_epss_with_confirmed_absence_from_kev_reconciles(self) -> None:
+        # This is the case that exposed the defect: "+2.0" was applied silently.
+        result = score_vulnerability(
+            self._record(kev=False, epss_score=0.72), context=PriorityContext(), now=FIXED_NOW
+        )
+        assert self._stated_points(result) == pytest.approx(result.score, abs=0.05)
+
+    def test_the_bonus_amount_is_named(self) -> None:
+        result = score_vulnerability(
+            self._record(kev=False, epss_score=0.72), context=PriorityContext(), now=FIXED_NOW
+        )
+        assert any("2.0 for a confirmed absence" in reason for reason in result.reasons)
+
+    def test_worked_example_in_the_methodology_document(self) -> None:
+        """SCORING_METHODOLOGY.md §7 quotes 77.7 and 64.1 for these inputs."""
+        kev = score_vulnerability(
+            self._record(kev=True), context=PriorityContext(), now=FIXED_NOW
+        )
+        epss = score_vulnerability(
+            self._record(kev=False, epss_score=0.72), context=PriorityContext(), now=FIXED_NOW
+        )
+        assert kev.score == pytest.approx(77.7, abs=0.05)
+        assert epss.score == pytest.approx(64.1, abs=0.05)

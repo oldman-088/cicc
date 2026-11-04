@@ -298,24 +298,40 @@ def _exploitation_points(
 ) -> tuple[float, bool, list[str]]:
     notes: list[str] = []
     if record.kev is True:
-        notes.append("listed in CISA KEV: confirmed exploitation in the wild")
+        # The figure is quoted even though it is the whole budget: a component line
+        # without a number cannot be reconciled against the total by a reader.
+        notes.append(
+            f"exploitation {policy.weights['exploitation']}/{policy.weights['exploitation']}: "
+            "listed in CISA KEV, confirmed exploitation in the wild"
+        )
         return float(policy.weights["exploitation"]), False, notes
     epss = record.epss_score
     if epss is not None:
         points = policy.epss_budget * float(epss)
+        kev_bonus = 0.0 if record.kev is None else 2.0
         notes.append(
-            f"EPSS forecast {float(epss):.3f} contributes {points:.1f}/"
-            f"{policy.weights['exploitation']} (prediction, not proof)"
+            f"exploitation {points + kev_bonus:.1f}/{policy.weights['exploitation']}: "
+            f"EPSS forecast {float(epss):.3f} (prediction, not proof)"
+            + (
+                ", plus 2.0 for a confirmed absence from CISA KEV"
+                if kev_bonus
+                else ""
+            )
         )
-        if record.kev is False:
-            notes.append("not in CISA KEV")
-            points += 2.0
-        return points, False, notes
+        # The bonus used to be added to the score while the explanation only said
+        # "not in CISA KEV", so summing the stated figures gave a total 2 points
+        # lower than the one returned.
+        return points + kev_bonus, False, notes
     if record.kev is False:
-        notes.append("not in CISA KEV and no EPSS score: exploitation unlikely but unproven")
-        return float(policy.weights["exploitation"]) * 0.4, False, notes
+        points = float(policy.weights["exploitation"]) * 0.4
+        notes.append(
+            f"exploitation {points:.1f}/{policy.weights['exploitation']}: "
+            "not in CISA KEV and no EPSS score, exploitation unlikely but unproven"
+        )
+        return points, False, notes
     notes.append(
-        "exploitation status unknown (KEV not consulted, no EPSS): neutral score assigned"
+        f"exploitation {_UNKNOWN_EXPLOITATION}/{policy.weights['exploitation']}: "
+        "status unknown (KEV not consulted, no EPSS), neutral score assigned"
     )
     return _UNKNOWN_EXPLOITATION, True, notes
 
@@ -326,15 +342,22 @@ def _confidence_points(
     sources = sorted(set(record.sources))
     if len(sources) >= 3:
         return float(policy.weights["confidence"]), [
-            f"confidence {policy.weights['confidence']}/5: corroborated by {len(sources)} sources"
+            f"confidence {policy.weights['confidence']}/"
+            f"{policy.weights['confidence']}: corroborated by {len(sources)} sources"
         ]
     if len(sources) == 2:
-        return policy.weights["confidence"] * 0.7, ["confidence 3.5/5: corroborated by 2 sources"]
+        return policy.weights["confidence"] * 0.7, [
+            f"confidence {policy.weights['confidence'] * 0.7:.1f}/"
+            f"{policy.weights['confidence']}: corroborated by 2 sources"
+        ]
     if len(sources) == 1:
         return policy.weights["confidence"] * 0.3, [
-            f"confidence 1.5/5: single source ({sources[0]})"
+            f"confidence {policy.weights['confidence'] * 0.3:.1f}/"
+            f"{policy.weights['confidence']}: single source ({sources[0]})"
         ]
-    return 0.0, ["confidence 0/5: no recorded source provenance"]
+    return 0.0, [
+        f"confidence 0.0/{policy.weights['confidence']}: no recorded source provenance"
+    ]
 
 
 def _recency_points(
@@ -348,11 +371,15 @@ def _recency_points(
         observed, now=now, fresh_within=context.recency_window, stale_after=context.recency_window * 4
     )
     if freshness.age is None:
-        return 0.0, freshness, ["no publication/modification timestamp: recency not scored"]
+        return 0.0, freshness, [
+            f"recency 0.0/{policy.weights['recency']}: no publication/modification "
+            "timestamp, not scored"
+        ]
     fraction = max(0.0, 1.0 - (freshness.age / (context.recency_window * 4)))
     points = policy.weights["recency"] * fraction
     return points, freshness, [
-        f"last updated {freshness.age.days}d ago ({freshness.bucket})"
+        f"recency {points:.1f}/{policy.weights['recency']}: last updated "
+        f"{freshness.age.days}d ago ({freshness.bucket})"
     ]
 
 
