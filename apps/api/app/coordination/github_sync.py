@@ -23,6 +23,8 @@ from . import registry, webhook
 
 API = "https://api.github.com"
 REPO = os.getenv("CICC_GH_REPO", "oldman-088/cicc")
+# ids must be URL-path-safe (no slashes)
+REPO_ID = REPO.replace("/", "-")
 
 
 def _headers() -> dict:
@@ -95,7 +97,7 @@ def sync(s) -> dict:
                 "labels": ["ci", "ops"], "payload": {"check_run": c},
                 "requires_approval": False, "priority": 2,
             }
-            delivery = f"api-ci-{REPO}-{c.get('html_url', '')}"
+            delivery = ("api-ci-" + REPO_ID + "-" + c.get("html_url", "")).replace("/", "-")
             if s.get(models.GitHubEvent, delivery) is not None:
                 continue  # already ingested
             s.add(models.GitHubEvent(delivery_id=delivery, event="check_run", action="completed",
@@ -110,7 +112,7 @@ def sync(s) -> dict:
                 registry.record_event(s, t.task_id, "created_via_api_sync", c.get("html_url", ""))
     # open PRs -> informational tasks only if labeled for coordination
     for p in data.get("open_prs") or []:
-        delivery = f"api-pr-{REPO}-{p['number']}"
+        delivery = f"api-pr-{REPO_ID}-{p['number']}"
         exists = s.get(models.GitHubEvent, delivery)
         if exists:
             continue

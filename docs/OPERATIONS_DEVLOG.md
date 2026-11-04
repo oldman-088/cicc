@@ -81,3 +81,7 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - Fixed: check-runs 404 fallback to actions/runs; sync idempotency on CI path;
   dag route shadowing; CB reset ordering in live test.
 - API 112/112 (7 real-PG + 1 live GitHub), web 17/17 + tsc + build.
+
+- M8 follow-up fix (live-smoke caught): sync-derived task_ids contained '/'
+  from the repo slug, breaking path params — sanitized to REPO_ID; regression
+  test added. API 113/113.

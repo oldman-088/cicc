@@ -133,3 +133,16 @@ def test_github_live_probe_real_api(client):
     assert d["repo"] == "oldman-088/cicc"
     assert isinstance(d["open_prs"], list) and isinstance(d["check_runs"], list)
     assert any(p["number"] == 4 for p in d["open_prs"])  # PR #4 exists
+
+
+def test_sync_task_ids_are_url_safe(client, monkeypatch):
+    _fake_github(monkeypatch, prs=[{"number": 4, "title": "t", "head": {"ref": "b"},
+                                    "user": {"login": "u"}, "html_url": "https://x/pr/4"}])
+    client.post("/api/v1/coordination/github/sync")
+    tasks = client.get("/api/v1/coordination/tasks").json()["tasks"]
+    for t in tasks:
+        assert "/" not in t["task_id"]
+    # progress endpoint reachable with the slash-free id
+    tid = tasks[0]["task_id"]
+    r = client.post(f"/api/v1/coordination/tasks/{tid}/progress", json={"percent": 10})
+    assert r.status_code == 200
