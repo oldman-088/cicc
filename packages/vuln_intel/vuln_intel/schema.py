@@ -263,6 +263,12 @@ class NormalizedVulnerability:
     epss_score: float | None = None
     epss_percentile: float | None = None
     epss_model_date: str | None = None
+    #: CISA's published SSVC inputs, when a provider supplied them (NVD carries
+    #: ``cve.ssvc.ssvcV203[].ssvcData``).  Stored as the three provider-supplied
+    #: decision points only: the fourth (mission & well-being) is
+    #: stakeholder-specific and cannot come from a feed, so it is never invented
+    #: here.  ``None`` means the provider said nothing, never "no exploitation".
+    ssvc: tuple[tuple[str, str], ...] = ()
     provenance: tuple[ProvenanceRecord, ...] = ()
     sources: tuple[str, ...] = ()
     conflict_notes: tuple[str, ...] = ()

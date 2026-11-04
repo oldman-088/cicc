@@ -366,6 +366,7 @@ class NvdConnector:
                     notes.append(note)
 
         notes.extend(_status_notes(cve))
+        ssvc_options = _ssvc_inputs(cve, notes)
 
         severity = Severity.UNKNOWN
         for key in ("cvssMetricV31", "cvssMetricV30"):
@@ -408,6 +409,7 @@ class NvdConnector:
             modified=parse_timestamp(cve.get("lastModified"), field_name="lastModified"),
             cvss=tuple(cvss_scores),
             severity=severity,
+            ssvc=ssvc_options,
             cwe=tuple(cwe),
             references=tuple(references),
             provenance=(
@@ -432,6 +434,52 @@ class NvdConnector:
 _UNRESOLVED_STATUSES = frozenset(
     {"Awaiting Analysis", "Undergoing Analysis", "Received", "Rejected"}
 )
+
+
+def _ssvc_inputs(cve: Mapping[str, Any], notes: list[str]) -> tuple[tuple[str, str], ...]:
+    """Read CISA's published SSVC decision points out of an NVD record.
+
+    NVD nests them as ``ssvc.ssvcV203[].ssvcData.options`` — a list of one-key
+    objects.  Only the three provider-supplied inputs are kept; mission & well-being
+    is stakeholder-specific and is deliberately never inferred here.
+
+    A record with SSVC data but no usable inputs is reported in ``notes`` rather
+    than silently ignored, because "CISA assessed this" and "CISA assessed this in
+    a shape we cannot read" are different facts.
+    """
+    ssvc = cve.get("ssvc")
+    if not isinstance(ssvc, Mapping):
+        return ()
+
+    # Pick the highest version block present, so a future ssvcV3 is preferred over
+    # ssvcV203 without needing a code change for every new version string.
+    blocks: list[tuple[str, Any]] = [
+        (key, value) for key, value in ssvc.items() if isinstance(key, str)
+    ]
+    for _, entries in sorted(blocks, key=lambda kv: kv[0], reverse=True):
+        for entry in mapping_list(entries, field_name="ssvc"):
+            data = entry.get("ssvcData")
+            if not isinstance(data, Mapping):
+                continue
+            options = data.get("options")
+            values: dict[str, str] = {}
+            for option in mapping_list(options, field_name="ssvcData.options"):
+                for key, value in option.items():
+                    name = str(key).strip().lower()
+                    if name == "technicalimpact":
+                        name = "technical_impact"
+                    if name in ("exploitation", "automatable", "technical_impact") and isinstance(
+                        value, str
+                    ):
+                        values[name] = value.strip().lower()
+            if values:
+                if data.get("role"):
+                    notes.append(f"SSVC assessment role: {data.get('role')}")
+                return tuple(sorted(values.items()))
+            notes.append(
+                "NVD supplied an SSVC block with no usable decision points; ignored"
+            )
+    return ()
 
 
 def _status_notes(cve: Mapping[str, Any]) -> list[str]:

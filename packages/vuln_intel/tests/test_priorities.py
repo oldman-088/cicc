@@ -10,6 +10,7 @@ from vuln_intel.errors import ValidationError
 from vuln_intel.priorities import (
     WEIGHTS,
     PriorityContext,
+    RankingPolicy,
     rank_vulnerabilities,
     score_vulnerability,
 )
@@ -423,3 +424,131 @@ class TestExplanationsReconcileWithTheScore:
         )
         assert kev.score == pytest.approx(77.7, abs=0.05)
         assert epss.score == pytest.approx(64.1, abs=0.05)
+
+
+class TestSsvcInScoring:
+    """CISA SSVC's three provider inputs plus local mission context, in the score.
+
+    The rules worth protecting: an absent input must never be read as a benign one,
+    the provider's own assessment must beat a local inference, and the exposure
+    nudge must be small and bounded because it is evidence about the *flaw*, not
+    about our estate.
+    """
+
+    @staticmethod
+    def _record(**kwargs):
+        base = dict(
+            cve=CveId.parse("CVE-2026-7000"),
+            origin=Origin.FIXTURE,
+            cvss=(CvssScore(version="3.1", base_score=9.8, severity=Severity.CRITICAL),),
+            modified=FIXED_NOW - timedelta(days=1),
+            sources=("nvd",),
+        )
+        base.update(kwargs)
+        return NormalizedVulnerability(**base)
+
+    def _score(self, record, **policy_kwargs):
+        return score_vulnerability(
+            record,
+            context=PriorityContext(),
+            now=FIXED_NOW,
+            policy=RankingPolicy(**policy_kwargs) if policy_kwargs else None,
+        )
+
+    def test_no_ssvc_data_adds_no_reason_and_no_points(self) -> None:
+        result = self._score(self._record())
+        assert not any("SSVC" in r for r in result.reasons)
+        assert result.components["exposure"] == 0.0
+
+    def test_incomplete_ssvc_is_reported_as_not_evaluable(self) -> None:
+        """Exploitation alone cannot drive the tree; saying nothing would hide that."""
+        result = self._score(
+            self._record(ssvc=(("exploitation", "active"),))
+        )
+        assert any("not evaluable" in r for r in result.reasons)
+        assert result.components["exposure"] == 0.0
+
+    def test_full_provider_inputs_yield_a_decision_range(self) -> None:
+        result = self._score(
+            self._record(
+                ssvc=(
+                    ("automatable", "yes"),
+                    ("exploitation", "active"),
+                    ("technical_impact", "total"),
+                )
+            )
+        )
+        note = next(r for r in result.reasons if r.startswith("CISA SSVC"))
+        assert "range" in note
+        assert "stakeholder-specific" in note
+
+    def test_supplied_mission_context_resolves_to_one_decision(self) -> None:
+        result = score_vulnerability(
+            self._record(
+                ssvc=(
+                    ("automatable", "yes"),
+                    ("exploitation", "active"),
+                    ("technical_impact", "total"),
+                )
+            ),
+            context=PriorityContext(mission_prevalence="essential",
+                                    public_wellbeing="irreversible"),
+            now=FIXED_NOW,
+        )
+        note = next(r for r in result.reasons if r.startswith("CISA SSVC"))
+        assert "Act" in note
+        assert "range" not in note
+
+    def test_kev_membership_supplies_active_exploitation(self) -> None:
+        """KEV asserts active exploitation, so it can stand in for that input."""
+        result = self._score(
+            self._record(
+                kev=True,
+                ssvc=(("automatable", "no"), ("technical_impact", "partial")),
+            )
+        )
+        note = next(r for r in result.reasons if r.startswith("CISA SSVC"))
+        assert "active" in note
+
+    def test_epss_alone_does_not_supply_exploitation(self) -> None:
+        """A forecast is not evidence; it must not move a decision input."""
+        result = self._score(
+            self._record(
+                epss_score=0.99,
+                ssvc=(("automatable", "yes"), ("technical_impact", "total")),
+            )
+        )
+        assert any("not evaluable" in r for r in result.reasons)
+
+    def test_automatable_earns_a_bounded_share_of_exposure(self) -> None:
+        baseline = self._score(
+            self._record(
+                ssvc=(("exploitation", "active"), ("technical_impact", "total"),
+                      ("automatable", "no"))
+            )
+        )
+        automatable = self._score(
+            self._record(
+                ssvc=(("exploitation", "active"), ("technical_impact", "total"),
+                      ("automatable", "yes"))
+            )
+        )
+        assert automatable.components["exposure"] > baseline.components["exposure"]
+        # Bounded: 40% of the exposure budget, never the whole of it.
+        assert automatable.components["exposure"] == pytest.approx(
+            automatable.max_components["exposure"] * 0.4
+        )
+
+    def test_exploitability_reason_is_still_stated(self) -> None:
+        """Every component that moves the score must explain itself."""
+        result = self._score(
+            self._record(
+                ssvc=(("exploitation", "active"), ("technical_impact", "total"),
+                      ("automatable", "yes"))
+            )
+        )
+        assert any(r.startswith("CISA SSVC") for r in result.reasons)
+
+    def test_bad_context_values_fail_at_construction(self) -> None:
+        with pytest.raises(ValidationError):
+            PriorityContext(mission_prevalence="enormous", public_wellbeing="minimal")

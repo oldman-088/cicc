@@ -45,6 +45,12 @@ from .schema import (
     compute_freshness,
     utcnow,
 )
+from .ssvc import (
+    CisaAutomatable,
+    CisaExploitation,
+    assess_ssvc,
+    mission_wellbeing,
+)
 
 __all__ = [
     "WEIGHTS",
@@ -108,6 +114,10 @@ class RankingPolicy:
     #: the provisional policy encodes (20 of 30). Requiring every caller to restate
     #: it invites the inconsistency the check below rejects.
     epss_max: float | None = None
+    #: CISA's stakeholder-specific SSVC input, which no feed can supply.  When set,
+    #: SSVC produces a single decision instead of a range.  ``None`` is the honest
+    #: default: mission consequence depends on the deployment, not on the CVE.
+    mission_wellbeing: str | None = None
     name: str = "provisional-40/30/10/10/5/5"
     #: True only when an owner has approved these weights as organizational policy.
     approved: bool = False
@@ -208,12 +218,24 @@ class PriorityContext:
     business_criticality: float | None = None
     #: How long a record counts as "recently updated" for the recency component.
     recency_window: timedelta = timedelta(days=30)
+    #: CISA SSVC's two stakeholder-specific inputs.  Supplying both lets SSVC
+    #: resolve to a single decision instead of a range, which is the only way this
+    #: package can state an action rather than a floor and a ceiling.  Left
+    #: ``None`` by default because they are facts about a deployment, not about a
+    #: CVE, and guessing them would spend emergency capacity on an assumption.
+    mission_prevalence: str | None = None
+    public_wellbeing: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("exposure", "business_criticality"):
             value = getattr(self, name)
             if value is not None and not 0.0 <= float(value) <= 1.0:
                 raise ValidationError(f"{name} must be within 0.0-1.0", field=name)
+        # Validated here rather than at scoring time: a typo in a deployment's
+        # configuration should fail when it is configured, not silently downgrade
+        # every SSVC decision in production.
+        if self.mission_prevalence is not None:
+            mission_wellbeing(self.mission_prevalence, self.public_wellbeing or "minimal")
 
 
 @dataclass(frozen=True)
@@ -262,6 +284,97 @@ def _band(score: float) -> str:
         if score >= threshold:
             return name
     return "low"
+
+
+#: Share of the exposure budget an SSVC `automatable: yes` may earn.  Small on
+#: purpose: it is evidence about the *flaw*, not about our estate.
+_SSVC_EXPOSURE_SHARE = 0.4
+
+
+def _ssvc_points(
+    record: NormalizedVulnerability, policy: RankingPolicy, context: PriorityContext
+) -> tuple[str | None, float]:
+    """Derive CISA's SSVC decision from published inputs plus local context.
+
+    Returns ``(reason, exposure_nudge)``.  The reason is ``None`` when SSVC cannot
+    be evaluated; a policy that silently substituted ``Track`` for "unknown" would
+    make an unassessed finding look benign.
+
+    Exploitation is taken from CISA's own assessment when present.  KEV membership
+    is used as a fallback for *active* exploitation, because that is exactly what
+    KEV asserts.  Nothing else is inferred: an absent EPSS score is not evidence of
+    anything, so it never moves this input.
+    """
+    inputs = dict(record.ssvc)
+    exploitation = inputs.get("exploitation")
+    automatable = inputs.get("automatable")
+    technical_impact = inputs.get("technical_impact")
+    if exploitation is None and record.kev is True:
+        exploitation = CisaExploitation.ACTIVE.value
+    if exploitation is None:
+        # Silent omission here would look identical to "SSVC says nothing to do".
+        # Say which input is absent so the gap is visible in the report.
+        if automatable is not None or technical_impact is not None:
+            return (
+                "CISA SSVC not evaluable: exploitation is not supplied and the "
+                "record is not in CISA KEV",
+                0.0,
+            )
+        return None, 0.0
+
+    # The stakeholder input: from the policy if the deployment declared one,
+    # otherwise from the per-record PriorityContext (which knows the asset).
+    stakeholder = policy.mission_wellbeing
+    if stakeholder is None and context.mission_prevalence and context.public_wellbeing:
+        try:
+            stakeholder = mission_wellbeing(
+                context.mission_prevalence, context.public_wellbeing
+            ).value
+        except Exception:  # a bad context value must not sink the whole ranking
+            stakeholder = None
+
+    assessment = assess_ssvc(
+        exploitation=exploitation,
+        automatable=automatable,
+        technical_impact=technical_impact,
+        mission_wellbeing=stakeholder,
+        source="nvd" if inputs else "kev",
+    )
+    if assessment is None:
+        missing = [
+            name
+            for name, value in (
+                ("automatable", automatable),
+                ("technical_impact", technical_impact),
+            )
+            if value is None
+        ]
+        return (
+            f"CISA SSVC not evaluable: {', '.join(missing)} not supplied by the provider",
+            0.0,
+        )
+
+    nudge = (
+        float(policy.weights["exposure"]) * _SSVC_EXPOSURE_SHARE
+        if automatable == CisaAutomatable.YES.value
+        else 0.0
+    )
+    if assessment.decision is not None:
+        return (
+            f"CISA SSVC {assessment.decision.label} "
+            f"({assessment.exploitation.value}/{assessment.automatable.value}/"
+            f"{assessment.technical_impact.value}, mission & well-being "
+            f"{assessment.mission_wellbeing.value if assessment.mission_wellbeing else '?'})",
+            nudge,
+        )
+    return (
+        "CISA SSVC range "
+        f"{assessment.floor.label}..{assessment.ceiling.label} "
+        f"({assessment.exploitation.value}/{assessment.automatable.value}/"
+        f"{assessment.technical_impact.value}; mission & well-being is "
+        "stakeholder-specific and was not supplied)",
+        nudge,
+    )
 
 
 def _severity_points(
@@ -453,6 +566,19 @@ def score_vulnerability(
     if record.conflict_notes:
         warnings.append(
             "source disagreements present: " + "; ".join(record.conflict_notes[:3])
+        )
+
+    # -- SSVC: turn the combined evidence into an action, not just a number -----
+    ssvc_note, exposure_nudge = _ssvc_points(record, policy, context)
+    if ssvc_note is not None:
+        reasons.append(ssvc_note)
+    if exposure_nudge:
+        # SSVC's Automatable/Exploitation inputs are provider assertions about the
+        # flaw, which is the closest thing to reachability evidence available
+        # without an inventory.  It is a small, bounded share of the exposure
+        # budget and it never claims to be asset context.
+        components["exposure"] = min(
+            float(policy.weights["exposure"]), components["exposure"] + exposure_nudge
         )
 
     total = sum(components.values())
