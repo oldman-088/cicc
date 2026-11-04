@@ -165,3 +165,57 @@ class TestIntelligenceLayerScaling:
             assess_affected(packages, ecosystem="npm", name="pkg", version="1.0.0")
         elapsed = time.perf_counter() - started
         assert elapsed < 1.0, f"2000 verdicts took {elapsed:.3f}s"
+
+
+class TestBenchmarkHarness:
+    """The benchmark module produces numbers that get pasted into operations docs.
+
+    A benchmark that silently measures the wrong thing is worse than no benchmark:
+    it becomes a planning input. `rank_5000` originally built 5,000 records inside
+    the timed loop, so dividing by 5,000 reported object construction as ranking
+    throughput.
+    """
+
+    def test_report_is_json_safe_and_complete(self):
+        import json
+
+        from vuln_intel.benchmark import run_all
+
+        report = run_all()
+        json.dumps(report)
+        assert report["results"]
+        for item in report["results"]:
+            assert item["median_ms"] > 0
+            assert item["per_second"] is not None
+
+    def test_environment_is_recorded(self):
+        """A number without its environment is a rumour."""
+        from vuln_intel.benchmark import environment
+
+        env = environment()
+        assert env["python"]
+        assert env["platform"]
+        assert env["note"]
+
+    def test_methodology_is_stated(self):
+        from vuln_intel.benchmark import METHODOLOGY
+
+        for key in ("timing", "reported", "data", "caveat"):
+            assert METHODOLOGY[key]
+
+    def test_derived_throughput_uses_a_prebuilt_input(self):
+        """Deriving throughput from a benchmark that constructs its own data would
+        report construction cost as ranking cost."""
+        from vuln_intel.benchmark import run_all
+
+        report = run_all()
+        names = {item["name"] for item in report["results"]}
+        assert "rank_prebuilt_5000" in names
+        assert report["derived"]["rank_records_per_second"] > 0
+
+    def test_every_benchmark_reports_a_spread(self):
+        """Spread is how a reader knows whether to trust a single number."""
+        from vuln_intel.benchmark import run_all
+
+        for item in run_all()["results"]:
+            assert item["spread_pct"] is not None
