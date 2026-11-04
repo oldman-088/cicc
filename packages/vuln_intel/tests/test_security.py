@@ -173,3 +173,71 @@ def test_sanitize_is_applied_to_every_error_message() -> None:
     error = SourceResponseError(f"failed https://api.example/v1?apiKey={SECRET}&x=1")
     assert SECRET not in str(error)
     assert sanitize(error) == sanitize(str(error))
+
+
+class TestAssembledConnectorSecrets:
+    """The assembly layer is the one place the key stops being masked.
+
+    A key that reaches a URL, a query parameter, an exception message or a repr is
+    a credential disclosure: URLs and params land in provider logs, and exception
+    text lands in ours.
+    """
+
+    KEY = "SUPERSECRET-NVD-KEY-0123456789"
+
+    def _bundle(self, script):
+        from tests.conftest import FakeTransport
+        from vuln_intel.assembly import build_connectors
+        from vuln_intel.config import Settings
+
+        transport = FakeTransport(script=script)
+        settings = Settings.from_env(
+            {
+                "CICC_VULN_LIVE_COLLECTION": "true",
+                "CICC_VULN_NVD_API_KEY": self.KEY,
+                "CICC_VULN_NVD_MAX_PAGES": "1",
+            },
+            strict=True,
+        )
+        return build_connectors(settings, transport_factory=lambda: transport), transport
+
+    def test_key_travels_in_a_header_only(self):
+        from tests.conftest import response
+
+        empty = {
+            "resultsPerPage": 0,
+            "startIndex": 0,
+            "totalResults": 0,
+            "vulnerabilities": [],
+        }
+        bundle, transport = self._bundle([response(empty)])
+        from vuln_intel.assembly import nvd_collector
+
+        nvd_collector(bundle.nvd)()
+        assert transport.calls, "expected at least one request"
+        for call in transport.calls:
+            assert self.KEY not in call.get("url", "")
+            assert "apiKey" not in repr(call.get("params") or {})
+        assert any(
+            call.get("headers", {}).get("apiKey") == self.KEY for call in transport.calls
+        )
+
+    def test_provider_error_text_does_not_echo_the_key(self):
+        from tests.conftest import response
+
+        bundle, _transport = self._bundle(
+            [response({"message": f"forbidden {self.KEY}"}, status=403)]
+        )
+        from vuln_intel.assembly import nvd_collector
+
+        try:
+            nvd_collector(bundle.nvd)()
+        except Exception as exc:  # the collector must raise on a failed page
+            assert self.KEY not in str(exc)
+        else:  # pragma: no cover - the raise above is the expected path
+            raise AssertionError("a 403 must not be reported as an empty result")
+
+    def test_bundle_description_does_not_contain_the_key(self):
+        bundle, _transport = self._bundle([])
+        assert self.KEY not in repr(bundle.describe())
+        assert self.KEY not in repr(bundle)
