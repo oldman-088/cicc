@@ -30,17 +30,26 @@ flip ``LIVE_PROVIDER_AVAILABLE`` only when a real fetch has been recorded.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Mapping, Protocol, Sequence, runtime_checkable
 
-from ..errors import SourceResponseError, ValidationError
+from ..errors import (
+    SourceRateLimited,
+    SourceResponseError,
+    ValidationError,
+)
+from ..ratelimit import RateGate
+from ..retry import RetryPolicy, call_with_retry
 from ..schema import CveId, coerce_text, mapping_list, utcnow
+from ..transport import Transport
 
 __all__ = [
     "EPSS_API",
     "LIVE_PROVIDER_AVAILABLE",
     "EpssCache",
+    "EpssConnector",
     "EpssProvider",
     "EpssScore",
     "FixtureEpssProvider",
@@ -262,3 +271,106 @@ def parse_epss_response(
             origin=origin,
         )
     return scores
+
+
+#: Documents how many CVEs one request may ask for. The API accepts a
+#: comma-separated ``cve`` parameter; a bounded batch keeps the URL well inside
+#: provider and proxy limits rather than discovering the ceiling in production.
+MAX_CVES_PER_REQUEST = 100
+
+
+@dataclass
+class EpssConnector:
+    """Live-ish EPSS client over an injected transport.
+
+    Ship-with-caution design. The HTTP path is implemented and tested, but
+    :data:`LIVE_PROVIDER_AVAILABLE` stays ``False`` until an authorized live fetch
+    has actually succeeded and been recorded. Nothing in this class sets it, by
+    design: a module must not be able to certify itself.
+
+    Behaviour that matters more than the plumbing:
+
+    * a CVE with **no** EPSS record is absent from the result, not ``0.0`` — a
+      projected zero is the strongest possible claim of "not exploited";
+    * a non-OK envelope, a transport failure or a malformed row **raises**, so an
+      outage is never reported as "no scores for anything";
+    * batching is bounded and every CVE in a request is checked against the
+      response, so a score can never be attributed to the wrong identifier.
+    """
+
+    transport: Transport | None = None
+    retry: RetryPolicy = RetryPolicy()
+    gate: RateGate | None = None
+    timeout: float = 30.0
+    origin: str = "live"
+    sleep: Callable[[float], None] | None = None
+    max_cves_per_request: int = MAX_CVES_PER_REQUEST
+    name: str = "epss"
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.max_cves_per_request <= 1000:
+            raise ValidationError(
+                "max_cves_per_request must be within 1-1000", field="max_cves_per_request"
+            )
+        if self.gate is None:
+            self.gate = RateGate(
+                min_interval=0.0, clock=time.monotonic, sleep=self.sleep or time.sleep
+            )
+
+    def _headers(self) -> dict[str, str]:
+        return {"Accept": "application/json", "User-Agent": "CICC-vuln-intel/0.1"}
+
+    def fetch(self, cves: Sequence[CveId]) -> Mapping[str, EpssScore]:
+        """Return the scores FIRST actually published for ``cves``.
+
+        Absent keys mean "this CVE has no published EPSS score", which callers must
+        render as unknown rather than as zero risk.
+        """
+        if self.transport is None:
+            raise SourceResponseError(
+                "no transport configured for EPSS; scores are unavailable", source="epss"
+            )
+        wanted = list(dict.fromkeys(str(cve) for cve in cves))
+        if not wanted:
+            return {}
+
+        out: dict[str, EpssScore] = {}
+        for start in range(0, len(wanted), self.max_cves_per_request):
+            batch = wanted[start : start + self.max_cves_per_request]
+            out.update(self._fetch_batch(batch))
+        return out
+
+    def _fetch_batch(self, batch: Sequence[str]) -> Mapping[str, EpssScore]:
+        url = EPSS_API
+
+        def attempt() -> Mapping[str, EpssScore]:
+            assert self.gate is not None and self.transport is not None
+            self.gate.wait()
+            response = self.transport.get(
+                url,
+                params={"cve": ",".join(batch), "envelope": "true"},
+                headers=self._headers(),
+                timeout=self.timeout,
+            )
+            if response.status == 429:
+                raise SourceRateLimited(
+                    "EPSS rate limited", retry_after=None, status=429, source="epss"
+                )
+            if response.status != 200:
+                raise SourceResponseError(
+                    f"unexpected EPSS status {response.status}",
+                    status=response.status,
+                    source="epss",
+                )
+            body = response.json()
+            if not isinstance(body, Mapping):
+                raise SourceResponseError("EPSS body is not an object", source="epss")
+            return parse_epss_response(
+                body,
+                origin=self.origin,
+                requested=[CveId.parse(item) for item in batch],
+            )
+
+        return call_with_retry(
+            attempt, policy=self.retry, sleep=self.sleep or time.sleep
+        )

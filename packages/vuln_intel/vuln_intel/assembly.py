@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from .config import ENV_PREFIX, Secret, Settings
-from .connectors.epss import UnavailableEpssProvider
+from .connectors.epss import EpssConnector, UnavailableEpssProvider
 from .connectors.nvd import NvdConnector
 from .connectors.osv import OsvConnector
 from .errors import SourceError, SourceNotFound, SourceResponseError, ValidationError
@@ -46,7 +46,9 @@ class ConnectorBundle:
     nvd: NvdConnector
     osv: OsvConnector
     kev: KevConnector
-    epss: UnavailableEpssProvider
+    #: ``EpssConnector`` when EPSS is enabled and a live transport exists, else
+    #: ``UnavailableEpssProvider``, which raises rather than reporting zeros.
+    epss: EpssConnector | UnavailableEpssProvider
     kev_cache: CachedKevCatalog
     #: True only when a live transport was actually supplied.
     live: bool = False
@@ -63,7 +65,7 @@ class ConnectorBundle:
             "nvd_api_key": "configured" if self.nvd.api_key else "absent",
             "http_timeout": self.nvd.timeout,
             "kev_max_age_days": self.kev_cache.max_age.days,
-            "epss": "unavailable",
+            "epss": type(self.epss).__name__,
             "notes": list(self.notes),
         }
 
@@ -163,19 +165,35 @@ def build_connectors(
         origin=settings.origin.value,
     )
 
-    if settings.epss_enabled:
-        # Deliberately still unavailable: no live EPSS client exists, and returning
-        # zeros would be a false claim that exploitation is unlikely.
+    if settings.epss_enabled and live:
+        # The client exists and is tested, but it has never been verified against
+        # the real endpoint from this project. Building it is the host's call; the
+        # note keeps that distinction visible in logs.
+        epss_provider: EpssConnector | UnavailableEpssProvider = EpssConnector(
+            transport=_one("epss"),
+            timeout=settings.http_timeout,
+            sleep=sleep,
+            origin=settings.origin.value,
+        )
         notes.append(
-            "EPSS is enabled in configuration but no live client exists; provider "
+            "EPSS client enabled; FIRST publishes no SLA and the endpoint has NOT "
+            "been verified live by this project"
+        )
+    elif settings.epss_enabled:
+        # Enabled but collection is off: do not build a provider that cannot work.
+        epss_provider = UnavailableEpssProvider()
+        notes.append(
+            "EPSS is enabled in configuration but live collection is off; provider "
             "remains unavailable rather than reporting zero"
         )
+    else:
+        epss_provider = UnavailableEpssProvider()
 
     return ConnectorBundle(
         nvd=nvd,
         osv=osv,
         kev=kev,
-        epss=UnavailableEpssProvider(),
+        epss=epss_provider,
         kev_cache=CachedKevCatalog(connector=kev, max_age=settings.kev_max_age),
         live=live,
         notes=tuple(notes),

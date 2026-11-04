@@ -240,7 +240,21 @@ header); deriving it by hand would reintroduce transcription risk.
 
 ## 6. EPSS integration interface
 
-EPSS is designed in, but the HTTP call is deliberately **not implemented**:
+EPSS has a real client (`connectors/epss.EpssConnector`), built against the
+documented FIRST API and tested offline. It is **not live-verified**: no request to
+`api.first.org` has ever been made from this project, and `LIVE_PROVIDER_AVAILABLE`
+stays `False` until one succeeds and is recorded. Nothing in the module sets that
+flag itself — a component must not be able to certify its own connectivity.
+
+`EpssConnector` is genuinely usable by a host that chooses to enable it
+(`CICC_VULN_EPSS_ENABLED` + `CICC_VULN_LIVE_COLLECTION`), and assembly records in
+its startup notes that the endpoint is unverified. Two behaviours matter more than
+the plumbing: a CVE with no published record is **absent** from the result rather
+than `0.0` (a zero is the strongest possible claim of "not exploited"), and an
+error, non-OK envelope or unrequested CVE **raises** rather than returning an
+empty mapping.
+
+Alongside it:
 
 - `EpssProvider` — protocol a live provider must satisfy;
 - `EpssCache` / `InMemoryEpssCache` — cache seam (injectable clock);

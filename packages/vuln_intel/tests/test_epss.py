@@ -138,3 +138,145 @@ def test_transport_protocol_is_satisfied_by_the_fake() -> None:
     from .conftest import FakeTransport
 
     assert isinstance(FakeTransport(), Transport)
+
+
+class TestEpssConnector:
+    """The live client. Implemented and offline-tested; NOT live-verified.
+
+    `LIVE_PROVIDER_AVAILABLE` must stay False until an authorized real fetch has
+    succeeded and been recorded, so these tests assert the flag stays down even
+    though the happy path works.
+    """
+
+    PAYLOAD = {
+        "status": "OK",
+        "status-code": 200,
+        "version": "2025.03.14",
+        "total": 1,
+        "offset": 0,
+        "limit": 100,
+        "data": [
+            {
+                "cve": "CVE-2024-1234",
+                "epss": "0.97228",
+                "percentile": "0.99966",
+                "date": "2025-03-14",
+            }
+        ],
+    }
+
+    def _connector(self, *script, **kwargs):
+        from tests.conftest import FakeTransport, no_wait
+        from vuln_intel.connectors.epss import EpssConnector
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+
+        transport = FakeTransport(script=list(script))
+        connector = EpssConnector(
+            transport=transport,
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=no_wait),
+            retry=RetryPolicy(attempts=1),
+            sleep=no_wait,
+            origin="fixture",
+            **kwargs,
+        )
+        return connector, transport
+
+    def _cve(self, value="CVE-2024-1234"):
+        from vuln_intel.schema import CveId
+
+        return CveId.parse(value)
+
+    def test_parses_a_published_score(self):
+        from tests.conftest import response
+
+        connector, transport = self._connector(response(self.PAYLOAD))
+        scores = connector.fetch([self._cve()])
+        assert scores["CVE-2024-1234"].score == 0.97228
+        assert scores["CVE-2024-1234"].percentile == 0.99966
+        assert scores["CVE-2024-1234"].model_date == "2025-03-14"
+        assert scores["CVE-2024-1234"].model_version == "2025.03.14"
+        # The documented query shape.
+        assert transport.calls[0]["params"]["cve"] == "CVE-2024-1234"
+        assert transport.calls[0]["params"]["envelope"] == "true"
+
+    def test_unscored_cve_is_absent_not_zero(self):
+        """A zero would be the strongest possible claim of "not exploited"."""
+        from tests.conftest import response
+
+        connector, _ = self._connector(response(self.PAYLOAD))
+        scores = connector.fetch([self._cve(), self._cve("CVE-2024-9999")])
+        assert "CVE-2024-9999" not in scores
+
+    def test_no_transport_raises_rather_than_returning_empty(self):
+        from vuln_intel.connectors.epss import EpssConnector
+        from vuln_intel.errors import SourceResponseError
+
+        connector = EpssConnector(transport=None)
+        try:
+            connector.fetch([self._cve()])
+        except SourceResponseError:
+            pass
+        else:  # pragma: no cover
+            raise AssertionError("missing transport must raise, not report no scores")
+
+    def test_http_error_raises(self):
+        from tests.conftest import response
+        from vuln_intel.errors import SourceError
+
+        connector, _ = self._connector(response({"message": "boom"}, status=503))
+        with pytest.raises(SourceError):
+            connector.fetch([self._cve()])
+
+    def test_non_ok_envelope_raises(self):
+        from tests.conftest import response
+        from vuln_intel.errors import SourceResponseError
+
+        bad = dict(self.PAYLOAD, status="ERROR")
+        connector, _ = self._connector(response(bad))
+        with pytest.raises(SourceResponseError):
+            connector.fetch([self._cve()])
+
+    def test_unrequested_cve_in_the_response_raises(self):
+        """Guards against attributing a score to the wrong identifier."""
+        from tests.conftest import response
+        from vuln_intel.errors import ValidationError
+
+        wrong = dict(
+            self.PAYLOAD,
+            data=[dict(self.PAYLOAD["data"][0], cve="CVE-2024-0000")],
+        )
+        connector, _ = self._connector(response(wrong))
+        with pytest.raises(ValidationError):
+            connector.fetch([self._cve()])
+
+    def test_large_request_is_split_into_bounded_batches(self):
+        from tests.conftest import response
+
+        connector, transport = self._connector(
+            response(dict(self.PAYLOAD, data=[])),
+            response(dict(self.PAYLOAD, data=[])),
+            max_cves_per_request=2,
+        )
+        connector.fetch([self._cve(f"CVE-2024-{i:04d}") for i in range(4)])
+        assert len(transport.calls) == 2
+        for call in transport.calls:
+            assert len(call["params"]["cve"].split(",")) <= 2
+
+    def test_duplicate_cves_produce_one_request_entry(self):
+        from tests.conftest import response
+
+        connector, transport = self._connector(response(self.PAYLOAD))
+        connector.fetch([self._cve(), self._cve()])
+        assert transport.calls[0]["params"]["cve"] == "CVE-2024-1234"
+
+    def test_empty_request_makes_no_call(self):
+        connector, transport = self._connector()
+        assert connector.fetch([]) == {}
+        assert transport.calls == []
+
+    def test_live_provider_flag_stays_false(self):
+        """A working code path is not evidence of a live connection."""
+        from vuln_intel.connectors import epss
+
+        assert epss.LIVE_PROVIDER_AVAILABLE is False

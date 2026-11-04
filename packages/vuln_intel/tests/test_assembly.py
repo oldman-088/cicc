@@ -433,3 +433,48 @@ class TestNvdWindowFetcher:
         outcome = sync.run()
         assert outcome.records
         assert store.saved  # the checkpoint advanced only after a completed window
+
+
+class TestEpssAssembly:
+    """EPSS is built only when it can actually work, and never certificates itself."""
+
+    def test_disabled_by_default(self):
+        from vuln_intel.connectors.epss import UnavailableEpssProvider
+
+        bundle = build_connectors(settings())
+        assert isinstance(bundle.epss, UnavailableEpssProvider)
+
+    def test_enabled_without_live_collection_stays_unavailable(self):
+        """An enabled flag with collection off must not build an unreachable client."""
+        from vuln_intel.connectors.epss import UnavailableEpssProvider
+
+        bundle = build_connectors(settings(CICC_VULN_EPSS_ENABLED="true"))
+        assert isinstance(bundle.epss, UnavailableEpssProvider)
+        assert any("live collection is off" in note for note in bundle.notes)
+
+    def test_enabled_with_live_collection_builds_the_client(self):
+        from vuln_intel.connectors.epss import EpssConnector
+
+        bundle = build_connectors(
+            settings(CICC_VULN_LIVE_COLLECTION="true", CICC_VULN_EPSS_ENABLED="true"),
+            transport_factory=lambda: FakeTransport(script=[response({})]),
+        )
+        assert isinstance(bundle.epss, EpssConnector)
+        assert bundle.epss.transport is not None
+
+    def test_notes_say_the_endpoint_is_not_live_verified(self):
+        bundle = build_connectors(
+            settings(CICC_VULN_LIVE_COLLECTION="true", CICC_VULN_EPSS_ENABLED="true"),
+            transport_factory=lambda: FakeTransport(script=[response({})]),
+        )
+        assert any("NOT been verified live" in note for note in bundle.notes)
+
+    def test_building_the_client_does_not_flip_the_live_flag(self):
+        """A working code path is not evidence of a live connection."""
+        from vuln_intel.connectors import epss
+
+        build_connectors(
+            settings(CICC_VULN_LIVE_COLLECTION="true", CICC_VULN_EPSS_ENABLED="true"),
+            transport_factory=lambda: FakeTransport(script=[response({})]),
+        )
+        assert epss.LIVE_PROVIDER_AVAILABLE is False
