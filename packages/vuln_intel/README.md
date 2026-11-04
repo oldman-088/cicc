@@ -5,7 +5,8 @@ an **EPSS** integration interface, **unified CVE normalization** and transparent
 **prioritization**.
 
 - Package: `vuln_intel` (distribution name `cicc-vuln-intel`), version `0.1.0`
-- Status: **IMPLEMENTED and TESTED offline; integration PROPOSED, not wired; NOT live-verified**
+- Size: 5,457 lines of source, 2,968 lines of tests, 252 tests
+- Status: **IMPLEMENTED and TESTED offline; integration layer ready; NOT live-verified**
 - Runtime dependencies: **none** (stdlib only). `httpx` is required only for
   live collection, via the optional `live` extra.
 
@@ -47,11 +48,20 @@ packages/vuln_intel/
 │   │   ├── nvd.py          NVD API 2.0 connector
 │   │   ├── osv.py          OSV v1 connector
 │   │   └── epss.py         EPSS interface + strict parser (no HTTP call)
+│   ├── kev.py              CISA KEV catalogue + stale-preserving cache
+│   ├── circuit.py          per-source circuit breaker
+│   ├── pipeline.py         collect → observe → merge → KEV → EPSS → rank
 │   ├── normalization.py    cross-source merge, KEV signals, EPSS attach
 │   ├── priorities.py       additive 0-100 ranking with explanations
 │   ├── demo.py             offline pipeline demo (fixtures only)
-│   └── integration/        proposed host contract (ports + mapping + service)
-├── tests/                  153 tests, synthetic fixtures only
+│   └── integration/
+│       ├── contracts.py    VulnerabilityStore / AuditPort protocols
+│       ├── mapping.py      record → host entity + details + enrichment
+│       ├── service.py      origin gate, dry-run, audit coupling
+│       ├── store.py        reference store + deny-by-default store
+│       ├── observations.py append-only, source-specific evidence log
+│       └── preview.py      review artifact + separation-rule validation
+├── tests/                  252 tests, synthetic fixtures only, sockets blocked
 │   └── fixtures/           hand-written payloads shaped after public docs
 ├── pyproject.toml
 └── README.md
@@ -196,7 +206,58 @@ Properties enforced by tests:
   production queue;
 - identical inputs produce identical output; ties break on (KEV, EPSS, CVE).
 
-## 8. Error handling contract
+## 8. Reliability and evidence
+
+### Circuit breaker (`circuit.py`)
+
+Retry handles a blip; the breaker handles a sustained outage. After
+`failure_threshold` consecutive `SourceError`s a source is **open**: calls fail
+fast with `CircuitOpen` and a `retry_in`, so a collector cannot hammer a dead
+provider. After the cooldown a single probe is allowed (`half_open`); success
+closes it, failure re-opens with a doubled cooldown (capped). Programming errors
+(`TypeError`, `KeyError`) are **not** counted — bugs stay visible.
+
+### Append-only evidence (`integration/observations.py`)
+
+A merged `NormalizedVulnerability` is a *derived view*, not evidence. Ingestion
+therefore records **one observation per source record**:
+
+| property | guarantee |
+|---|---|
+| history | never rewritten; a changed source record appends a new row |
+| idempotency | `(tenant, source, cve, sha256(payload))` stored once |
+| identity | source, source reference, collection time, origin, digest all retained |
+| replay order | deterministic: `(collected_at, source, digest)` |
+| tenancy | strictly per-tenant |
+| origin gate | fixture/demo refused unless the log explicitly allows them |
+
+`to_observations()` splits a merged record into its contributing sources, each
+carrying only the fields that source can vouch for (e.g. affected ranges from
+OSV, CWE from NVD), so claims stay separable.
+
+### Pipeline (`pipeline.py`)
+
+`EnrichmentPipeline.run()` composes collectors → observation log → merge → KEV →
+EPSS → ranking and returns a `PipelineReport` with:
+
+- a `complete` flag that is `False` whenever **any** source failed or any
+  observation was refused (partial data is never presented as complete);
+- an explicit `empty ≠ failed` distinction per source;
+- mixed-origin input refused outright;
+- KEV membership marked `unknown` when no catalogue was supplied, and flagged
+  `stale` when the catalogue is old;
+- EPSS unavailability surfaced as *unavailable*, never as a score of zero;
+- evidence appended **before** derivation, so a later scoring bug cannot erase it.
+
+### CISA KEV (`kev.py`)
+
+`KevConnector` validates the whole document: a `count`/row mismatch, duplicate
+CVE ids or malformed ids fail the document, because "not listed" answers derived
+from a partial index would be wrong. `CachedKevCatalog` keeps the **last good
+snapshot** across outages and reports staleness, so an outage degrades quality
+instead of erasing knowledge.
+
+## 9. Error handling contract
 
 | Situation | Result |
 |---|---|
@@ -207,27 +268,31 @@ Properties enforced by tests:
 | malformed single record in a batch | record skipped, batch → `PARTIAL`, reason in `warnings` |
 | credentials in an error message | redacted by `errors.sanitize` (redacts to end of line) |
 
-## 9. Known limitations (do not overstate)
+## 10. Known limitations (do not overstate)
 
-0. **Integration is proposed, not wired.** The adapter is the host's job; the storage decision (Path A/B) is open.
+1. **No live verification.** NVD, OSV and CISA KEV are fixture-tested only;
+   EPSS has no HTTP client. Endpoint shape, provider terms, API keys and real
+   rate limits are unverified. `LAST_VERIFIED_LIVE` is `None` in all three
+   connectors and a CI guard fails the build if that changes without evidence.
+2. **No persistence.** Nothing writes to a database. Storage requirements are
+   documented (`docs/vulnerability-intelligence/INTEGRATION.md`); the strategy
+   decision is the owner's.
+3. **No OSV batch/POST query.** Only `GET /vulns/<id>`; `query`/`querybatch` are
+   POST endpoints and are unimplemented.
+4. **Rate gating is per-process**, not cluster-wide, and does not coordinate
+   across workers. A breaker is per instance too.
+5. **No version-range evaluation.** Affected ranges are stored, not compared;
+   that needs per-ecosystem ordering and is out of scope.
+6. **Prioritization is decision support**, not an automated remediation
+   decision: no exploit-availability feed and no asset join.
+7. **`search_all()` is a bounded window**, not a full NVD mirror.
+8. **KEV membership depends on catalogue freshness.** A stale cache is flagged,
+   never silently treated as current.
+9. **Observation log is in-memory here.** Durability, retention and tamper
+   resistance are properties of the host adapter, not of this reference log.
+10. **`sources.py` is not integrated** — deliberately, per the assignment rules.
 
-1. **No live verification.** Both connectors are fixture-tested only. Endpoint
-   shape, provider terms, API-key behaviour and real rate limits are unverified.
-2. **No persistence.** Nothing writes to the database; the API layer must map
-   `NormalizedVulnerability` onto models (a separate, reviewed change).
-3. **No OSV batch/POST query.** `query`/`querybatch` are POST endpoints; only the
-   GET (`vulns/<id>`) path is implemented. Package-based lookup is unscheduled.
-4. **EPSS has no HTTP client by design** (see §6).
-5. **Rate gating is per-process**, not cluster-wide; it does not coordinate
-   across workers.
-6. **No version-range evaluation.** `affected` ranges are stored, not compared.
-7. **Prioritization has no exploit-availability or asset-join data**; it is
-   advisory input for analysts, not an automated remediation decision.
-8. **`search_all()` is a bounded window**, not a full NVD mirror.
-9. **`sources.py` integration is pending review** — deliberately not modified,
-   per the task rules.
-
-## 10. Proposed integration (review only — nothing wired)
+## 11. Integration layer
 
 `vuln_intel/integration/` defines the seam without touching the host:
 
@@ -251,7 +316,7 @@ A reviewer checklist lives in
 
 **No migration is authored by this change.**
 
-## 11. Integration checklist for the reviewer
+## 12. Integration checklist for the reviewer
 
 - [ ] Confirm the target integration point (`apps/api/app/sources.py` in the
       lineage that owns it) before wiring.
