@@ -488,25 +488,34 @@ def _score(metrics: Mapping[str, str]) -> float:
     depth_eq3eq6 = _MAX_SEVERITY["eq3eq6"][eq3][eq6] * _STEP
     depth_eq4 = _MAX_SEVERITY["eq4"][eq4] * _STEP
 
-    normalized: list[float] = []
-    for available, span, dist in (
-        (base_value - eq1_lower if eq1_lower is not None else None, depth_eq1, dist_eq1),
-        (base_value - eq2_lower if eq2_lower is not None else None, depth_eq2, dist_eq2),
-        (
+    def _normalized(available: float | None, span: float | None, dist: float) -> float | None:
+        """EQ contribution: available distance scaled by dist/span.
+
+        Returns ``None`` when the EQ has no lower macrovector to interpolate
+        toward. That case must be *excluded* from the average, not treated as a
+        zero: a zero would count toward the denominator and pull the score down.
+        ``span`` of ``None``/``0`` is different — the class has no depth, so the
+        contribution is genuinely zero and does count.
+        """
+        if available is None:
+            return None
+        if span is None or span == 0:
+            return 0.0
+        return available * (dist / span)
+
+    contributions = [
+        _normalized(base_value - eq1_lower if eq1_lower is not None else None, depth_eq1, dist_eq1),
+        _normalized(base_value - eq2_lower if eq2_lower is not None else None, depth_eq2, dist_eq2),
+        _normalized(
             base_value - eq3eq6_lower if eq3eq6_lower is not None else None,
             depth_eq3eq6,
             dist_eq3eq6,
         ),
-        (base_value - eq4_lower if eq4_lower is not None else None, depth_eq4, dist_eq4),
+        _normalized(base_value - eq4_lower if eq4_lower is not None else None, depth_eq4, dist_eq4),
         # EQ5 contributes a distance of 0 by definition, so it never moves the score.
-        (base_value - eq5_lower if eq5_lower is not None else None, None, dist_eq5),
-    ):
-        if available is None:
-            continue
-        if span in (None, 0):
-            normalized.append(0.0)
-            continue
-        normalized.append(available * (dist / span))
+        _normalized(base_value - eq5_lower if eq5_lower is not None else None, None, dist_eq5),
+    ]
+    normalized = [value for value in contributions if value is not None]
 
     value = base_value - (sum(normalized) / len(normalized) if normalized else 0.0)
     value = min(10.0, max(0.0, value))
