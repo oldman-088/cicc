@@ -241,10 +241,15 @@ class EnrichmentPipeline:
                     record.cve,
                     listed=entry is not None,
                     date_added=entry.date_added if entry else None,
+                    due_date=entry.due_date if entry else None,
                     checked=True,
                     catalog_version=self.kev_catalog.catalog_version,
                 )
             record = attach_kev(record, signal, fetched_at=run_at)
+            enriched.append(record)
+        # Emitted once per run, not once per record: a 10k-record run used to
+        # produce 10k identical warning strings.
+        if merged:
             if self.kev_catalog is None:
                 report.warnings.append(
                     "CISA KEV catalogue not supplied: exploitation status left unknown"
@@ -253,7 +258,6 @@ class EnrichmentPipeline:
                 report.warnings.append(
                     "CISA KEV catalogue is stale; membership may have changed"
                 )
-            enriched.append(record)
 
         # 4. EPSS.
         if self.epss_provider is not None:

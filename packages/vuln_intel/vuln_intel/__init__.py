@@ -25,7 +25,10 @@ Typical use::
     ranking = rank_vulnerabilities([record])
 """
 
+from .affected import AffectedAssessment, Verdict, assess_affected
+from .assessment import AssessmentReport, AssessmentWorkflow, workflow_for
 from .circuit import BreakerState, CircuitBreaker, CircuitOpen
+from .config import Secret, Settings
 from .connectors import (
     EPSS_API,
     LIVE_PROVIDER_AVAILABLE,
@@ -43,6 +46,7 @@ from .connectors import (
     UnavailableEpssProvider,
     parse_epss_response,
 )
+from .correlation import ClusterIndex, CorrelationCluster, correlate, resolve_identity
 from .cvss import cvss_from_source, parse_vector, score_vector
 from .errors import (
     MixedOriginError,
@@ -55,6 +59,7 @@ from .errors import (
     UnsupportedVector,
     ValidationError,
 )
+from .health import ComponentHealth, HealthReport, Metrics, Readiness, build_health_report
 from .integration.observations import (
     ImmutableObservationLog,
     Observation,
@@ -79,6 +84,12 @@ from .priorities import (
     score_vulnerability,
 )
 from .ratelimit import RateGate, quota_for_nvd, quota_for_osv
+from .remediation import (
+    RecommendedAction,
+    Remediation,
+    plan_remediation,
+    summarize_remediation,
+)
 from .retry import RetryPolicy, call_with_retry
 from .schema import (
     AffectedPackage,
@@ -110,13 +121,19 @@ __all__ = [
     "OSV_API",
     "WEIGHTS",
     "AdvisoryOnly",
+    "AffectedAssessment",
     "AffectedPackage",
+    "AssessmentReport",
+    "AssessmentWorkflow",
     "BreakerState",
     "CachedKevCatalog",
     "CircuitBreaker",
     "CircuitOpen",
+    "ClusterIndex",
     "CollectionResult",
     "CollectionStatus",
+    "ComponentHealth",
+    "CorrelationCluster",
     "CveId",
     "CvssScore",
     "EnrichmentPipeline",
@@ -125,6 +142,7 @@ __all__ = [
     "EpssScore",
     "FixtureEpssProvider",
     "Freshness",
+    "HealthReport",
     "HttpxTransport",
     "ImmutableObservationLog",
     "InMemoryEpssCache",
@@ -132,6 +150,7 @@ __all__ = [
     "KevConnector",
     "KevEntry",
     "KevSignal",
+    "Metrics",
     "MixedOriginError",
     "NormalizedVulnerability",
     "NvdConnector",
@@ -144,8 +163,13 @@ __all__ = [
     "PriorityResult",
     "ProvenanceRecord",
     "RateGate",
+    "Readiness",
+    "RecommendedAction",
     "Reference",
+    "Remediation",
     "RetryPolicy",
+    "Secret",
+    "Settings",
     "Severity",
     "SourceError",
     "SourceKind",
@@ -162,11 +186,15 @@ __all__ = [
     "UnavailableEpssProvider",
     "UnsupportedVector",
     "ValidationError",
+    "Verdict",
     "__version__",
+    "assess_affected",
     "attach_epss",
     "attach_kev",
+    "build_health_report",
     "call_with_retry",
     "compute_freshness",
+    "correlate",
     "corroboration_report",
     "cvss_from_source",
     "digest_payload",
@@ -175,12 +203,16 @@ __all__ = [
     "normalize_sources",
     "parse_epss_response",
     "parse_vector",
+    "plan_remediation",
     "quota_for_nvd",
     "quota_for_osv",
     "rank_vulnerabilities",
+    "resolve_identity",
     "score_vector",
     "score_vulnerability",
     "severity_from_score",
+    "summarize_remediation",
     "to_observations",
     "transport_kind",
+    "workflow_for",
 ]
