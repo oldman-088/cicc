@@ -85,10 +85,20 @@ class TestVersionOrdering:
         assert compare("", "1.0.0", VersionScheme.SEMVER) is None
 
     def test_opaque_scheme_refuses_to_order(self):
-        # Rubygems is deliberately mapped to OPAQUE: gem versions like
-        # "1.0.0.pre.rc1" do not follow semver, so guessing would be wrong.
-        assert scheme_for_ecosystem("rubygems") is VersionScheme.OPAQUE
+        # Composer is still mapped to OPAQUE: its ordering rules are not
+        # documented well enough here to implement honestly, so guessing would be
+        # wrong.  (RubyGems used to be in this position; it now has a real scheme.)
+        assert scheme_for_ecosystem("composer") is VersionScheme.OPAQUE
         assert compare("1.0.0", "1.0.1", VersionScheme.OPAQUE) is None
+
+    def test_rubygems_is_ordered(self):
+        """RubyGems is no longer opaque; a gem version can be ordered exactly."""
+        assert scheme_for_ecosystem("rubygems") is VersionScheme.RUBYGEMS
+        assert compare("1.0.0.rc1", "1.0.0", VersionScheme.RUBYGEMS) == -1
+
+    def test_cocoapods_shares_the_rubygems_algorithm(self):
+        """CocoaPods vendors Gem::Version, so it is not a separate implementation."""
+        assert scheme_for_ecosystem("cocoapods") is VersionScheme.RUBYGEMS
 
     def test_parse_does_not_raise_on_garbage(self):
         for scheme in VersionScheme:
@@ -444,3 +454,87 @@ class TestRangeLimitEvent:
             "the range document ends at 2.0.0, but that is not evidence the "
             "vulnerability is fixed there"
         )
+
+
+class TestRubyGemsOrdering:
+    """RubyGems' ``Gem::Version`` ordering, reproduced from its documentation.
+
+    This mattered as a correctness gap, not a nicety: while ``rubygems`` was
+    OPAQUE every affected-version question about a gem returned ``UNKNOWN``, which
+    is honest but useless.  The rules are unusual enough that guessing would have
+    produced confident wrong answers — ``1.0.0.rc1`` sorts *below* ``1.0.0``, and a
+    letter segment always sorts below a numeric one.
+    """
+
+    # The exact list published in the RubyGems versioning guide.
+    DOCUMENTED_ORDER = [
+        "1.0.0.alpha",
+        "1.0.0.beta2",
+        "1.0.0.rc1",
+        "1.0.0",
+        "1.0.1",
+        "1.1.0.beta",
+        "2.0.0",
+    ]
+
+    def test_documented_order_is_reproduced(self) -> None:
+        for lower, higher in zip(self.DOCUMENTED_ORDER, self.DOCUMENTED_ORDER[1:], strict=False):
+            assert compare(lower, higher, VersionScheme.RUBYGEMS) == -1, (
+                f"{lower} must sort below {higher}"
+            )
+
+    def test_trailing_zeros_are_ignored(self) -> None:
+        assert compare("1.0", "1.0.0", VersionScheme.RUBYGEMS) == 0
+        assert compare("2", "2.0.0.0", VersionScheme.RUBYGEMS) == 0
+
+    def test_hyphen_is_read_as_dot_pre(self) -> None:
+        # "1.0.0-rc1" is accepted and normalised to "1.0.0.pre.rc1".
+        assert compare("1.0.0-rc1", "1.0.0.pre.rc1", VersionScheme.RUBYGEMS) == 0
+
+    def test_letter_digit_boundary_is_a_segment_boundary(self) -> None:
+        # beta10 -> "beta", 10, so it must exceed beta9 rather than sort lexically.
+        assert compare("1.0.0.beta10", "1.0.0.beta9", VersionScheme.RUBYGEMS) == 1
+
+    def test_multi_digit_segments_compare_numerically(self) -> None:
+        assert compare("3.10", "3.2", VersionScheme.RUBYGEMS) == 1
+
+    def test_prerelease_sorts_below_the_release(self) -> None:
+        assert compare("1.0.a", "1.0", VersionScheme.RUBYGEMS) == -1
+
+    def test_gem_version_is_flagged_as_prerelease(self) -> None:
+        assert parse("1.0.0.rc1", VersionScheme.RUBYGEMS).is_prerelease is True
+        assert parse("1.0.0", VersionScheme.RUBYGEMS).is_prerelease is False
+
+    @pytest.mark.parametrize(
+        "bad", ["", "not-a-version", "1..0", "-1.0", "1.0-", "1.0 0", "v1.0"]
+    )
+    def test_malformed_versions_are_refused(self, bad: str) -> None:
+        """A refused parse yields ``None``, never a wrong ordering."""
+        assert parse(bad, VersionScheme.RUBYGEMS) is None
+
+    def test_range_evaluation_now_answers_for_rubygems(self) -> None:
+        """The point of the scheme: a gem verdict is no longer UNKNOWN."""
+        packages = [
+            AffectedPackage(
+                ecosystem="RubyGems", name="rails", introduced="0", fixed="6.1.7.1"
+            )
+        ]
+        affected = assess_affected(
+            packages, ecosystem="RubyGems", name="rails", version="6.1.7"
+        )
+        assert affected.verdict is Verdict.AFFECTED
+        safe = assess_affected(
+            packages, ecosystem="RubyGems", name="rails", version="7.0.0"
+        )
+        assert safe.verdict is Verdict.NOT_AFFECTED
+
+    def test_prerelease_below_the_fix_is_still_affected(self) -> None:
+        """A release candidate below the fixed version must not be excused."""
+        packages = [
+            AffectedPackage(ecosystem="RubyGems", name="rails", introduced="0",
+                            fixed="6.1.7.1")
+        ]
+        result = assess_affected(
+            packages, ecosystem="RubyGems", name="rails", version="6.1.7.1.rc1"
+        )
+        assert result.verdict is Verdict.AFFECTED

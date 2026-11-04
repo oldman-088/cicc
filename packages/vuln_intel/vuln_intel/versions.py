@@ -19,6 +19,7 @@ scheme              ordering basis
 ``rpm``             like Debian but ``~`` sorts *before* everything
 ``maven``           numeric qualifier ranking (``SNAPSHOT``/``alpha``/``rc``…)
 ``go``              ``vMAJOR.MINOR.PATCH`` plus pseudo-version timestamps
+``rubygems``        canonical segments; a letter segment is a prerelease
 ``opaque``          no ordering — never compared, always reported as unknown
 ==================  ==========================================================
 
@@ -54,6 +55,7 @@ class VersionScheme(str, Enum):
     RPM = "rpm"
     MAVEN = "maven"
     GO = "go"
+    RUBYGEMS = "rubygems"
     OPAQUE = "opaque"
 
 
@@ -77,9 +79,11 @@ SCHEME_BY_ECOSYSTEM: dict[str, VersionScheme] = {
     "maven": VersionScheme.MAVEN,
     "gradle": VersionScheme.MAVEN,
     "go": VersionScheme.GO,
-    "rubygems": VersionScheme.OPAQUE,
+    "rubygems": VersionScheme.RUBYGEMS,
+    # CocoaPods vendors RubyGems' Gem::Version (Pod::Vendor::Gem::Version) and adds
+    # head/`1.0.0.head` handling on top, so the segment comparison is the same.
+    "cocoapods": VersionScheme.RUBYGEMS,
     "composer": VersionScheme.OPAQUE,
-    "cocoapods": VersionScheme.OPAQUE,
     "oss-fuzz": VersionScheme.OPAQUE,
     "linux": VersionScheme.DEBIAN,
     "red hat": VersionScheme.RPM,
@@ -306,6 +310,84 @@ def _parse_go(raw: str) -> ParsedVersion | None:
     return ParsedVersion(raw, VersionScheme.GO, (padded, 0, ""), bool(pseudo))
 
 
+#: RubyGems accepts a leading numeric segment then dotted alphanumerics, with an
+#: optional ``-suffix`` build tail that it rewrites to ``.pre.``.  Anything else is
+#: not a gem version, so it is refused rather than approximated.
+_RUBYGEMS_PATTERN = re.compile(
+    r"^[0-9]+(?:\.[0-9a-zA-Z]+)*(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
+
+#: RubyGems compares ``String < Numeric`` at each position, so the string tag must
+#: sort below the numeric one.
+_RUBYGEMS_STRING = 0
+_RUBYGEMS_NUMERIC = 1
+
+#: Segment separators in a canonicalised gem version.
+_RUBYGEMS_SEGMENT = re.compile(r"[.\-]|(?<=[0-9])(?=[a-zA-Z])|(?<=[a-zA-Z])(?=[0-9])")
+
+
+def _parse_rubygems(raw: str) -> ParsedVersion | None:
+    """Parse a gem version into canonical segments, per RubyGems' ``Gem::Version``.
+
+    The algorithm, taken from RubyGems' own documentation and ``canonical_segments``:
+
+    * a ``-`` is read as ``.pre.``, so SemVer-style ``1.0.0-rc1`` becomes
+      ``1.0.0.pre.rc1``;
+    * segments are split at dots *and* at digit/letter boundaries, so ``beta10``
+      becomes ``"beta"``, ``10``;
+    * trailing zero segments are dropped, so ``1.0`` and ``1.0.0`` are the same
+      version;
+    * the version is a prerelease if it contains any letter.
+
+    Comparison then uses canonical segments where **a string segment always sorts
+    before a numeric one**, and missing segments read as ``0``.  That single rule is
+    what makes every prerelease sort below the release it leads up to::
+
+        1.0.0.alpha < 1.0.0.beta2 < 1.0.0.rc1 < 1.0.0 < 1.0.1 < 1.1.0.beta < 2.0.0
+
+    Keys are self-delimiting and tagged *string=0, numeric=1*, because RubyGems
+    orders ``String < Numeric`` at each position.  The tag alone therefore encodes
+    that rule, and a numeric segment still compares numerically inside its tag, so
+    ``1.0.10`` (``(1,10)``) correctly exceeds ``1.0.9`` (``(1,9)``).
+    :func:`_cmp_keys` then pads a missing tail with ``0`` to reproduce RubyGems'
+    ``lhs[i] || 0`` rule.
+    """
+    text = raw.strip()
+    if not text or _RUBYGEMS_PATTERN.match(text) is None:
+        return None
+    if text.endswith("-") or text.startswith("-"):
+        return None
+    normalised = text.replace("-", ".pre.")
+    # Drop trailing zero segments, as canonical_segments does.  Anchored at the end
+    # so an internal "0" (as in 1.0.5) is never touched.
+    while True:
+        trimmed = re.sub(r"\.0+$", "", normalised)
+        if trimmed == normalised or "." not in trimmed:
+            normalised = trimmed
+            break
+        normalised = trimmed
+    parts = [part for part in _RUBYGEMS_SEGMENT.split(normalised) if part]
+    if not parts:
+        return None
+    segments: list[tuple[int, object]] = []
+    for part in parts:
+        if part.isdigit():
+            segments.append((_RUBYGEMS_NUMERIC, int(part)))
+        else:
+            segments.append((_RUBYGEMS_STRING, part.lower()))
+    while segments and segments[-1] == (_RUBYGEMS_NUMERIC, 0):
+        # Trailing zeros never affect ordering, and removing them makes "1.0" and
+        # "1.0.0" produce the same key rather than relying on the zero padding.
+        segments.pop()
+    prerelease = any(tag == _RUBYGEMS_STRING for tag, _ in segments)
+    # The key is right-padded with numeric zeros to a fixed width so that a missing
+    # segment always compares *below* a present one.  This is what makes a
+    # prerelease sort under its release: RubyGems compares `lhs[i] || 0`, and 0 is
+    # numeric while a prerelease segment is a string, so the string loses.
+    padded = tuple(segments) + ((_RUBYGEMS_NUMERIC, 0),) * (8 - len(segments))
+    return ParsedVersion(raw, VersionScheme.RUBYGEMS, padded, prerelease)
+
+
 def parse(raw: str | None, scheme: VersionScheme) -> ParsedVersion | None:
     """Parse ``raw`` under ``scheme``; ``None`` means "cannot be ordered"."""
     if raw is None:
@@ -328,6 +410,8 @@ def parse(raw: str | None, scheme: VersionScheme) -> ParsedVersion | None:
             return _parse_maven(text)
         if scheme is VersionScheme.GO:
             return _parse_go(text)
+        if scheme is VersionScheme.RUBYGEMS:
+            return _parse_rubygems(text)
     except (ValueError, TypeError):  # pragma: no cover - defensive
         return None
     return None
