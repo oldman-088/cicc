@@ -1,9 +1,9 @@
 import { BufferGeometry, Float32BufferAttribute } from "three";
-import type { IntelligenceNode, IntelligenceRelationship } from "./types";
+import type { IntelligenceRelationship, PositionedIntelligenceNode } from "./types";
 
 type Vector3Tuple = [number, number, number];
 
-export function toScenePosition(node: IntelligenceNode): Vector3Tuple {
+export function toScenePosition(node: PositionedIntelligenceNode): Vector3Tuple {
   return [
     (node.position.x - 50) / 9,
     (48 - node.position.y) / 8,
@@ -17,7 +17,7 @@ export function toScenePosition(node: IntelligenceNode): Vector3Tuple {
  * and material for every edge.
  */
 export function createRelationshipLineGeometry(
-  nodes: IntelligenceNode[],
+  nodes: PositionedIntelligenceNode[],
   relationships: IntelligenceRelationship[],
 ): BufferGeometry {
   const positionById = new Map(nodes.map((node) => [node.id, toScenePosition(node)]));

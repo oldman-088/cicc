@@ -14,13 +14,16 @@ import { createRelationshipLineGeometry, toScenePosition } from "./graph-geometr
 import type {
   IntelligenceNode,
   IntelligenceRelationship,
+  PositionedIntelligenceNode,
   Locale,
 } from "./types";
 import { getMessages } from "./translations";
+import { safeDisplayText } from "./display-text";
+import { selectGraphView } from "./graph-view";
 import styles from "./Theater3DCanvas.module.css";
 
 type Theater3DCanvasProps = {
-  nodes: IntelligenceNode[];
+  nodes: PositionedIntelligenceNode[];
   relationships: IntelligenceRelationship[];
   selectedNodeId: string;
   locale: Locale;
@@ -45,26 +48,30 @@ function RelationshipScene({
   Theater3DCanvasProps,
   "nodes" | "relationships" | "selectedNodeId" | "onSelectNode"
 >) {
+  const view = useMemo(
+    () => selectGraphView(nodes, relationships, selectedNodeId),
+    [nodes, relationships, selectedNodeId],
+  );
   const positions = useMemo(
-    () => new Map(nodes.map((node) => [node.id, toScenePosition(node)])),
-    [nodes],
+    () => new Map(view.nodes.map((node) => [node.id, toScenePosition(node)])),
+    [view.nodes],
   );
   const selectedRelationships = useMemo(
     () =>
-      relationships.filter(
+      view.relationships.filter(
         (relationship) =>
           relationship.sourceId === selectedNodeId ||
           relationship.targetId === selectedNodeId,
       ),
-    [relationships, selectedNodeId],
+    [view.relationships, selectedNodeId],
   );
   const allEdgeGeometry = useMemo(
-    () => createRelationshipLineGeometry(nodes, relationships),
-    [nodes, relationships],
+    () => createRelationshipLineGeometry(view.nodes, view.relationships),
+    [view.nodes, view.relationships],
   );
   const selectedEdgeGeometry = useMemo(
-    () => createRelationshipLineGeometry(nodes, selectedRelationships),
-    [nodes, selectedRelationships],
+    () => createRelationshipLineGeometry(view.nodes, selectedRelationships),
+    [view.nodes, selectedRelationships],
   );
 
   useEffect(() => () => allEdgeGeometry.dispose(), [allEdgeGeometry]);
@@ -77,7 +84,7 @@ function RelationshipScene({
       <pointLight position={[0, 4, 7]} intensity={24} color="#7ddde2" />
       <pointLight position={[-5, -3, 2]} intensity={9} color="#648fff" />
 
-      {relationships.length > 0 && (
+      {view.relationships.length > 0 && (
         <lineSegments geometry={allEdgeGeometry}>
           <lineBasicMaterial color="#3f8296" transparent opacity={0.58} />
         </lineSegments>
@@ -88,7 +95,7 @@ function RelationshipScene({
         </lineSegments>
       )}
 
-      {nodes.map((node) => {
+      {view.nodes.map((node) => {
         const position = positions.get(node.id);
         if (!position) return null;
         const selected = selectedNodeId === node.id;
@@ -122,7 +129,7 @@ function RelationshipScene({
               />
             </mesh>
             <Html position={[0, -0.68, 0]} center distanceFactor={9}>
-              <bdi className={styles.nodeLabel} dir="auto">{node.label}</bdi>
+              <bdi className={styles.nodeLabel} dir="auto">{safeDisplayText(node.label)}</bdi>
             </Html>
           </group>
         );

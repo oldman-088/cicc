@@ -1,18 +1,26 @@
 import { useId, useMemo } from "react";
-import type { IntelligenceNode, IntelligenceRelationship, Locale } from "./types";
+import type {
+  IntelligenceNode,
+  IntelligenceRelationship,
+  Locale,
+  PositionedIntelligenceNode,
+} from "./types";
 import { getMessages } from "./translations";
+import { safeDisplayText } from "./display-text";
+import { selectGraphView } from "./graph-view";
 import styles from "./CommandTheater.module.css";
 
 type RelationshipGraph2DProps = {
-  nodes: IntelligenceNode[];
+  nodes: PositionedIntelligenceNode[];
   relationships: IntelligenceRelationship[];
   selectedNodeId: string;
   locale: Locale;
+  totalNodes?: number | null;
+  totalRelationships?: number | null;
 };
 
 const WIDTH = 1000;
 const HEIGHT = 520;
-const MAX_MAP_RELATIONSHIPS = 250;
 
 const entityColors: Record<IntelligenceNode["type"], string> = {
   "threat-actor": "#c4a6ff",
@@ -22,7 +30,7 @@ const entityColors: Record<IntelligenceNode["type"], string> = {
   asset: "#9be3a7",
 };
 
-function mapPoint(node: IntelligenceNode) {
+function mapPoint(node: PositionedIntelligenceNode) {
   return { x: node.position.x * 10, y: node.position.y * 5.1 };
 }
 
@@ -38,33 +46,27 @@ export function RelationshipGraph2D({
   relationships,
   selectedNodeId,
   locale,
+  totalNodes,
+  totalRelationships,
 }: RelationshipGraph2DProps) {
   const messages = getMessages(locale);
   const id = useId().replaceAll(":", "");
-  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const visibleRelationships = useMemo(() => {
-    const selected = relationships.filter(
-      (relationship) =>
-        relationship.sourceId === selectedNodeId ||
-        relationship.targetId === selectedNodeId,
-    );
-    if (selected.length >= MAX_MAP_RELATIONSHIPS) {
-      return selected.slice(0, MAX_MAP_RELATIONSHIPS);
-    }
-
-    const selectedIds = new Set(selected.map((relationship) => relationship.id));
-    const remaining = relationships.filter((relationship) => !selectedIds.has(relationship.id));
-    return [...selected, ...remaining].slice(0, MAX_MAP_RELATIONSHIPS);
-  }, [relationships, selectedNodeId]);
-  const limitNotice =
-    relationships.length > MAX_MAP_RELATIONSHIPS
-      ? fillCountTemplate(
-          messages.mapLimitNotice,
-          visibleRelationships.length,
-          relationships.length,
-          locale,
-        )
-      : null;
+  const view = useMemo(
+    () => selectGraphView(nodes, relationships, selectedNodeId),
+    [nodes, relationships, selectedNodeId],
+  );
+  const nodeById = useMemo(() => new Map(view.nodes.map((node) => [node.id, node])), [view.nodes]);
+  const relationshipTotal = Math.max(totalRelationships ?? relationships.length, relationships.length);
+  const nodeTotal = Math.max(totalNodes ?? nodes.length, nodes.length);
+  const limitNotices = [
+    relationshipTotal > view.relationships.length
+      ? fillCountTemplate(messages.mapLimitNotice, view.relationships.length, relationshipTotal, locale)
+      : null,
+    nodeTotal > view.nodes.length
+      ? fillCountTemplate(messages.mapNodeLimitNotice, view.nodes.length, nodeTotal, locale)
+      : null,
+  ].filter((notice): notice is string => notice !== null);
+  const limitNotice = limitNotices.join(" ");
 
   return (
     <div className={styles.mapFrame}>
@@ -96,7 +98,7 @@ export function RelationshipGraph2D({
         </defs>
 
         <g className={styles.edgeLayer}>
-          {visibleRelationships.map((relationship) => {
+          {view.relationships.map((relationship) => {
             const source = nodeById.get(relationship.sourceId);
             const target = nodeById.get(relationship.targetId);
             if (!source || !target) return null;
@@ -131,7 +133,7 @@ export function RelationshipGraph2D({
         </g>
 
         <g className={styles.nodeLayer}>
-          {nodes.map((node) => {
+          {view.nodes.map((node) => {
             const point = mapPoint(node);
             const selected = node.id === selectedNodeId;
             const color = entityColors[node.type];
@@ -165,8 +167,9 @@ export function RelationshipGraph2D({
                   y={point.y + 48}
                   textAnchor="middle"
                   direction="ltr"
+                  style={{ unicodeBidi: "plaintext" }}
                 >
-                  {node.label}
+                  {safeDisplayText(node.label)}
                 </text>
               </g>
             );

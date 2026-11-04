@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DEMO_NODES, DEMO_RELATIONSHIPS } from "./demo-graph";
 import type { IntelligenceRelationship } from "./types";
@@ -12,6 +13,26 @@ function buildRelationships(count: number): IntelligenceRelationship[] {
     id: `stress-edge-${index}`,
   }));
 }
+
+function buildNodes(count: number) {
+  const template = DEMO_NODES[0]!;
+  return Array.from({ length: count }, (_, index) => ({
+    ...template,
+    id: `stress-node-${index}`,
+    label: `Entity ${index}`,
+  }));
+}
+
+const explorerDefaults = {
+  sourceKind: "demo" as const,
+  totalNodes: DEMO_NODES.length,
+  totalRelationships: DEMO_RELATIONSHIPS.length,
+  hasMoreData: false,
+  loadingMore: false,
+  pageError: null,
+  onLoadMore: vi.fn(),
+  onRetryMore: vi.fn(),
+};
 
 describe("RelationshipGraph2D", () => {
   it("draws a labelled 2D map for each sample relationship", () => {
@@ -51,6 +72,7 @@ describe("RelationshipExplorer", () => {
   it("exposes relationship direction, confidence, evidence state, and provenance", () => {
     render(
       <RelationshipExplorer
+        {...explorerDefaults}
         nodes={DEMO_NODES}
         relationships={DEMO_RELATIONSHIPS}
         selectedNodeId="actor-demo"
@@ -63,14 +85,15 @@ describe("RelationshipExplorer", () => {
     expect(within(relationshipList).getAllByText("Demo threat actor").length).toBeGreaterThan(0);
     expect(within(relationshipList).getByText("associated with")).toBeInTheDocument();
     expect(within(relationshipList).getByText(/55%/)).toBeInTheDocument();
-    expect(screen.getAllByText(/No verified evidence attached/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Synthetic UI fixture; not an intelligence record/)).toBeInTheDocument();
+    expect(screen.getAllByText(/No evidence attached to this synthetic sample/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Synthetic UI fixture")).toBeInTheDocument();
   });
 
   it("moves keyboard focus along a relationship in the LTR direction", () => {
     const onSelectNode = vi.fn();
     render(
       <RelationshipExplorer
+        {...explorerDefaults}
         nodes={DEMO_NODES}
         relationships={DEMO_RELATIONSHIPS}
         selectedNodeId="actor-demo"
@@ -81,6 +104,8 @@ describe("RelationshipExplorer", () => {
 
     const actor = screen.getByRole("button", { name: /Demo threat actor/ });
     const campaign = screen.getByRole("button", { name: /Demo campaign/ });
+    expect(actor).toHaveAttribute("tabindex", "0");
+    expect(campaign).toHaveAttribute("tabindex", "-1");
     actor.focus();
     fireEvent.keyDown(actor, { key: "ArrowRight" });
 
@@ -92,6 +117,7 @@ describe("RelationshipExplorer", () => {
     const onSelectNode = vi.fn();
     render(
       <RelationshipExplorer
+        {...explorerDefaults}
         nodes={DEMO_NODES}
         relationships={DEMO_RELATIONSHIPS}
         selectedNodeId="actor-demo"
@@ -113,6 +139,7 @@ describe("RelationshipExplorer", () => {
     const onSelectNode = vi.fn();
     render(
       <RelationshipExplorer
+        {...explorerDefaults}
         nodes={DEMO_NODES}
         relationships={DEMO_RELATIONSHIPS}
         selectedNodeId="campaign-demo"
@@ -128,9 +155,72 @@ describe("RelationshipExplorer", () => {
     expect(screen.getByRole("button", { name: /Demo research workstation/ })).toHaveFocus();
   });
 
+  it("paginates the entity list while keeping an off-page selection visible", () => {
+    const nodes = buildNodes(80);
+    render(
+      <RelationshipExplorer
+        {...explorerDefaults}
+        totalNodes={nodes.length}
+        totalRelationships={0}
+        nodes={nodes}
+        relationships={[]}
+        selectedNodeId="stress-node-70"
+        locale="en"
+        onSelectNode={vi.fn()}
+      />,
+    );
+
+    const entityList = screen.getByRole("list", { name: /Entities/ });
+    expect(within(entityList).getAllByRole("button")).toHaveLength(50);
+    expect(within(entityList).getByRole("button", { name: /Entity 70/ })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByText("Showing 50 of 80 entities.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more entities" }));
+    expect(within(entityList).getAllByRole("button")).toHaveLength(80);
+    expect(screen.getByText("Showing 80 of 80 entities.")).toBeInTheDocument();
+  });
+
+  it("moves focus to an off-page linked entity without rendering every entity", () => {
+    const nodes = buildNodes(60);
+    const relationship = {
+      ...DEMO_RELATIONSHIPS[0]!,
+      id: "off-page-link",
+      sourceId: nodes[0]!.id,
+      targetId: nodes[55]!.id,
+    };
+
+    function InteractiveExplorer() {
+      const [selectedNodeId, setSelectedNodeId] = useState(nodes[0]!.id);
+      return (
+        <RelationshipExplorer
+          {...explorerDefaults}
+          totalNodes={nodes.length}
+          totalRelationships={1}
+          nodes={nodes}
+          relationships={[relationship]}
+          selectedNodeId={selectedNodeId}
+          locale="en"
+          onSelectNode={setSelectedNodeId}
+        />
+      );
+    }
+
+    render(<InteractiveExplorer />);
+    const firstEntity = screen.getByRole("button", { name: /Entity 0/ });
+    expect(screen.queryByRole("button", { name: /Entity 55/ })).not.toBeInTheDocument();
+    firstEntity.focus();
+    fireEvent.keyDown(firstEntity, { key: "ArrowRight" });
+
+    const linkedEntity = screen.getByRole("button", { name: /Entity 55/ });
+    expect(linkedEntity).toHaveFocus();
+    expect(screen.getAllByRole("list", { name: /Entities/ })[0]?.querySelectorAll("button")).toHaveLength(50);
+  });
+
   it("paginates the accessible relationship list for large graphs", () => {
     render(
       <RelationshipExplorer
+        {...explorerDefaults}
+        totalRelationships={5_000}
         nodes={DEMO_NODES}
         relationships={buildRelationships(5_000)}
         selectedNodeId="actor-demo"
@@ -141,10 +231,10 @@ describe("RelationshipExplorer", () => {
 
     const relationshipList = screen.getByRole("list", { name: /Relationships/ });
     expect(within(relationshipList).getAllByRole("listitem")).toHaveLength(50);
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 50 of 5,000");
+    expect(screen.getByText("Showing 50 of 5,000 relationships.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Show more relationships" }));
     expect(within(relationshipList).getAllByRole("listitem")).toHaveLength(100);
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 100 of 5,000");
+    expect(screen.getByText("Showing 100 of 5,000 relationships.")).toBeInTheDocument();
   });
 });
