@@ -63,7 +63,7 @@ def test_webhook_ingest_ok_and_task_created(client):
     d = r.json()
     assert d["ok"] and not d["duplicate"] and d["kind"] == "pr_opened"
     tasks = client.get("/api/v1/coordination/tasks").json()["tasks"]
-    assert len(tasks) == 1 and tasks[0]["task_id"] == "gh-d-1" and tasks[0]["state"] == "NEW"
+    assert len(tasks) == 1 and tasks[0]["task_id"] == "gh-d-1" and tasks[0]["state"] == "CREATED"  # NEW normalized
     assert tasks[0]["pr_ref"] == "7" and tasks[0]["branch_ref"] == "arena/x"
     # normalized payload stored with provenance, secret stripped
     assert "super-secret-value" not in json.dumps(tasks[0]["payload"])
@@ -99,10 +99,10 @@ def test_registry_transitions_validated():
                                  kind="manual", repo="r", pr_ref=None, branch_ref=None,
                                  title="x", payload={})
         assert registry.transition(s, t, "WEIRD") is False
-        assert registry.transition(s, t, "IN_PROGRESS") is False  # NEW -> IN_PROGRESS illegal
+        assert registry.transition(s, t, "RUNNING") is False  # CREATED -> RUNNING illegal
         assert registry.transition(s, t, "QUEUED") is True
         assert registry.transition(s, t, "DELIVERED") is True
-        assert registry.transition(s, t, "IN_PROGRESS") is True
+        assert registry.transition(s, t, "RUNNING") is True
         assert registry.transition(s, t, "COMPLETED") is True
         assert registry.transition(s, t, "QUEUED") is False  # terminal
         evs = registry.task_events(s, "t-1")
@@ -156,23 +156,23 @@ def test_handoff_human_assisted_and_reporting(client):
     assert h["task_id"] == "gh-d-2" and h["agent"] == "agent-1-ops"
     assert "do NOT control Arena sessions" in h["boundary"]
     assert "never push to main" in h["instructions"]
-    # agent reports: QUEUED ->(ack requires DELIVERED; ignored) ; use direct transitions
-    d = client.post("/api/v1/coordination/tasks/gh-d-2/ack").json()
-    assert d["state"] in ("QUEUED",)  # ack from QUEUED is recorded, not a transition
+    # v2 lifecycle: QUEUED -> ASSIGNED -> DELIVERING -> ACKNOWLEDGED -> RUNNING -> COMPLETED
+    from sqlalchemy import select as _sel
     with ops.SessionLocal() as s:
-        t = s.execute(models.CoordinationTask.__table__.select().where(
-            models.CoordinationTask.task_id == "gh-d-2")).scalar_one_or_none() if False else None
-    # force DELIVERED then ack -> IN_PROGRESS -> complete
-    with ops.SessionLocal() as s:
-        t = s.execute(__import__("sqlalchemy").select(models.CoordinationTask).where(
+        t = s.execute(_sel(models.CoordinationTask).where(
             models.CoordinationTask.task_id == "gh-d-2")).scalar_one_or_none()
-        assert registry.transition(s, t, "DELIVERED", "test")
+        assert registry.transition(s, t, "ASSIGNED", "test")
+        assert registry.transition(s, t, "DELIVERING", "test")
         s.commit()
-    assert client.post("/api/v1/coordination/tasks/gh-d-2/ack").json()["state"] == "IN_PROGRESS"
+    assert client.post("/api/v1/coordination/tasks/gh-d-2/ack").json()["state"] == "ACKNOWLEDGED"
+    assert client.post("/api/v1/coordination/tasks/gh-d-2/start").json()["state"] == "RUNNING"
     d = client.post("/api/v1/coordination/tasks/gh-d-2/complete", json={"result": "done in PR #9"}).json()
     assert d["state"] == "COMPLETED"
     evs = client.get("/api/v1/coordination/tasks/gh-d-2/events").json()["events"]
     assert any("COMPLETED" in e["kind"] for e in evs)
+    # delivery history recorded (human_assisted, published — not "delivered")
+    dl = client.get("/api/v1/coordination/tasks/gh-d-2/deliveries").json()["deliveries"]
+    assert dl and dl[0]["channel"] == "human_assisted" and dl[0]["status"] == "published"
 
 
 def test_handoff_broker_failure_falls_back(client, monkeypatch):
@@ -183,7 +183,7 @@ def test_handoff_broker_failure_falls_back(client, monkeypatch):
     client.post("/api/v1/coordination/tasks/gh-d-3/route")
     r = client.post("/api/v1/coordination/tasks/gh-d-3/deliver").json()
     assert r["delivered"] is False and r["via"] == "human_assisted"
-    assert r["state"] in ("RETRYING", "QUEUED")
+    assert r["state"] == "RETRYING"
 
 
 # ---------- read/write gates on coordination ----------

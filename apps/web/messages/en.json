@@ -159,5 +159,12 @@
   "colSender": "Sender",
   "noCoordTasks": "No coordination tasks yet — send a signed GitHub webhook to /api/v1/coordination/webhook/github",
   "noCoordEvents": "No GitHub events ingested yet.",
-  "coordBoundary": "RabbitMQ/local workers distribute tasks; they do NOT launch or control Arena sessions."
+  "coordBoundary": "RabbitMQ/local workers distribute tasks; they do NOT launch or control Arena sessions.",
+  "agentsTitle": "Agent registry (heartbeats; NOT Arena sessions)",
+  "noAgents": "No agents registered yet — POST /api/v1/coordination/agents/register",
+  "specialization": "Specialization",
+  "capabilities": "Capabilities",
+  "activeTasks": "Active",
+  "done": "Done",
+  "failedCol": "Failed"
 }

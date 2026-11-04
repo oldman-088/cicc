@@ -86,6 +86,10 @@ class TaskStatsResponse(BaseModel):
     avg_duration_ms: Optional[float] = None
     oldest_pending_started: Optional[str] = None
     tasks_per_min: Optional[float] = None  # processing rate (M6)
+    duration_p50_ms: Optional[int] = None
+    duration_p95_ms: Optional[int] = None
+    duration_max_ms: Optional[int] = None
+    retry_rate: Optional[float] = None  # M7: failed-with-retries / failed
 
 
 class TaskRunIn(BaseModel):

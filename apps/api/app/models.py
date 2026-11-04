@@ -233,10 +233,16 @@ class Worker(Base):
 
 # ---- Central Autonomous Coordination (separately reviewable; own tables) ----
 
+# M7 lifecycle v2: legacy states kept as aliases for backward compatibility
+# (NEW == CREATED, DELIVERED == DELIVERING, IN_PROGRESS == RUNNING).
 COORD_TASK_STATES = (
-    "NEW", "QUEUED", "DELIVERED", "IN_PROGRESS", "WAITING_FOR_APPROVAL",
-    "COMPLETED", "FAILED", "RETRYING", "BLOCKED",
+    "CREATED", "VALIDATING", "QUEUED", "WAITING_FOR_APPROVAL", "ASSIGNED",
+    "DELIVERING", "ACKNOWLEDGED", "RUNNING", "COMPLETED", "FAILED",
+    "RETRYING", "BLOCKED", "CANCELLED", "EXPIRED",
+    # legacy aliases (accepted on read, normalized on write)
+    "NEW", "DELIVERED", "IN_PROGRESS",
 )
+LEGACY_STATE_ALIASES = {"NEW": "CREATED", "DELIVERED": "DELIVERING", "IN_PROGRESS": "RUNNING"}
 
 
 class CoordinationTask(Base):
@@ -260,6 +266,13 @@ class CoordinationTask(Base):
     handoff = Column(Text, nullable=True)  # copy-ready handoff payload
     attempts = Column(Integer, default=0)
     result = Column(Text, nullable=True)
+    owner = Column(String(128), nullable=True)            # human owner of the task
+    depends_on = Column(Text, nullable=True)               # JSON list of task_ids
+    timeout_s = Column(Integer, nullable=True)             # max runtime once RUNNING
+    expires_at = Column(DateTime(timezone=True), nullable=True)  # task TTL
+    idempotency_key = Column(String(128), nullable=True, index=True)
+    dead_letter = Column(Boolean, default=False, nullable=False)
+    routing_explanation = Column(Text, nullable=True)      # why this agent was chosen
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -301,3 +314,55 @@ class RoutingRule(Base):
     match = Column(Text, nullable=False)  # JSON: {"kind": ..., "labels": [...], "path": ...}
     agent = Column(String(64), nullable=False)
     enabled = Column(Boolean, default=True, nullable=False)
+
+
+class CoordinationAgent(Base):
+    """Agent registry entry (M7): identity, specialization, capabilities,
+    liveness, workload and performance stats. A registered agent is NOT an
+    active Arena session — liveness here means heartbeats, nothing more."""
+
+    __tablename__ = "coord_agents"
+
+    agent = Column(String(64), primary_key=True)
+    specialization = Column(String(128), nullable=True)
+    capabilities = Column(Text, nullable=True)  # JSON array
+    status = Column(String(16), default="unknown", index=True)  # available|busy|offline|draining
+    version = Column(String(64), nullable=True)
+    last_heartbeat = Column(DateTime(timezone=True), nullable=True)
+    registered_at = Column(DateTime(timezone=True), default=utcnow)
+    meta = Column(Text, nullable=True)  # JSON free-form (compat metadata)
+
+
+class CoordinationApproval(Base):
+    """Approval workflow record (M7): one row per approval request."""
+
+    __tablename__ = "coord_approvals"
+
+    id = Column(Integer, primary_key=True)
+    task_id = Column(String(64), index=True)
+    status = Column(String(16), default="pending", index=True)  # pending|approved|rejected|expired
+    requested_by = Column(String(128), nullable=True)
+    decided_by = Column(String(128), nullable=True)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class CoordinationDelivery(Base):
+    """Delivery history record (M7): one row per delivery attempt. A task is
+    DELIVERING only while a record is unconfirmed; publisher confirms update
+    it. Never marks delivered merely because a message was prepared."""
+
+    __tablename__ = "coord_deliveries"
+
+    id = Column(Integer, primary_key=True)
+    task_id = Column(String(64), index=True)
+    channel = Column(String(16))  # rabbitmq | human_assisted
+    queue = Column(String(256), nullable=True)
+    message_id = Column(String(128), nullable=True)  # idempotency / dedup id
+    status = Column(String(16), index=True)  # published|confirmed|failed
+    attempt = Column(Integer, default=1)
+    error = Column(Text, nullable=True)
+    at = Column(DateTime(timezone=True), default=utcnow)
+    confirmed_at = Column(DateTime(timezone=True), nullable=True)

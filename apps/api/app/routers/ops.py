@@ -127,6 +127,16 @@ def post_heartbeat(payload: WorkerHeartbeatIn, request: Request, authorization: 
     return {"worker": payload.worker, "created": created}
 
 
+@router.get("/alerts/history", response_model=AlertsResponse)
+def get_alert_history(
+    component: str | None = Query(None, max_length=64),
+    rule: str | None = Query(None, max_length=64),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    """Per-component / per-rule alert history (M7)."""
+    return {"alerts": ops.build_alert_history(component, rule, limit)}
+
+
 @router.get("/alerts", response_model=AlertsResponse)
 def get_alerts(
     state: str = Query("active", pattern="^(active|acknowledged|resolved|all)$"),

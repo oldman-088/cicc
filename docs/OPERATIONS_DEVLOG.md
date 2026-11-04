@@ -57,3 +57,15 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - API 93/93 (7 real-PG), web 17/17 + tsc + build; live smoke full pipeline.
 - Env-blocked (honest): real broker delivery/verification — no Docker/reachable
   broker in sandbox; procedures committed.
+
+## 2026-11-04 — Milestone 7 (branch arena/961971ed-cicc, PR #4)
+
+- Coordination v2 shipped (see COORDINATION_ARCHITECTURE.md): agents registry,
+  explainable workload-aware routing, lifecycle v2 with audited transitions,
+  approvals, delivery records w/ publisher confirms, webhook hardening.
+- Ops: alert history endpoint, latency percentiles + retry_rate in task stats.
+- Bugs found & fixed by tests/live smoke: missing approval record on webhook,
+  tz-naive expiry compare, required_capabilities nesting, QUEUED->ACKNOWLEDGED
+  policy gap, coord_tasks additive migration for pre-existing dev DB.
+- API 107/107 (7 real-PG), web 17/17 + tsc + build; live smoke full lifecycle.
+- Still environment-blocked: real RabbitMQ broker verification/delivery.

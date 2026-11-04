@@ -242,3 +242,16 @@ full overview p50 8.2ms; retention purge p50 0.9ms. task stats over the full
 - **Coordination API** under `/api/v1/coordination` — see
   docs/COORDINATION_ARCHITECTURE.md (webhook HMAC + replay dedup, task
   registry state machine, routing rules, handoff/delivery, reporting).
+
+
+## 12. Milestone-7 contracts
+
+- `GET /api/v1/ops/alerts/history?component&rule&limit` — per-component/rule alert history.
+- `GET /tasks/stats` adds `duration_p50_ms`, `duration_p95_ms`, `duration_max_ms`, `retry_rate`.
+- Coordination API v2 — see docs/COORDINATION_ARCHITECTURE.md (agent registry,
+  workload-aware routing + explanations, lifecycle v2 states incl. CANCELLED/
+  EXPIRED + legacy aliases, approvals, delivery records, webhook allowlist).
+- New env: `CICC_GH_EVENT_ALLOWLIST`, `CICC_AGENT_STALE_S`, `CICC_COORD_APPROVERS`,
+  `CICC_COORD_APPROVAL_TTL_S`, `CICC_COORD_MAX_ATTEMPTS`, `RABBITMQ_AMQP_URL`.
+- Additive-only migrations extended to coord_tasks (owner, depends_on,
+  timeout_s, expires_at, idempotency_key, dead_letter, routing_explanation).

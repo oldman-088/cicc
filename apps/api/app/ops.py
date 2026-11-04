@@ -137,6 +137,15 @@ def _ensure_alert_columns() -> None:
         "task_runs": [
             ("attempts", "ALTER TABLE task_runs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1"),
         ],
+        "coord_tasks": [
+            ("owner", "ALTER TABLE coord_tasks ADD COLUMN owner VARCHAR(128)"),
+            ("depends_on", "ALTER TABLE coord_tasks ADD COLUMN depends_on TEXT"),
+            ("timeout_s", "ALTER TABLE coord_tasks ADD COLUMN timeout_s INTEGER"),
+            ("expires_at", "ALTER TABLE coord_tasks ADD COLUMN expires_at DATETIME"),
+            ("idempotency_key", "ALTER TABLE coord_tasks ADD COLUMN idempotency_key VARCHAR(128)"),
+            ("dead_letter", "ALTER TABLE coord_tasks ADD COLUMN dead_letter BOOLEAN NOT NULL DEFAULT FALSE"),
+            ("routing_explanation", "ALTER TABLE coord_tasks ADD COLUMN routing_explanation TEXT"),
+        ],
     }
     insp = _inspect(engine)
     tables = set(insp.get_table_names())
@@ -640,6 +649,18 @@ def build_alerts(state: str = "active", limit: int = 100) -> list[dict]:
         return [_alert_dict(a) for a in rows]
 
 
+def build_alert_history(component: str | None = None, rule: str | None = None, limit: int = 200) -> list[dict]:
+    """Per-component / per-rule alert history (M7)."""
+    with SessionLocal() as s:
+        q = select(models.Alert)
+        if component:
+            q = q.where(models.Alert.component_key == component)
+        if rule:
+            q = q.where(models.Alert.rule == rule)
+        rows = s.execute(q.order_by(models.Alert.last_seen.desc(), models.Alert.id.desc()).limit(limit)).scalars().all()
+        return [_alert_dict(a) for a in rows]
+
+
 def ack_alert(alert_id: int, acked_by: str | None, owner: str | None = None):
     with SessionLocal() as s:
         a = s.get(models.Alert, alert_id)
@@ -850,6 +871,26 @@ def build_task_stats(hours: int) -> dict:
                 models.TaskRun.created_at >= utcnow() - timedelta(minutes=1)
             )
         ).scalar_one()
+        # latency percentiles over the window (bounded to latest 5000 durations)
+        durs = s.execute(
+            select(models.TaskRun.duration_ms).where(
+                models.TaskRun.created_at >= cutoff,
+                models.TaskRun.duration_ms.isnot(None),
+            ).order_by(models.TaskRun.created_at.desc()).limit(5000)
+        ).scalars().all()
+        durs = sorted(durs)
+        p50 = durs[len(durs) // 2] if durs else None
+        p95 = durs[int(len(durs) * 0.95)] if durs else None
+        maxd = durs[-1] if durs else None
+        failed_total = int(counts.get("failed", 0))
+        retried = s.execute(
+            select(func.count(models.TaskRun.id)).where(
+                models.TaskRun.created_at >= cutoff,
+                models.TaskRun.status == "failed",
+                models.TaskRun.attempts > 1,
+            )
+        ).scalar_one()
+        retry_rate = round(int(retried) / failed_total, 4) if failed_total else None
         return {
             "window_hours": hours,
             "completed": int(counts.get("success", 0)),
@@ -858,6 +899,10 @@ def build_task_stats(hours: int) -> dict:
             "avg_duration_ms": round(float(avg), 2) if avg is not None else None,
             "oldest_pending_started": _iso(oldest_pending),
             "tasks_per_min": round(int(per_min) / 60.0, 2),
+            "duration_p50_ms": p50,
+            "duration_p95_ms": p95,
+            "duration_max_ms": maxd,
+            "retry_rate": retry_rate,  # failed runs with attempts>1 / failed runs
         }
 
 

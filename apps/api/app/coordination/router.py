@@ -1,17 +1,20 @@
-"""Coordination HTTP API (mounted under /api/v1/coordination).
+"""Coordination HTTP API v2 (M7), mounted under /api/v1/coordination.
 
-- POST /webhook/github — signed GitHub webhook ingestion (fail-closed).
-- GET  /events — ingested GitHub events (provenance preserved).
-- GET  /tasks?state&agent — durable task registry.
-- GET  /tasks/{task_id}/events — audit history of one task.
-- POST /tasks/{task_id}/route — run the routing engine (assign agent).
-- POST /tasks/{task_id}/deliver — RabbitMQ publish (real broker only) or
-  copy-ready human-assisted handoff payload.
-- POST /tasks/{task_id}/ack|complete|fail — agent reporting.
-- GET  /rules, POST /rules — routing rules (write-gated).
+Webhook:   POST /webhook/github (HMAC only — GitHub sends no ops read token)
+Events:    GET  /events
+Tasks:     GET  /tasks?state&agent   GET /tasks/{id}   GET /tasks/{id}/events
+           POST /tasks/{id}/route    POST /tasks/{id}/deliver
+           POST /tasks/{id}/ack|start|complete|fail
+           POST /tasks/{id}/cancel   POST /tasks/{id}/retry
+           GET  /tasks/{id}/deliveries   GET /tasks/{id}/approval
+           POST /tasks/{id}/approve|reject  (approver-gated)
+           POST /sweep                (timeouts/expired approvals/stale agents)
+Agents:    GET  /agents   POST /agents/register   POST /agents/{agent}/heartbeat
+           POST /agents/{agent}/deregister
+Rules:     GET  /rules    POST /rules
 
 Reads honor CICC_OPS_READ_TOKEN when set; writes honor CICC_OPS_WRITE_TOKEN
-(write token also satisfies read). All under the ops rate limiter.
+(write also satisfies read). Webhook is the only endpoint without the read gate.
 """
 import json
 import os
@@ -22,11 +25,9 @@ from sqlalchemy import select
 
 from app import models, ops
 from app.ratelimit import read_token_dependency, require_write_token, write_rate_limit_dependency
-from . import handoff, registry, routing, webhook
+from . import agents as agent_registry
+from . import approvals, handoff, registry, routing, webhook
 
-# NOTE: the GitHub webhook endpoint is intentionally NOT behind the read-token
-# gate — it authenticates via X-Hub-Signature-256 HMAC (fail-closed when the
-# secret is unset). All other endpoints carry the read gate explicitly.
 router = APIRouter(prefix="/api/v1/coordination", tags=["coordination"])
 
 
@@ -42,6 +43,34 @@ class ReportIn(BaseModel):
     result: str | None = Field(default=None, max_length=4000)
 
 
+class DecisionIn(BaseModel):
+    decided_by: str = Field(min_length=1, max_length=128)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class AgentRegisterIn(BaseModel):
+    agent: str = Field(min_length=1, max_length=64)
+    specialization: str | None = Field(default=None, max_length=128)
+    capabilities: list[str] | None = Field(default=None, max_length=64)
+    version: str | None = Field(default=None, max_length=64)
+    meta: dict | None = None
+
+
+class AgentHeartbeatIn(BaseModel):
+    status: str | None = Field(default=None, pattern="^(available|busy|draining|offline)$")
+
+
+def _get_task(s, task_id: str):
+    t = s.execute(
+        select(models.CoordinationTask).where(models.CoordinationTask.task_id == task_id)
+    ).scalar_one_or_none()
+    if t is None:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    return t
+
+
+# ---------------- webhook (signature-only auth) ----------------
+
 @router.post("/webhook/github")
 async def github_webhook(
     request: Request,
@@ -49,7 +78,6 @@ async def github_webhook(
     x_github_delivery: str | None = Header(default=None),
     x_hub_signature_256: str | None = Header(default=None),
 ):
-    """Signed GitHub webhook. Fail-closed when CICC_GH_WEBHOOK_SECRET is unset."""
     body = await request.body()
     if not x_github_delivery:
         raise HTTPException(status_code=400, detail="missing X-GitHub-Delivery")
@@ -61,6 +89,8 @@ async def github_webhook(
         raise HTTPException(status_code=result["code"], detail=result["reason"])
     return result
 
+
+# ---------------- events ----------------
 
 @router.get("/events")
 def list_events(_gate: None = Depends(read_token_dependency), limit: int = Query(100, ge=1, le=500)):
@@ -76,6 +106,8 @@ def list_events(_gate: None = Depends(read_token_dependency), limit: int = Query
         ]}
 
 
+# ---------------- tasks ----------------
+
 @router.get("/tasks")
 def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None = Query(None),
                agent: str | None = Query(None), limit: int = Query(100, ge=1, le=500)):
@@ -83,19 +115,34 @@ def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None =
         return {"tasks": registry.list_tasks(s, state, agent, limit)}
 
 
+@router.get("/tasks/{task_id}")
+def get_task(task_id: str, _gate: None = Depends(read_token_dependency)):
+    with ops.SessionLocal() as s:
+        _get_task(s, task_id)
+        rows = [t for t in registry.list_tasks(s, limit=10000) if t["task_id"] == task_id]
+        return rows[0]
+
+
 @router.get("/tasks/{task_id}/events")
 def get_task_events(task_id: str, _gate: None = Depends(read_token_dependency), limit: int = Query(200, ge=1, le=1000)):
     with ops.SessionLocal() as s:
+        _get_task(s, task_id)
         return {"task_id": task_id, "events": registry.task_events(s, task_id, limit)}
 
 
-def _get_task(s, task_id: str):
-    t = s.execute(
-        select(models.CoordinationTask).where(models.CoordinationTask.task_id == task_id)
-    ).scalar_one_or_none()
-    if t is None:
-        raise HTTPException(status_code=404, detail="task_not_found")
-    return t
+@router.get("/tasks/{task_id}/deliveries")
+def get_task_deliveries(task_id: str, _gate: None = Depends(read_token_dependency), limit: int = Query(100, ge=1, le=500)):
+    with ops.SessionLocal() as s:
+        _get_task(s, task_id)
+        return {"task_id": task_id, "deliveries": handoff.deliveries(s, task_id, limit)}
+
+
+@router.get("/tasks/{task_id}/approval")
+def get_task_approval(task_id: str, _gate: None = Depends(read_token_dependency)):
+    with ops.SessionLocal() as s:
+        _get_task(s, task_id)
+        ap = approvals.task_approval(s, task_id)
+        return {"task_id": task_id, "approval": ap}
 
 
 @router.post("/tasks/{task_id}/route")
@@ -103,28 +150,35 @@ def route_task(task_id: str, _gate: None = Depends(read_token_dependency), autho
     require_write_token(authorization)
     with ops.SessionLocal() as s:
         t = _get_task(s, task_id)
-        agent = routing.route(s, t)
-        t.agent = agent
-        if agent:
-            registry.transition(s, t, "QUEUED", f"routed to {agent}")
+        res = routing.route(s, t)
+        t.agent = res["agent"]
+        t.routing_explanation = json.dumps(res["explanation"])
+        if res["agent"]:
+            registry.transition(s, t, "QUEUED", f"routed to {res['agent']}: {res['explanation'].get('via')}")
         else:
-            registry.transition(s, t, "BLOCKED", "no routing rule matched; needs owner assignment")
+            registry.transition(s, t, "BLOCKED", "no routing decision: " + "; ".join(res["explanation"]["reasons"]))
         s.commit()
-        return {"task_id": task_id, "agent": agent, "state": t.state}
+        return {"task_id": task_id, "agent": res["agent"], "state": registry.normalize_state(t.state),
+                "explanation": res["explanation"]}
 
 
 @router.post("/tasks/{task_id}/deliver")
-def deliver_task(task_id: str, request: Request, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+def deliver_task(task_id: str, request: Request, _gate: None = Depends(read_token_dependency),
+                 authorization: str | None = Header(default=None)):
     require_write_token(authorization)
     write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         t = _get_task(s, task_id)
-        if t.state == "NEW":
-            t.agent = routing.route(s, t)
+        if registry.normalize_state(t.state) == "CREATED":
+            res = routing.route(s, t)
+            t.agent = res["agent"]
+            t.routing_explanation = json.dumps(res["explanation"])
             registry.transition(s, t, "QUEUED", "auto-routed before delivery")
+        if registry.normalize_state(t.state) == "WAITING_FOR_APPROVAL":
+            raise HTTPException(status_code=409, detail="task is WAITING_FOR_APPROVAL; not deliverable")
         res = handoff.deliver(s, t)
         s.commit()
-        return {"task_id": task_id, "state": t.state, **res}
+        return {"task_id": task_id, "state": registry.normalize_state(t.state), **res}
 
 
 @router.post("/tasks/{task_id}/ack")
@@ -137,8 +191,19 @@ def ack_task(task_id: str, _gate: None = Depends(read_token_dependency), authori
         return r
 
 
+@router.post("/tasks/{task_id}/start")
+def start_task(task_id: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        r = handoff.report(s, task_id, "start")
+        if r is None:
+            raise HTTPException(status_code=404, detail="task_not_found")
+        return r
+
+
 @router.post("/tasks/{task_id}/complete")
-def complete_task(task_id: str, _gate: None = Depends(read_token_dependency), body: ReportIn | None = None, authorization: str | None = Header(default=None)):
+def complete_task(task_id: str, _gate: None = Depends(read_token_dependency), body: ReportIn | None = None,
+                  authorization: str | None = Header(default=None)):
     require_write_token(authorization)
     with ops.SessionLocal() as s:
         r = handoff.report(s, task_id, "complete", body.result if body else None)
@@ -148,7 +213,8 @@ def complete_task(task_id: str, _gate: None = Depends(read_token_dependency), bo
 
 
 @router.post("/tasks/{task_id}/fail")
-def fail_task(task_id: str, _gate: None = Depends(read_token_dependency), body: ReportIn | None = None, authorization: str | None = Header(default=None)):
+def fail_task(task_id: str, _gate: None = Depends(read_token_dependency), body: ReportIn | None = None,
+              authorization: str | None = Header(default=None)):
     require_write_token(authorization)
     with ops.SessionLocal() as s:
         r = handoff.report(s, task_id, "fail", body.result if body else None)
@@ -156,6 +222,116 @@ def fail_task(task_id: str, _gate: None = Depends(read_token_dependency), body: 
             raise HTTPException(status_code=404, detail="task_not_found")
         return r
 
+
+@router.post("/tasks/{task_id}/cancel")
+def cancel_task(task_id: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        t = _get_task(s, task_id)
+        ok = registry.transition(s, t, "CANCELLED", "cancelled by operator")
+        s.commit()
+        if not ok:
+            raise HTTPException(status_code=409, detail=f"cannot cancel from state {t.state}")
+        return {"task_id": task_id, "state": "CANCELLED"}
+
+
+@router.post("/tasks/{task_id}/retry")
+def retry_task(task_id: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        t = _get_task(s, task_id)
+        ok = registry.transition(s, t, "RETRYING", "manual retry") and registry.transition(s, t, "QUEUED", "re-queued")
+        s.commit()
+        if not ok:
+            raise HTTPException(status_code=409, detail=f"cannot retry from state {t.state}")
+        return {"task_id": task_id, "state": "QUEUED", "attempts": t.attempts}
+
+
+@router.post("/tasks/{task_id}/approve")
+def approve_task(task_id: str, body: DecisionIn, _gate: None = Depends(read_token_dependency),
+                 authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        r = approvals.decide(s, task_id, "approve", body.decided_by)
+        s.commit()
+    if r is None:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    if not r.get("ok"):
+        raise HTTPException(status_code=r["code"], detail=r["reason"])
+    return r
+
+
+@router.post("/tasks/{task_id}/reject")
+def reject_task(task_id: str, body: DecisionIn, _gate: None = Depends(read_token_dependency),
+                authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        r = approvals.decide(s, task_id, "reject", body.decided_by)
+        s.commit()
+    if r is None:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    if not r.get("ok"):
+        raise HTTPException(status_code=r["code"], detail=r["reason"])
+    return r
+
+
+@router.post("/sweep")
+def sweep(_gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+    """Periodic maintenance: expire tasks/approvals, mark stale agents."""
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        expired_tasks = registry.sweep_timeouts(s)
+        expired_approvals = approvals.sweep_expired(s)
+        stale_agents = agent_registry.sweep_stale(s)
+        s.commit()
+        return {"expired_tasks": expired_tasks, "expired_approvals": expired_approvals,
+                "stale_agents": stale_agents}
+
+
+# ---------------- agents ----------------
+
+@router.get("/agents")
+def list_agents(_gate: None = Depends(read_token_dependency)):
+    with ops.SessionLocal() as s:
+        return {"agents": agent_registry.list_agents(s)}
+
+
+@router.post("/agents/register", status_code=201)
+def register_agent(body: AgentRegisterIn, request: Request, _gate: None = Depends(read_token_dependency),
+                   authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
+    with ops.SessionLocal() as s:
+        r = agent_registry.register(s, body.agent, body.specialization, body.capabilities, body.version, body.meta)
+        s.commit()
+        return r
+
+
+@router.post("/agents/{agent}/heartbeat")
+def agent_heartbeat(agent: str, body: AgentHeartbeatIn, request: Request,
+                    _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
+    with ops.SessionLocal() as s:
+        r = agent_registry.heartbeat(s, agent, body.status)
+        s.commit()
+        if r is None:
+            raise HTTPException(status_code=404, detail="agent_not_registered")
+        return r
+
+
+@router.post("/agents/{agent}/deregister")
+def deregister_agent(agent: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        ok = agent_registry.deregister(s, agent)
+        s.commit()
+        if not ok:
+            raise HTTPException(status_code=404, detail="agent_not_registered")
+        return {"agent": agent, "status": "offline"}
+
+
+# ---------------- rules ----------------
 
 @router.get("/rules")
 def list_rules(_gate: None = Depends(read_token_dependency)):
@@ -166,7 +342,8 @@ def list_rules(_gate: None = Depends(read_token_dependency)):
 
 
 @router.post("/rules", status_code=201)
-def add_rule(body: RuleIn, request: Request, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+def add_rule(body: RuleIn, request: Request, _gate: None = Depends(read_token_dependency),
+             authorization: str | None = Header(default=None)):
     require_write_token(authorization)
     write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:

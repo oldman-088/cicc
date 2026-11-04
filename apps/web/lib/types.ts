@@ -176,6 +176,7 @@ export interface CoordinationTask {
   title: string | null;
   attempts: number;
   result: string | null;
+  routing_explanation?: unknown;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -195,4 +196,22 @@ export interface GitHubEventItem {
 
 export interface CoordinationEventsResponse {
   events: GitHubEventItem[];
+}
+
+export interface CoordinationAgent {
+  agent: string;
+  specialization: string | null;
+  capabilities: string[];
+  status: string;
+  stale: boolean;
+  version: string | null;
+  last_heartbeat: string | null;
+  active_tasks: number;
+  completed: number;
+  failed: number;
+  retries: number;
+}
+
+export interface CoordinationAgentsResponse {
+  agents: CoordinationAgent[];
 }

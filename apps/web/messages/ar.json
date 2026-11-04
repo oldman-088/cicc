@@ -159,5 +159,12 @@
   "colSender": "المرسل",
   "noCoordTasks": "لا مهام تنسيق بعد — أرسل webhook موقّع إلى /api/v1/coordination/webhook/github",
   "noCoordEvents": "لم يتم ingest أي أحداث GitHub بعد.",
-  "coordBoundary": "RabbitMQ والعمال المحليون يوزعون المهام؛ هم لا يتحكمون في جلسات Arena."
+  "coordBoundary": "RabbitMQ والعمال المحليون يوزعون المهام؛ هم لا يتحكمون في جلسات Arena.",
+  "agentsTitle": "سجل الوكلاء (heartbeats؛ ليست جلسات Arena)",
+  "noAgents": "لا وكلاء مسجلون بعد — POST /api/v1/coordination/agents/register",
+  "specialization": "التخصص",
+  "capabilities": "القدرات",
+  "activeTasks": "نشطة",
+  "done": "منجزة",
+  "failedCol": "فاشلة"
 }

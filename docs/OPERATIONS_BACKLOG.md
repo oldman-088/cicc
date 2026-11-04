@@ -172,3 +172,33 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 4. Tenant isolation execution after owner decides DB model
    (docs/TENANT_ISOLATION_PLAN.md); per-tenant rate buckets; ops audit adapter.
 5. Notification channel adapters — only after explicit owner authorization.
+
+
+## Done — Milestone 7 (PR #4 update)
+
+- Coordination v2: agent registry + lifecycle, workload-aware explainable
+  routing (scoring + reasons, eligibility excludes stale/offline/draining and
+  capability-mismatched agents), task lifecycle v2 (14 canonical states +
+  legacy aliases, explicit transition policy with audited rejections,
+  dependencies gating delivery, timeouts/TTL sweep, cancel/retry,
+  idempotency-key dedup, dead-letter after max attempts), approval workflow
+  (approver-gated 403, expiry, 409 while waiting, audited), delivery records
+  with publisher confirms on real broker / honest human-assisted otherwise,
+  webhook allowlist + 413 cap + object validation.
+- Ops: per-component alert history endpoint; task stats latency p50/p95/max +
+  retry_rate.
+- Dashboard: agent registry table, routing explanations (EN/AR 168 keys).
+- Tests: API 107/107 (incl. 7 real-PG); web 17/17 + tsc + build.
+- Live smoke: full webhook→approval→route→deliver→ack/start/complete + sweep.
+
+## Next (backlog, priority order)
+
+1. Real broker delivery + consumer ack loop when a Docker/broker environment
+   is available (environment-blocked here; procedure committed).
+2. Agent 4 contract confirmation (PR #4 comment / issue #5); then wire ops
+   client into their worker lifecycle.
+3. Coordination: progress reports (structured), cross-domain task refs,
+   PR/CI joins on the dashboard, dependency DAG endpoint.
+4. Tenant isolation execution after owner DB-model decision; per-tenant rate
+   buckets; ops audit adapter into platform audit table.
+5. Notification channel adapters — only after explicit owner authorization.
