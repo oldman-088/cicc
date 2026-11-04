@@ -74,6 +74,8 @@ jobs:
               sys.exit("; ".join(problems))
           print("no unverified live-connectivity claims")
           PY
-      - name: No network access in the test suite
-        run: |
-          grep -rn "HttpxTransport()" tests/ && { echo "tests must not construct a live transport"; exit 1; } || echo "no live transport in tests"
+      - name: Network denial is enforced, not grepped
+        # tests/conftest.py blocks socket connect/connect_ex/create_connection and
+        # getaddrinfo for every test; tests/test_network_denial.py proves the guard
+        # is active. This replaced a fragile grep for "HttpxTransport()".
+        run: python -m pytest tests/test_network_denial.py -q

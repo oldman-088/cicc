@@ -96,3 +96,30 @@ def raises(exc_type: type[BaseException]) -> Callable[[str, Mapping[str, str] | 
         return exc_type("scripted failure")
 
     return _raise
+
+
+# ---------------------------------------------------------------------------
+# Network denial
+# ---------------------------------------------------------------------------
+# A grep for "HttpxTransport()" was the original guard, and it was both fragile
+# (it flagged a legitimate construction used to assert transport classification)
+# and weak (it could not see a request made through another library). This
+# fixture enforces the property that actually matters: no test may open a
+# socket. Any accidental live call fails loudly instead of passing silently.
+import socket as _socket  # noqa: E402
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _deny_network(monkeypatch: _pytest.MonkeyPatch) -> None:
+    def _blocked(*args: object, **kwargs: object):
+        raise RuntimeError(
+            "network access attempted during an offline test; "
+            "inject a scripted transport instead of making a live request"
+        )
+
+    monkeypatch.setattr(_socket.socket, "connect", _blocked, raising=True)
+    monkeypatch.setattr(_socket.socket, "connect_ex", _blocked, raising=True)
+    monkeypatch.setattr(_socket, "create_connection", _blocked, raising=True)
+    monkeypatch.setattr(_socket, "getaddrinfo", _blocked, raising=True)
