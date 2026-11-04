@@ -241,3 +241,67 @@ def test_truncated_page_is_reported_not_paged_forever() -> None:
     result = connector([response(truncated)]).search()
     assert result.state.status is CollectionStatus.PARTIAL
     assert any("short page" in warning for warning in result.warnings)
+
+
+# --- NVD-specific fields that change how a record should be read --------------
+
+
+class TestStatusAndDisputeDisclosure:
+    """NVD says more about a record's standing than the metrics alone convey.
+
+    A ``disputed`` CVE is contested by a vendor, and a ``Rejected`` one is
+    withdrawn.  Neither is "safe" and neither should be silently ranked as
+    ordinary confirmed intelligence.  This connector reports both; it does not
+    resolve them, because deciding whether to trust a disputed claim is the
+    consumer's call.
+    """
+
+    def test_deprecated_cveid_parameter_is_not_used(self) -> None:
+        """NVD documents `cveId` as deprecated in favour of `cveIds`."""
+        nvd = connector([response(fx.NVD_SINGLE)])
+        nvd.get_cve("CVE-2026-0001")
+        params = nvd.transport.calls[0]["params"]
+        assert "cveIds" in params
+        assert "cveId" not in params
+
+    def test_disputed_tag_is_reported(self) -> None:
+        body = {
+            **fx.NVD_SINGLE,
+            "vulnerabilities": [
+                {
+                    **fx.NVD_SINGLE["vulnerabilities"][0],
+                    "cve": {
+                        **fx.NVD_SINGLE["vulnerabilities"][0]["cve"],
+                        "cveTags": [
+                            {"sourceIdentifier": "fixture@example.invalid",
+                             "tags": ["disputed"]}
+                        ],
+                    },
+                }
+            ],
+        }
+        record = connector([response(body)]).get_cve("CVE-2026-0001")
+        assert any("disputed" in note for note in record.conflict_notes), (
+            "a contested record must not be presented as agreed intelligence"
+        )
+
+    def test_rejected_status_is_reported(self) -> None:
+        body = {
+            **fx.NVD_SINGLE,
+            "vulnerabilities": [
+                {
+                    **fx.NVD_SINGLE["vulnerabilities"][0],
+                    "cve": {
+                        **fx.NVD_SINGLE["vulnerabilities"][0]["cve"],
+                        "vulnStatus": "Rejected",
+                    },
+                }
+            ],
+        }
+        record = connector([response(body)]).get_cve("CVE-2026-0001")
+        assert any("Rejected" in note for note in record.conflict_notes)
+
+    def test_analyzed_status_adds_no_noise(self) -> None:
+        """The common case must stay quiet: a note on every record is a note on none."""
+        record = connector([response(fx.NVD_SINGLE)]).get_cve("CVE-2026-0001")
+        assert not any("vulnStatus" in note for note in record.conflict_notes)

@@ -2,7 +2,7 @@
 
 Endpoint contract, from the published NVD API 2.0 specification:
 
-    GET https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-YYYY-NNNN
+    GET https://services.nvd.nist.gov/rest/json/cves/2.0?cveIds=CVE-YYYY-NNNN
     GET https://services.nvd.nist.gov/rest/json/cves/2.0?startIndex=0&resultsPerPage=200
 
     {
@@ -176,7 +176,10 @@ class NvdConnector:
     def get_cve(self, cve_id: str | CveId) -> NormalizedVulnerability:
         """Fetch exactly one CVE. Raises :class:`SourceNotFound` if NVD has no record."""
         identifier = cve_id if isinstance(cve_id, CveId) else CveId.parse(cve_id)
-        body = self._request({"cveId": str(identifier)})
+        # NVD documents `cveId` as deprecated in favour of `cveIds`.  `cveId` still
+        # answers today, but a deprecated parameter is a removal waiting to happen,
+        # and the replacement has identical semantics for a single identifier.
+        body = self._request({"cveIds": str(identifier)})
         entries = self._envelope(body)
         if not entries:
             raise SourceNotFound(
@@ -362,6 +365,8 @@ class NvdConnector:
                 if note:
                     notes.append(note)
 
+        notes.extend(_status_notes(cve))
+
         severity = Severity.UNKNOWN
         for key in ("cvssMetricV31", "cvssMetricV30"):
             for metric in mapping_list((metrics or {}).get(key), field_name=f"metrics.{key}"):
@@ -418,6 +423,43 @@ class NvdConnector:
             conflict_notes=tuple(notes),
             verification="unverified",
         )
+
+
+#: NVD statuses meaning "this record does not assert a finalised vulnerability".
+#: ``Rejected`` is a withdrawn CVE; ``Awaiting Analysis`` / ``Undergoing Analysis``
+#: mean NVD has not finished enrichment.  None of them means "safe", so they are
+#: reported rather than dropped.
+_UNRESOLVED_STATUSES = frozenset(
+    {"Awaiting Analysis", "Undergoing Analysis", "Received", "Rejected"}
+)
+
+
+def _status_notes(cve: Mapping[str, Any]) -> list[str]:
+    """Surface NVD status and ``disputed`` tags, which are otherwise invisible.
+
+    A ``disputed`` CVE is one whose existence or severity a vendor contests.  NVD
+    carries this in ``cveTags``; ignoring it means a contested claim is ranked and
+    remediated as though it were agreed.  This module does not resolve the dispute,
+    it reports it so the consumer can decide.
+    """
+    notes: list[str] = []
+
+    status = _text(cve.get("vulnStatus"))
+    if status in _UNRESOLVED_STATUSES:
+        notes.append(f"NVD vulnStatus is '{status}': enrichment not final")
+
+    tags = cve.get("cveTags")
+    if isinstance(tags, list):
+        for tag_block in tags:
+            if not isinstance(tag_block, Mapping):
+                continue
+            for tag in tag_block.get("tags") or ():
+                if isinstance(tag, str) and tag.strip():
+                    notes.append(
+                        f"NVD cveTag '{tag.strip()}' present: the record is contested "
+                        "by its source"
+                    )
+    return notes
 
 
 def _text(value: object) -> str | None:
