@@ -1,0 +1,22 @@
+services:
+  api:
+    build: ./apps/api
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: sqlite:////data/ops.db
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - ops-data:/data
+
+  web:
+    build: ./apps/web
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    depends_on:
+      - api
+
+volumes:
+  ops-data:
