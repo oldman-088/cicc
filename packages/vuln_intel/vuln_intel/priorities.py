@@ -31,7 +31,7 @@ Guard rails:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Iterable, Mapping
 
@@ -54,8 +54,8 @@ __all__ = [
     "score_vulnerability",
 ]
 
-#: Maximum points contributed by each component. Must sum to 100.
-WEIGHTS: Mapping[str, int] = {
+#: Provisional weights. Not approved organizational policy.
+_PROVISIONAL_WEIGHTS: Mapping[str, int] = {
     "severity": 40,
     "exploitation": 30,
     "exposure": 10,
@@ -64,8 +64,115 @@ WEIGHTS: Mapping[str, int] = {
     "confidence": 5,
 }
 
+#: Maximum points contributed by each component under the provisional policy.
+#: Retained for callers that read it directly; scoring uses ``RankingPolicy``.
+WEIGHTS: Mapping[str, int] = _PROVISIONAL_WEIGHTS
+
 #: Share of the exploitation budget a mere EPSS probability can earn.
 EPSS_MAX = 20.0
+
+#: Components a policy must define. Kept explicit so a typo in a custom policy
+#: fails at construction instead of silently scoring zero for that component.
+_REQUIRED_WEIGHTS = (
+    "severity",
+    "exploitation",
+    "exposure",
+    "business",
+    "recency",
+    "confidence",
+)
+
+
+@dataclass(frozen=True)
+class RankingPolicy:
+    """A transparent, replaceable weighting policy.
+
+    These weights are **provisional** and have not been approved as organizational
+    policy. They live in an object rather than a module constant so a tenant can
+    rank with its own sign-off, and so the provisional numbers can be superseded
+    without editing code paths.
+
+    Every result states the policy it was scored under, which is the property that
+    makes a ranking arguable: two scores can only be compared if you know they used
+    the same weights.
+
+    ``epss_max`` is the share of the exploitation budget an EPSS *probability* can
+    earn; KEV membership is worth the whole budget because it is evidence of
+    exploitation rather than a forecast of it.
+    """
+
+    weights: Mapping[str, int] = field(
+        default_factory=lambda: dict(_PROVISIONAL_WEIGHTS)
+    )
+    #: ``None`` derives it as two thirds of the exploitation budget, which is what
+    #: the provisional policy encodes (20 of 30). Requiring every caller to restate
+    #: it invites the inconsistency the check below rejects.
+    epss_max: float | None = None
+    name: str = "provisional-40/30/10/10/5/5"
+    #: True only when an owner has approved these weights as organizational policy.
+    approved: bool = False
+
+    def __post_init__(self) -> None:
+        missing = [name for name in _REQUIRED_WEIGHTS if name not in self.weights]
+        if missing:
+            raise ValidationError(
+                "ranking policy is missing component(s): " + ", ".join(missing),
+                field="weights",
+            )
+        extra = [name for name in self.weights if name not in _REQUIRED_WEIGHTS]
+        if extra:
+            raise ValidationError(
+                "ranking policy has unknown component(s): " + ", ".join(extra),
+                field="weights",
+            )
+        for name, value in self.weights.items():
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValidationError(
+                    f"weight for {name} must be an integer", field="weights"
+                )
+            if value < 0:
+                raise ValidationError(
+                    f"weight for {name} must not be negative", field="weights"
+                )
+        total = sum(self.weights.values())
+        if total != 100:
+            # Not cosmetic: a total != 100 makes the 0-100 scale a lie and bands
+            # meaningless, and it is exactly the mistake a hand-edited policy makes.
+            raise ValidationError(
+                f"ranking weights must sum to 100 (got {total})", field="weights"
+            )
+        budget = float(self.weights["exploitation"])
+        raw = self.epss_max if self.epss_max is not None else round(budget * 2 / 3, 2)
+        if not 0.0 <= float(raw) <= budget:
+            raise ValidationError(
+                f"epss_max must be within 0 and the exploitation weight ({budget:g})",
+                field="epss_max",
+            )
+        # Frozen dataclass: resolve the default once, at construction.
+        object.__setattr__(self, "epss_max", float(raw))
+
+    @property
+    def epss_budget(self) -> float:
+        """Resolved EPSS budget. Always a float, never ``None`` after construction."""
+        return float(self.epss_max or 0.0)
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "weights": dict(self.weights),
+            "epss_max": self.epss_max,
+            "approved": self.approved,
+            "notice": (
+                "owner-approved organizational policy"
+                if self.approved
+                else "PROVISIONAL weights, not approved organizational policy"
+            ),
+        }
+
+
+#: The provisional policy. ``approved=False`` is the honest default and is what
+#: every existing caller keeps getting, so behaviour is unchanged.
+DEFAULT_POLICY = RankingPolicy()
 
 #: Score used when exploitation status was never established.
 _UNKNOWN_EXPLOITATION = 10.0
@@ -124,6 +231,11 @@ class PriorityResult:
     epss: float | None
     severity: Severity
     freshness: str
+    #: Name of the ranking policy used. Two scores are only comparable if these
+    #: match, so the name travels with the number.
+    policy: str = DEFAULT_POLICY.name
+    #: False means the policy is provisional and not organizational policy.
+    policy_approved: bool = False
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -131,6 +243,8 @@ class PriorityResult:
             "origin": self.origin.value,
             "score": round(self.score, 2),
             "band": self.band,
+            "policy": self.policy,
+            "policy_approved": self.policy_approved,
             "components": {k: round(v, 2) for k, v in self.components.items()},
             "max_components": dict(self.max_components),
             "reasons": list(self.reasons),
@@ -151,7 +265,7 @@ def _band(score: float) -> str:
 
 
 def _severity_points(
-    record: NormalizedVulnerability,
+    record: NormalizedVulnerability, policy: RankingPolicy
 ) -> tuple[float, str, list[str]]:
     """Return ``(points, reason, warnings)``.
 
@@ -175,23 +289,23 @@ def _severity_points(
         base = 0.0
         reason = "severity unavailable"
         warnings.append("no CVSS data and no stated severity: severity component is 0")
-    points = WEIGHTS["severity"] * (max(0.0, min(10.0, base)) / 10.0)
-    return points, f"severity {points:.1f}/{WEIGHTS['severity']}: {reason}", warnings
+    points = policy.weights["severity"] * (max(0.0, min(10.0, base)) / 10.0)
+    return points, f"severity {points:.1f}/{policy.weights['severity']}: {reason}", warnings
 
 
 def _exploitation_points(
-    record: NormalizedVulnerability,
+    record: NormalizedVulnerability, policy: RankingPolicy
 ) -> tuple[float, bool, list[str]]:
     notes: list[str] = []
     if record.kev is True:
         notes.append("listed in CISA KEV: confirmed exploitation in the wild")
-        return float(WEIGHTS["exploitation"]), False, notes
+        return float(policy.weights["exploitation"]), False, notes
     epss = record.epss_score
     if epss is not None:
-        points = EPSS_MAX * float(epss)
+        points = policy.epss_budget * float(epss)
         notes.append(
             f"EPSS forecast {float(epss):.3f} contributes {points:.1f}/"
-            f"{WEIGHTS['exploitation']} (prediction, not proof)"
+            f"{policy.weights['exploitation']} (prediction, not proof)"
         )
         if record.kev is False:
             notes.append("not in CISA KEV")
@@ -199,30 +313,35 @@ def _exploitation_points(
         return points, False, notes
     if record.kev is False:
         notes.append("not in CISA KEV and no EPSS score: exploitation unlikely but unproven")
-        return float(WEIGHTS["exploitation"]) * 0.4, False, notes
+        return float(policy.weights["exploitation"]) * 0.4, False, notes
     notes.append(
         "exploitation status unknown (KEV not consulted, no EPSS): neutral score assigned"
     )
     return _UNKNOWN_EXPLOITATION, True, notes
 
 
-def _confidence_points(record: NormalizedVulnerability) -> tuple[float, list[str]]:
+def _confidence_points(
+    record: NormalizedVulnerability, policy: RankingPolicy
+) -> tuple[float, list[str]]:
     sources = sorted(set(record.sources))
     if len(sources) >= 3:
-        return float(WEIGHTS["confidence"]), [
-            f"confidence {WEIGHTS['confidence']}/5: corroborated by {len(sources)} sources"
+        return float(policy.weights["confidence"]), [
+            f"confidence {policy.weights['confidence']}/5: corroborated by {len(sources)} sources"
         ]
     if len(sources) == 2:
-        return WEIGHTS["confidence"] * 0.7, ["confidence 3.5/5: corroborated by 2 sources"]
+        return policy.weights["confidence"] * 0.7, ["confidence 3.5/5: corroborated by 2 sources"]
     if len(sources) == 1:
-        return WEIGHTS["confidence"] * 0.3, [
+        return policy.weights["confidence"] * 0.3, [
             f"confidence 1.5/5: single source ({sources[0]})"
         ]
     return 0.0, ["confidence 0/5: no recorded source provenance"]
 
 
 def _recency_points(
-    record: NormalizedVulnerability, context: PriorityContext, now: datetime
+    record: NormalizedVulnerability,
+    context: PriorityContext,
+    now: datetime,
+    policy: RankingPolicy,
 ) -> tuple[float, Freshness, list[str]]:
     observed = record.modified or record.published
     freshness = compute_freshness(
@@ -231,7 +350,7 @@ def _recency_points(
     if freshness.age is None:
         return 0.0, freshness, ["no publication/modification timestamp: recency not scored"]
     fraction = max(0.0, 1.0 - (freshness.age / (context.recency_window * 4)))
-    points = WEIGHTS["recency"] * fraction
+    points = policy.weights["recency"] * fraction
     return points, freshness, [
         f"last updated {freshness.age.days}d ago ({freshness.bucket})"
     ]
@@ -242,15 +361,26 @@ def score_vulnerability(
     *,
     context: PriorityContext | None = None,
     now: datetime | None = None,
+    policy: RankingPolicy | None = None,
 ) -> PriorityResult:
-    """Compute a deterministic 0-100 priority score with an explanation."""
+    """Compute a deterministic 0-100 priority score with an explanation.
+
+    Pass ``policy`` to rank with weights other than the provisional default. The
+    policy is recorded on the result and quoted in the explanation, so a score can
+    never be read as if it used different weights.
+    """
     context = context or PriorityContext()
     now = now or utcnow()
+    policy = policy or DEFAULT_POLICY
 
-    severity_points, severity_reason, severity_warnings = _severity_points(record)
-    exploitation_points, unknown, exploitation_notes = _exploitation_points(record)
-    confidence_points, confidence_notes = _confidence_points(record)
-    recency_points, freshness, recency_notes = _recency_points(record, context, now)
+    severity_points, severity_reason, severity_warnings = _severity_points(record, policy)
+    exploitation_points, unknown, exploitation_notes = _exploitation_points(
+        record, policy
+    )
+    confidence_points, confidence_notes = _confidence_points(record, policy)
+    recency_points, freshness, recency_notes = _recency_points(
+        record, context, now, policy
+    )
 
     warnings: list[str] = list(severity_warnings)
     warnings.extend(n for n in exploitation_notes if "unknown" in n or "unproven" in n)
@@ -267,23 +397,28 @@ def score_vulnerability(
     reasons = [severity_reason, *exploitation_notes, *confidence_notes, *recency_notes]
 
     if context.exposure is not None:
-        components["exposure"] = WEIGHTS["exposure"] * float(context.exposure)
+        components["exposure"] = policy.weights["exposure"] * float(context.exposure)
         reasons.append(
             f"asset exposure {float(context.exposure):.2f} -> "
-            f"{components['exposure']:.1f}/{WEIGHTS['exposure']}"
+            f"{components['exposure']:.1f}/{policy.weights['exposure']}"
         )
     else:
         reasons.append("asset exposure not assessed: component excluded (max unchanged)")
 
     if context.business_criticality is not None:
-        components["business"] = WEIGHTS["business"] * float(context.business_criticality)
+        components["business"] = policy.weights["business"] * float(context.business_criticality)
         reasons.append(
             f"business criticality {float(context.business_criticality):.2f} -> "
-            f"{components['business']:.1f}/{WEIGHTS['business']}"
+            f"{components['business']:.1f}/{policy.weights['business']}"
         )
     else:
         reasons.append("business criticality not assessed: component excluded")
 
+    if not policy.approved:
+        warnings.append(
+            f"ranking policy '{policy.name}' is PROVISIONAL, not approved "
+            "organizational policy"
+        )
     if record.origin is not Origin.LIVE:
         warnings.append(
             f"origin is '{record.origin.value}': this ranking is not production intelligence"
@@ -301,7 +436,9 @@ def score_vulnerability(
         score=total,
         band=_band(total),
         components=components,
-        max_components=WEIGHTS,
+        max_components=policy.weights,
+        policy=policy.name,
+        policy_approved=policy.approved,
         reasons=tuple(reasons),
         warnings=tuple(dict.fromkeys(warnings)),
         exploitation_unknown=unknown,
@@ -318,6 +455,7 @@ def rank_vulnerabilities(
     context: PriorityContext | Mapping[str, PriorityContext] | None = None,
     now: datetime | None = None,
     limit: int | None = None,
+    policy: RankingPolicy | None = None,
 ) -> list[PriorityResult]:
     """Score and sort records, highest priority first.
 
@@ -338,7 +476,9 @@ def rank_vulnerabilities(
         return context.get(str(cve), PriorityContext())
 
     results = [
-        score_vulnerability(record, context=context_for(record.cve), now=now)
+        score_vulnerability(
+            record, context=context_for(record.cve), now=now, policy=policy
+        )
         for record in records
     ]
     results.sort(

@@ -188,3 +188,176 @@ def test_cvss_explanation_is_a_reason_not_a_warning() -> None:
     result = score_vulnerability(rec(**critical(kev=True)), now=FIXED_NOW)
     assert any("CVSS 3.1 base" in reason for reason in result.reasons)
     assert not any("CVSS 3.1 base" in warning for warning in result.warnings)
+
+
+class TestRankingPolicy:
+    """Weights are provisional and must be replaceable without editing code.
+
+    The requirement is not "a dataclass exists" — it is that a tenant can rank with
+    its own approved weights, that an invalid policy is rejected rather than
+    silently producing a meaningless 0-100 score, and that a score always states
+    which policy produced it.
+    """
+
+    def _record(self, **kwargs):
+        from vuln_intel.schema import CveId, CvssScore, NormalizedVulnerability, Origin, Severity
+
+        defaults = {
+            "cve": CveId.parse("CVE-2026-0001"),
+            "origin": Origin.LIVE,
+            "cvss": (
+                CvssScore(
+                    version="4.0", base_score=9.3, severity=Severity.CRITICAL, assessed=True
+                ),
+            ),
+            "sources": ("nvd", "osv", "kev"),
+        }
+        defaults.update(kwargs)
+        return NormalizedVulnerability(**defaults)
+
+    def test_default_policy_is_marked_provisional(self):
+        from vuln_intel.priorities import DEFAULT_POLICY
+
+        assert DEFAULT_POLICY.approved is False
+        assert sum(DEFAULT_POLICY.weights.values()) == 100
+
+    def test_default_result_states_the_policy_and_that_it_is_unapproved(self):
+        from vuln_intel.priorities import score_vulnerability
+
+        result = score_vulnerability(self._record())
+        assert result.policy
+        assert result.policy_approved is False
+        assert any("PROVISIONAL" in warning for warning in result.warnings)
+
+    def test_custom_policy_changes_the_score(self):
+        from vuln_intel.priorities import RankingPolicy, score_vulnerability
+
+        severity_heavy = RankingPolicy(
+            weights={
+                "severity": 70,
+                "exploitation": 10,
+                "exposure": 5,
+                "business": 5,
+                "recency": 5,
+                "confidence": 5,
+            },
+            name="severity-heavy",
+            approved=True,
+        )
+        default = score_vulnerability(self._record())
+        custom = score_vulnerability(self._record(), policy=severity_heavy)
+        assert custom.score > default.score
+        assert custom.policy == "severity-heavy"
+        assert custom.policy_approved is True
+        assert not any("PROVISIONAL" in warning for warning in custom.warnings)
+
+    def test_max_components_follow_the_policy(self):
+        from vuln_intel.priorities import RankingPolicy, score_vulnerability
+
+        policy = RankingPolicy(
+            weights={
+                "severity": 60,
+                "exploitation": 20,
+                "exposure": 5,
+                "business": 5,
+                "recency": 5,
+                "confidence": 5,
+            }
+        )
+        result = score_vulnerability(self._record(), policy=policy)
+        assert result.max_components["severity"] == 60
+
+    @pytest.mark.parametrize(
+        "weights",
+        [
+            {"severity": 40},  # missing components
+            {
+                "severity": 40,
+                "exploitation": 30,
+                "exposure": 10,
+                "business": 10,
+                "recency": 5,
+                "confidence": 6,
+            },  # sums to 101
+            {
+                "severity": 40,
+                "exploitation": 30,
+                "exposure": 10,
+                "business": 10,
+                "recency": 5,
+                "confidence": 5,
+                "nonsense": 0,
+            },  # unknown component
+            {
+                "severity": -40,
+                "exploitation": 70,
+                "exposure": 10,
+                "business": 10,
+                "recency": 5,
+                "confidence": 5,
+            },  # negative
+            {
+                "severity": 40.0,
+                "exploitation": 30,
+                "exposure": 10,
+                "business": 10,
+                "recency": 5,
+                "confidence": 5,
+            },  # non-integer
+        ],
+    )
+    def test_invalid_policies_are_rejected(self, weights):
+        """A policy summing to 101 makes the 0-100 scale a lie."""
+        from vuln_intel.priorities import RankingPolicy
+
+        with pytest.raises(ValidationError):
+            RankingPolicy(weights=weights)
+
+    def test_epss_budget_is_derived_when_not_given(self):
+        from vuln_intel.priorities import RankingPolicy
+
+        policy = RankingPolicy(
+            weights={
+                "severity": 70,
+                "exploitation": 10,
+                "exposure": 5,
+                "business": 5,
+                "recency": 5,
+                "confidence": 5,
+            }
+        )
+        # Two thirds of the exploitation budget, so the ratio is preserved.
+        assert 0.0 < policy.epss_budget <= 10.0
+
+    def test_epss_budget_cannot_exceed_the_exploitation_weight(self):
+        from vuln_intel.priorities import RankingPolicy
+
+        with pytest.raises(ValidationError):
+            RankingPolicy(
+                weights={
+                    "severity": 70,
+                    "exploitation": 10,
+                    "exposure": 5,
+                    "business": 5,
+                    "recency": 5,
+                    "confidence": 5,
+                },
+                epss_max=30.0,
+            )
+
+    def test_rank_accepts_a_policy(self):
+        from vuln_intel.priorities import RankingPolicy, rank_vulnerabilities
+
+        policy = RankingPolicy(
+            weights={
+                "severity": 50,
+                "exploitation": 20,
+                "exposure": 10,
+                "business": 10,
+                "recency": 5,
+                "confidence": 5,
+            },
+            name="tenant-a",
+        )
+        results = rank_vulnerabilities([self._record()], policy=policy)
+        assert results[0].policy == "tenant-a"
