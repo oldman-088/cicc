@@ -1,0 +1,14 @@
+{
+  "name": "cicc",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@cicc/web",
+    "build": "npm run build --workspace=@cicc/web",
+    "test": "npm run test --workspace=@cicc/web",
+    "typecheck": "npm run typecheck --workspace=@cicc/web"
+  }
+}
