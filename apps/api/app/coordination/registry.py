@@ -11,6 +11,7 @@ dependencies (depends_on), timeouts, TTL expiry, cancellation, idempotency
 keys and dead-lettering.
 """
 import json
+import os
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
@@ -116,6 +117,10 @@ def transition(s, task: models.CoordinationTask, new_state: str, detail: str | N
     task.updated_at = utcnow()
     if new_state in ("QUEUED", "DELIVERING", "RETRYING"):
         task.attempts = (task.attempts or 0) + 1
+    if new_state == "RETRYING":
+        task.next_retry_at = utcnow() + timedelta(seconds=backoff_seconds(task.attempts or 1))
+    if new_state == "QUEUED":
+        task.next_retry_at = None
     if new_state == "FAILED":
         task.dead_letter = task.dead_letter or False
     record_event(s, task.task_id, f"state:{old}->{new_state}", detail)
@@ -166,12 +171,35 @@ def sweep_timeouts(s, now: datetime | None = None) -> list[str]:
     return expired
 
 
-def list_tasks(s, state: str | None = None, agent: str | None = None, limit: int = 100) -> list[dict]:
+def backoff_seconds(attempts: int) -> int:
+    """Exponential backoff for retries: base * 2^(attempts-1), capped at 1h.
+    Base configurable via CICC_COORD_RETRY_BACKOFF_S (default 30)."""
+    base = max(0, int(os.getenv("CICC_COORD_RETRY_BACKOFF_S", "30")))
+    return min(3600, base * (2 ** max(0, (attempts or 1) - 1)))
+
+
+def requeue_ready(s, now: datetime | None = None) -> list[str]:
+    """Sweep: RETRYING tasks whose backoff elapsed go back to QUEUED."""
+    now = now or utcnow()
+    rows = s.execute(select(models.CoordinationTask).where(
+        models.CoordinationTask.state == "RETRYING")).scalars().all()
+    requeued = []
+    for t in rows:
+        if t.next_retry_at is None or t.next_retry_at.replace(tzinfo=timezone.utc) <= now:
+            if transition(s, t, "QUEUED", "backoff elapsed, re-queued"):
+                requeued.append(t.task_id)
+    return requeued
+
+
+def list_tasks(s, state: str | None = None, agent: str | None = None, kind: str | None = None,
+               limit: int = 100) -> list[dict]:
     q = select(models.CoordinationTask).order_by(models.CoordinationTask.updated_at.desc()).limit(limit)
     if state:
         q = q.where(models.CoordinationTask.state == normalize_state(state))
     if agent:
         q = q.where(models.CoordinationTask.agent == agent)
+    if kind:
+        q = q.where(models.CoordinationTask.kind == kind)
     out = []
     for t in s.execute(q).scalars().all():
         out.append({
@@ -184,6 +212,7 @@ def list_tasks(s, state: str | None = None, agent: str | None = None, limit: int
             "dead_letter": bool(t.dead_letter),
             "routing_explanation": json.loads(t.routing_explanation) if t.routing_explanation else None,
             "progress": getattr(t, "progress", 0) or 0,
+            "next_retry_at": _iso(getattr(t, "next_retry_at", None)),
             "payload": json.loads(t.payload) if t.payload else None,
             "handoff": t.handoff,
             "created_at": _iso(t.created_at), "updated_at": _iso(t.updated_at),

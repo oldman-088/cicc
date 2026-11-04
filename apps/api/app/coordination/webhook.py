@@ -34,6 +34,19 @@ EVENT_KINDS = {
 }
 
 
+def webhook_secrets() -> list[str]:
+    """Active webhook secrets for rotation: current first, then previous.
+    Rotation: set CICC_GH_WEBHOOK_SECRET_PREVIOUS=<old>, CICC_GH_WEBHOOK_SECRET=<new>,
+    update GitHub, then remove the previous."""
+    cur = os.getenv("CICC_GH_WEBHOOK_SECRET")
+    prev = os.getenv("CICC_GH_WEBHOOK_SECRET_PREVIOUS")
+    return [x for x in (cur, prev) if x]
+
+
+def verify_any(secrets: list[str], body: bytes, signature_header: str | None) -> bool:
+    return any(verify_signature(sec, body, signature_header) for sec in secrets)
+
+
 def verify_signature(secret: str, body: bytes, signature_header: str | None) -> bool:
     if not secret or not signature_header:
         return False
@@ -89,12 +102,15 @@ def allowlist() -> set[str]:
 
 
 def ingest(s, delivery_id: str, event: str, body: bytes, signature: str | None,
-           secret: str | None) -> dict:
+           secrets: list[str] | str | None) -> dict:
     """Validate + dedup + normalize + create registry task. Returns a result
-    dict; never raises on bad input (fail closed with 4xx semantics)."""
-    if not secret:
+    dict; never raises on bad input (fail closed with 4xx semantics).
+    `secrets` accepts a list (rotation: current + previous) or a single str."""
+    if isinstance(secrets, str):
+        secrets = [secrets] if secrets else []
+    if not secrets:
         return {"ok": False, "code": 401, "reason": "webhook secret not configured (fail closed)"}
-    if not verify_signature(secret, body, signature):
+    if not verify_any(secrets, body, signature):
         return {"ok": False, "code": 401, "reason": "invalid signature"}
     if len(body) > MAX_BODY_BYTES:
         return {"ok": False, "code": 413, "reason": "payload too large"}

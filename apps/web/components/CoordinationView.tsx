@@ -46,6 +46,7 @@ export default function CoordinationView({
                   <th className="th">{t("colRepo")}</th>
                   <th className="th">{t("colPR")}</th>
                   <th className="th">{t("colAttempts")}</th>
+                  <th className="th">{t("colProgress")}</th>
                   <th className="th">{t("colUpdated")}</th>
                 </tr>
               </thead>
@@ -63,6 +64,14 @@ export default function CoordinationView({
                     <td className="td text-slate-400">{task.repo ?? "—"}</td>
                     <td className="td text-slate-300">{task.pr_ref ?? "—"}</td>
                     <td className="td text-slate-300">{task.attempts}</td>
+                    <td className="td w-32">
+                      <div className="h-2 w-full rounded bg-slate-800" title={`${task.progress ?? 0}%`}>
+                        <div
+                          className={`h-2 rounded ${task.state === "COMPLETED" ? "bg-emerald-500" : task.state === "FAILED" || task.state === "BLOCKED" ? "bg-red-500" : "bg-sky-500"}`}
+                          style={{ width: `${Math.min(100, task.progress ?? 0)}%` }}
+                        />
+                      </div>
+                    </td>
                     <td className="td whitespace-nowrap text-xs text-slate-400">
                       {task.updated_at ? formatTime(task.updated_at, locale) : "—"}
                     </td>

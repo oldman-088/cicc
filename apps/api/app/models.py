@@ -274,6 +274,7 @@ class CoordinationTask(Base):
     dead_letter = Column(Boolean, default=False, nullable=False)
     routing_explanation = Column(Text, nullable=True)      # why this agent was chosen
     progress = Column(Integer, default=0, nullable=False)  # 0..100 structured progress (M8)
+    next_retry_at = Column(DateTime, nullable=True)         # backoff until this time (M9)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

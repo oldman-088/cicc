@@ -137,3 +137,15 @@ Still environment-blocked: real-broker delivery/confirm (no Docker/broker here).
   registries, approvals; reuse/adapt/reject rationale + re-evaluation triggers).
 - **Security review**: docs/SECURITY_REVIEW.md (controls table + findings).
 - Dashboard: live GitHub panel (PRs/issues/CI) in Coordination tab.
+
+
+## v3.1 (Milestone 9 — hardening)
+
+- **Webhook secret rotation**: dual-secret HMAC verification
+  (`CICC_GH_WEBHOOK_SECRET` + `CICC_GH_WEBHOOK_SECRET_PREVIOUS`); rotation
+  procedure in docs/SECURITY_REVIEW.md.
+- **Retry backoff**: RETRYING tasks carry `next_retry_at = now +
+  min(3600, CICC_COORD_RETRY_BACKOFF_S * 2^(attempts-1))`; the sweep only
+  requeues them to QUEUED after the backoff elapses.
+- **Task list filters**: `GET /tasks?state=&agent=&kind=`; responses include
+  `progress` and `next_retry_at`. Dashboard task table shows a progress bar.

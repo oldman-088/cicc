@@ -175,6 +175,8 @@ export interface CoordinationTask {
   branch_ref: string | null;
   title: string | null;
   attempts: number;
+  progress?: number;
+  next_retry_at?: string | null;
   result: string | null;
   routing_explanation?: unknown;
   created_at: string | null;

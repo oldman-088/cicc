@@ -85,3 +85,13 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - M8 follow-up fix (live-smoke caught): sync-derived task_ids contained '/'
   from the repo slug, breaking path params — sanitized to REPO_ID; regression
   test added. API 113/113.
+
+## 2026-11-04 — Milestone 9 (branch arena/961971ed-cicc, PR #4)
+
+- Webhook dual-secret rotation (current + previous, fail-closed when both
+  unset) with tests; rotation procedure added to SECURITY_REVIEW.md.
+- Retry backoff: CICC_COORD_RETRY_BACKOFF_S exponential (cap 1h) as
+  next_retry_at on RETRYING; sweep requeues only when elapsed (requeue_ready).
+- GET /tasks filters (state/agent/kind); dashboard progress bar (EN/AR).
+- Test fix: fail() lands in RETRYING via dead_letter below max attempts —
+  backoff assertions adjusted accordingly. API 118/118.

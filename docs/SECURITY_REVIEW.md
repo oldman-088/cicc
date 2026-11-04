@@ -24,7 +24,9 @@ Scope: `apps/api/app/coordination/*`, `apps/api/app/{ratelimit,platform_auth,not
 2. **Static env tokens are bearer secrets in dev mode**: documented as single-tenant/dev only; platform auth is the production path (adapter ready, inert until `CICC_OPS_USE_PLATFORM_AUTH=1` + `CICC_PLATFORM_DB_URL` verified). Tenant scoping NOT claimed complete — see TENANT_ISOLATION_PLAN.md (owner decision pending).
 3. **GitHub API polling uses env GH_TOKEN if present**: header-only, rate-limit aware (stops <5 remaining), circuit breaker. Accepted.
 4. **Coordination write endpoints trust the network when no write token set** (dev mode): same posture as ops API, documented in contracts; production must set tokens. Accepted with documentation.
-5. **No CSRF surface**: API is bearer-token based, no cookies; web dashboard calls same-origin relative URLs only. Accepted.
+5. **Webhook secret rotation** (M9): dual-secret verification — `CICC_GH_WEBHOOK_SECRET` (current) + `CICC_GH_WEBHOOK_SECRET_PREVIOUS` (grace); either signature accepted, wrong secrets still 401, unset both = fail closed. Rotation procedure: (1) set PREVIOUS=<old>, SECRET=<new> and restart; (2) update the secret in GitHub webhook settings; (3) verify deliveries pass; (4) remove PREVIOUS. Tests: test_rotation_old_secret_accepted_during_grace, test_rotation_wrong_secret_rejected.
+6. **Retry backoff** (M9): `CICC_COORD_RETRY_BACKOFF_S` (default 30) exponential `base*2^(attempts-1)` capped 1h, stored as `next_retry_at`; sweep requeues only after backoff elapses. Prevents hot retry loops.
+7. **No CSRF surface**: API is bearer-token based, no cookies; web dashboard calls same-origin relative URLs only. Accepted.
 
 ## Open security work (backlog)
 - Tenant-scoped ops data + per-tenant rate buckets (awaiting DB-model decision).

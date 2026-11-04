@@ -86,10 +86,10 @@ async def github_webhook(
     body = await request.body()
     if not x_github_delivery:
         raise HTTPException(status_code=400, detail="missing X-GitHub-Delivery")
-    secret = os.getenv("CICC_GH_WEBHOOK_SECRET")
+    secrets = webhook.webhook_secrets()
     with ops.SessionLocal() as s:
         result = webhook.ingest(s, x_github_delivery, x_github_event or "unknown", body,
-                                x_hub_signature_256, secret)
+                                x_hub_signature_256, secrets)
     if not result.get("ok"):
         raise HTTPException(status_code=result["code"], detail=result["reason"])
     return result
@@ -115,9 +115,10 @@ def list_events(_gate: None = Depends(read_token_dependency), limit: int = Query
 
 @router.get("/tasks")
 def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None = Query(None),
-               agent: str | None = Query(None), limit: int = Query(100, ge=1, le=500)):
+               agent: str | None = Query(None), kind: str | None = Query(None),
+               limit: int = Query(100, ge=1, le=500)):
     with ops.SessionLocal() as s:
-        return {"tasks": registry.list_tasks(s, state, agent, limit)}
+        return {"tasks": registry.list_tasks(s, state, agent, kind, limit)}
 
 
 @router.get("/tasks/dag")
@@ -292,11 +293,12 @@ def sweep(_gate: None = Depends(read_token_dependency), authorization: str | Non
     require_write_token(authorization)
     with ops.SessionLocal() as s:
         expired_tasks = registry.sweep_timeouts(s)
+        requeued = registry.requeue_ready(s)
         expired_approvals = approvals.sweep_expired(s)
         stale_agents = agent_registry.sweep_stale(s)
         s.commit()
-        return {"expired_tasks": expired_tasks, "expired_approvals": expired_approvals,
-                "stale_agents": stale_agents}
+        return {"expired_tasks": expired_tasks, "requeued": requeued,
+                "expired_approvals": expired_approvals, "stale_agents": stale_agents}
 
 
 # ---------------- agents ----------------

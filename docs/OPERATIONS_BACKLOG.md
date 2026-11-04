@@ -93,6 +93,15 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Live smoke (uvicorn :8000 + next :3000): all new endpoints verified direct
   and via web proxy, incl. 401/404/409/422 paths and suppression behavior.
 
+## Done — Milestone 9 (PR #4 update)
+
+- Webhook secret rotation (dual-secret grace verification) + documented
+  rotation procedure in SECURITY_REVIEW.md.
+- Retry backoff: exponential `CICC_COORD_RETRY_BACKOFF_S` (cap 1h) stored as
+  `next_retry_at`; sweep requeues RETRYING→QUEUED only after backoff elapses.
+- Task list filters (state/agent/kind); dashboard progress bar per task.
+- Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -125,6 +134,15 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   the final contract proposal for Agent 4.
 - Tests: API 73/73 (incl. 7 real-PG); web 17/17, tsc clean; dashboard shows
   escalated/flapping chips (EN/AR 143 keys).
+
+## Done — Milestone 9 (PR #4 update)
+
+- Webhook secret rotation (dual-secret grace verification) + documented
+  rotation procedure in SECURITY_REVIEW.md.
+- Retry backoff: exponential `CICC_COORD_RETRY_BACKOFF_S` (cap 1h) stored as
+  `next_retry_at`; sweep requeues RETRYING→QUEUED only after backoff elapses.
+- Task list filters (state/agent/kind); dashboard progress bar per task.
+- Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
 
 ## Next (backlog, priority order)
 
@@ -162,6 +180,15 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   maintenance state on overview; register; attempts; stats per_min; proxy+page.
 - Bench: task_stats p50 ~33ms @20k rows (incl. per_min query), overview 7.6ms.
 
+## Done — Milestone 9 (PR #4 update)
+
+- Webhook secret rotation (dual-secret grace verification) + documented
+  rotation procedure in SECURITY_REVIEW.md.
+- Retry backoff: exponential `CICC_COORD_RETRY_BACKOFF_S` (cap 1h) stored as
+  `next_retry_at`; sweep requeues RETRYING→QUEUED only after backoff elapses.
+- Task list filters (state/agent/kind); dashboard progress bar per task.
+- Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -191,6 +218,15 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Tests: API 107/107 (incl. 7 real-PG); web 17/17 + tsc + build.
 - Live smoke: full webhook→approval→route→deliver→ack/start/complete + sweep.
 
+## Done — Milestone 9 (PR #4 update)
+
+- Webhook secret rotation (dual-secret grace verification) + documented
+  rotation procedure in SECURITY_REVIEW.md.
+- Retry backoff: exponential `CICC_COORD_RETRY_BACKOFF_S` (cap 1h) stored as
+  `next_retry_at`; sweep requeues RETRYING→QUEUED only after backoff elapses.
+- Task list filters (state/agent/kind); dashboard progress bar per task.
+- Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -218,13 +254,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Dashboard: live GitHub panel in Coordination tab (EN/AR 174 keys).
 - Tests: API 112/112 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
 
+## Done — Milestone 9 (PR #4 update)
+
+- Webhook secret rotation (dual-secret grace verification) + documented
+  rotation procedure in SECURITY_REVIEW.md.
+- Retry backoff: exponential `CICC_COORD_RETRY_BACKOFF_S` (cap 1h) stored as
+  `next_retry_at`; sweep requeues RETRYING→QUEUED only after backoff elapses.
+- Task list filters (state/agent/kind); dashboard progress bar per task.
+- Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ verification + broker delivery loop where Docker exists
    (env-blocked here; procedure committed; attach evidence to PR #4).
 2. Agent 4 contract confirmation (PR #4 comment / issue #5) -> wire ops_client.
-3. Retry backoff (CICC_COORD_RETRY_BACKOFF_S), prefetch=1 runbook, webhook
-   secret rotation + timestamp freshness.
+3. prefetch=1 runbook note; webhook delivery timestamp freshness check
+   (needs a signed timestamp — GitHub does not send one; evaluate).
 4. Tenant isolation execution after owner DB-model decision; per-tenant rate
    buckets; ops audit adapter.
 5. Notification adapters only after explicit owner authorization.

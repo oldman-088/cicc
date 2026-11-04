@@ -146,6 +146,7 @@ def _ensure_alert_columns() -> None:
             ("dead_letter", "ALTER TABLE coord_tasks ADD COLUMN dead_letter BOOLEAN NOT NULL DEFAULT FALSE"),
             ("routing_explanation", "ALTER TABLE coord_tasks ADD COLUMN routing_explanation TEXT"),
             ("progress", "ALTER TABLE coord_tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0"),
+            ("next_retry_at", "ALTER TABLE coord_tasks ADD COLUMN next_retry_at TIMESTAMP"),
         ],
     }
     insp = _inspect(engine)
