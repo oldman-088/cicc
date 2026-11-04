@@ -29,6 +29,7 @@ from vuln_intel.schema import (
     Origin,
     Severity,
 )
+from vuln_intel.threat_intel import load_ctid_mapping
 from vuln_intel.watchlist import Dependency, Inventory
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -212,3 +213,59 @@ class TestReportShape:
         assert isinstance(report, AssessmentReport)
         with pytest.raises(Exception):
             report.run_at = NOW  # type: ignore[misc]
+
+
+class TestAttackCorrelationInTheReport:
+    """The bridge to threat intelligence, proven through the report, not the unit.
+
+    A correlation module that no report ever calls is not an integration. These
+    tests assert the rollup reaches ``AssessmentReport.as_dict``, which is what the
+    threat-intelligence consumer actually reads.
+    """
+
+    MAPPING = {
+        "metadata": {"attack_version": "16.1", "mapping_framework_version": "07/28/2025"},
+        "mapping_objects": [
+            {
+                "capability_id": "CVE-2026-0002",
+                "attack_object_id": "T1190",
+                "attack_object_name": "Exploit Public-Facing Application",
+                "mapping_type": "exploitation_technique",
+                "comments": "Exploited over HTTP by a crafted request.",
+            }
+        ],
+    }
+
+    def _record(self, cve: str):
+        from vuln_intel.schema import CveId, NormalizedVulnerability, Origin
+
+        return NormalizedVulnerability(cve=CveId.parse(cve), origin=Origin.FIXTURE)
+
+    def test_without_a_mapping_the_report_says_not_consulted(self) -> None:
+        report = workflow_for(records=[self._record("CVE-2026-0002")])
+        payload = report.as_dict()
+        assert payload["summary"]["mitre_consulted"] is False
+        assert payload["threat_intel"]["consulted"] is False
+        assert payload["threat_intel"]["techniques"] == []
+
+    def test_with_a_mapping_the_rollup_reaches_the_report(self) -> None:
+        mapping = load_ctid_mapping(self.MAPPING)
+        report = workflow_for(records=[self._record("CVE-2026-0002")], attack_mapping=mapping)
+        payload = report.as_dict()
+        assert payload["summary"]["mitre_consulted"] is True
+        assert payload["summary"]["mitre_mapped"] == 1
+        (technique,) = payload["threat_intel"]["techniques"]
+        assert technique["technique_id"] == "T1190"
+        assert technique["cve_count"] == 1
+
+    def test_a_mapping_that_matches_nothing_is_reported_not_hidden(self) -> None:
+        """A stale dataset is a fact about the run, and it must not look like success."""
+        mapping = load_ctid_mapping(self.MAPPING)
+        report = workflow_for(records=[self._record("CVE-2026-9999")], attack_mapping=mapping)
+        assert report.as_dict()["summary"]["mitre_mapped"] == 0
+        assert any("no record matched" in w for w in report.warnings)
+
+    def test_matched_records_are_credited_to_their_source(self) -> None:
+        mapping = load_ctid_mapping(self.MAPPING)
+        report = workflow_for(records=[self._record("CVE-2026-0002")], attack_mapping=mapping)
+        assert any("mitre-ctid" in w for w in report.warnings)

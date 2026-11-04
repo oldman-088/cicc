@@ -41,6 +41,12 @@ from .schema import (
     Origin,
     utcnow,
 )
+from .threat_intel import (
+    CveTechniqueMap,
+    TechniqueCorrelation,
+    correlate_techniques,
+    technique_rollup,
+)
 from .watchlist import ExposureReport, Inventory, analyse_exposure
 
 __all__ = [
@@ -74,6 +80,10 @@ class AssessmentReport:
     warnings: tuple[str, ...] = ()
     #: ``True`` only when the caller declares a recorded live fetch.
     live_verified: bool = False
+    #: CVE -> ATT&CK correlation, when a threat-intelligence mapping was supplied.
+    #: Empty means "not requested", never "nothing correlates" - the individual
+    #: entries carry a ``consulted`` flag for that distinction.
+    threat_intel: tuple[TechniqueCorrelation, ...] = ()
 
     # -- derived views ----------------------------------------------------
     @property
@@ -109,7 +119,12 @@ class AssessmentReport:
                 "overdue": sum(1 for r in self.remediations if r.overdue),
                 "assets_at_risk": list(self.exposure.assets_at_risk) if self.exposure else [],
                 "incomplete": self.incomplete,
+                "mitre_mapped": sum(1 for c in self.threat_intel if c.mapped),
+                "mitre_consulted": bool(self.threat_intel and self.threat_intel[0].consulted),
             },
+            "threat_intel": technique_rollup(self.threat_intel).as_dict()
+            if self.threat_intel
+            else {"consulted": False, "total_cves": 0, "techniques": []},
             "remediation_summary": summarize_remediation(list(self.remediations)),
             "exposure": self.exposure.as_dict() if self.exposure else None,
             "top_risks": [r.as_dict() for r in self.top_risks],
@@ -141,6 +156,10 @@ class AssessmentWorkflow:
     now: Callable[[], datetime] = utcnow
     #: Set by the caller only after a real fetch has been recorded.
     live_verified: bool = False
+    #: Optional threat-intelligence mapping (CVE -> MITRE ATT&CK).  Supplying it
+    #: turns the report into something the threat-intelligence side can consume;
+    #: leaving it out produces ``consulted=False`` rather than an empty claim.
+    attack_mapping: CveTechniqueMap | None = None
 
     def run(self, *, today: date | None = None) -> AssessmentReport:
         run_at = self.now()
@@ -166,6 +185,7 @@ class AssessmentWorkflow:
                 source_errors=tuple(errors),
                 warnings=tuple([*warnings, "no records were collected"]),
                 live_verified=self.live_verified,
+                threat_intel=correlate_techniques((), self.attack_mapping),
             )
 
         origins = {record.origin for record in collected}
@@ -182,6 +202,20 @@ class AssessmentWorkflow:
 
         clusters = correlate(collected)
         distinct = [cluster.merged for cluster in clusters]
+
+        threat_intel = correlate_techniques(distinct, self.attack_mapping)
+        if self.attack_mapping is not None:
+            mapped = sum(1 for c in threat_intel if c.mapped)
+            if mapped == 0:
+                warnings.append(
+                    "ATT&CK mapping supplied but no record matched it: the mapping "
+                    "may be stale, or these CVEs may genuinely be unmapped"
+                )
+            else:
+                warnings.append(
+                    f"{mapped}/{len(threat_intel)} record(s) correlate to MITRE ATT&CK "
+                    f"(mapping {self.attack_mapping.source} v{self.attack_mapping.version})"
+                )
 
         exposure: ExposureReport | None = None
         if self.inventory is not None:
@@ -222,6 +256,7 @@ class AssessmentWorkflow:
             source_errors=tuple(errors),
             warnings=tuple(dict.fromkeys(warnings)),
             live_verified=self.live_verified,
+            threat_intel=threat_intel,
         )
 
     def _plan(
@@ -281,6 +316,7 @@ def workflow_for(
     context: PriorityContext | Mapping[str, PriorityContext] | None = None,
     now: Callable[[], datetime] = utcnow,
     live_verified: bool = False,
+    attack_mapping: CveTechniqueMap | None = None,
 ) -> AssessmentReport:
     """Convenience wrapper for an in-memory record set."""
     return AssessmentWorkflow(
@@ -289,6 +325,7 @@ def workflow_for(
         context=context,
         now=now,
         live_verified=live_verified,
+        attack_mapping=attack_mapping,
     ).run()
 
 
