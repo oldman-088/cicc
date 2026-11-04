@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import type {
   IntelligenceNode,
   IntelligenceRelationship,
@@ -17,11 +17,20 @@ type RelationshipExplorerProps = {
   onSelectNode: (nodeId: string) => void;
 };
 
+const RELATIONSHIP_PAGE_SIZE = 50;
+
 function formatPercent(value: number, locale: Locale) {
   return new Intl.NumberFormat(locale, {
     style: "percent",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatCountStatus(template: string, shown: number, total: number, locale: Locale) {
+  const numberFormat = new Intl.NumberFormat(locale);
+  return template
+    .replace("{shown}", numberFormat.format(shown))
+    .replace("{total}", numberFormat.format(total));
 }
 
 export function RelationshipExplorer({
@@ -33,8 +42,17 @@ export function RelationshipExplorer({
 }: RelationshipExplorerProps) {
   const messages = getMessages(locale);
   const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [visibleRelationshipCount, setVisibleRelationshipCount] =
+    useState(RELATIONSHIP_PAGE_SIZE);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const selectedNode = nodeById.get(selectedNodeId) ?? nodes[0];
+  const visibleRelationships = relationships.slice(0, visibleRelationshipCount);
+  const countStatus = formatCountStatus(
+    messages.relationshipCountStatus,
+    visibleRelationships.length,
+    relationships.length,
+    locale,
+  );
 
   function moveFocus(event: KeyboardEvent<HTMLButtonElement>, current: IntelligenceNode) {
     const currentIndex = nodes.findIndex((node) => node.id === current.id);
@@ -111,7 +129,7 @@ export function RelationshipExplorer({
                 >
                   <span className={styles.entityGlyph} data-type={node.type} aria-hidden="true" />
                   <span className={styles.entityCopy}>
-                    <span className={styles.entityName}>{node.label}</span>
+                    <bdi className={styles.entityName} dir="auto">{node.label}</bdi>
                     <span className={styles.entityMeta}>
                       {entityType} · {messages.confidence} {confidence} ({messages.illustrative})
                     </span>
@@ -129,8 +147,11 @@ export function RelationshipExplorer({
         <h3 className={styles.subheading} id="relationships-heading">
           {messages.relationshipsTitle} <span>{relationships.length}</span>
         </h3>
+        <p className={styles.relationshipCount} role="status" aria-live="polite">
+          {countStatus}
+        </p>
         <ul className={styles.relationshipList} aria-labelledby="relationships-heading">
-          {relationships.map((relationship) => {
+          {visibleRelationships.map((relationship) => {
             const source = nodeById.get(relationship.sourceId);
             const target = nodeById.get(relationship.targetId);
             if (!source || !target) return null;
@@ -138,11 +159,11 @@ export function RelationshipExplorer({
             return (
               <li className={styles.relationshipItem} key={relationship.id}>
                 <p className={styles.relationshipStatement}>
-                  <span>{source.label}</span>
+                  <bdi dir="auto">{source.label}</bdi>
                   <span className={styles.relationshipType}>
                     {messages.relationshipTypes[relationship.type]}
                   </span>
-                  <span>{target.label}</span>
+                  <bdi dir="auto">{target.label}</bdi>
                 </p>
                 <p className={styles.relationshipMeta}>
                   {messages.confidence}: {formatPercent(relationship.confidence, locale)} ({messages.illustrative})
@@ -152,6 +173,19 @@ export function RelationshipExplorer({
             );
           })}
         </ul>
+        {visibleRelationships.length < relationships.length && (
+          <button
+            className={styles.showMoreRelationships}
+            type="button"
+            onClick={() =>
+              setVisibleRelationshipCount((count) =>
+                Math.min(count + RELATIONSHIP_PAGE_SIZE, relationships.length),
+              )
+            }
+          >
+            {messages.showMoreRelationships}
+          </button>
+        )}
       </div>
 
       {selectedNode && (
@@ -162,7 +196,7 @@ export function RelationshipExplorer({
         >
           <p className={styles.sectionEyebrow}>{messages.sampleSource}</p>
           <h3 id="selected-entity-heading">{messages.selectedEntity}</h3>
-          <p className={styles.selectedName}>{selectedNode.label}</p>
+          <p className={styles.selectedName}><bdi dir="auto">{selectedNode.label}</bdi></p>
           <dl className={styles.detailsList}>
             <div>
               <dt>{messages.entityType}</dt>
@@ -180,7 +214,7 @@ export function RelationshipExplorer({
             </div>
             <div>
               <dt>{messages.provenance}</dt>
-              <dd>{selectedNode.provenance}</dd>
+              <dd><bdi dir="auto">{selectedNode.provenance}</bdi></dd>
             </div>
           </dl>
         </section>

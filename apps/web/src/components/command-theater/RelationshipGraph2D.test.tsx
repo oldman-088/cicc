@@ -1,8 +1,17 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DEMO_NODES, DEMO_RELATIONSHIPS } from "./demo-graph";
+import type { IntelligenceRelationship } from "./types";
 import { RelationshipExplorer } from "./RelationshipExplorer";
 import { RelationshipGraph2D } from "./RelationshipGraph2D";
+
+function buildRelationships(count: number): IntelligenceRelationship[] {
+  const template = DEMO_RELATIONSHIPS[0]!;
+  return Array.from({ length: count }, (_, index) => ({
+    ...template,
+    id: `stress-edge-${index}`,
+  }));
+}
 
 describe("RelationshipGraph2D", () => {
   it("draws a labelled 2D map for each sample relationship", () => {
@@ -19,6 +28,22 @@ describe("RelationshipGraph2D", () => {
     expect(map).toHaveAttribute("viewBox", "0 0 1000 520");
     expect(map.querySelectorAll("line")).toHaveLength(DEMO_RELATIONSHIPS.length);
     expect(map.querySelectorAll("circle").length).toBeGreaterThan(DEMO_NODES.length);
+  });
+
+  it("bounds SVG rendering to 250 edges for a 5,000-relationship graph", () => {
+    render(
+      <RelationshipGraph2D
+        nodes={DEMO_NODES}
+        relationships={buildRelationships(5_000)}
+        selectedNodeId="actor-demo"
+        locale="en"
+      />,
+    );
+
+    const map = screen.getByRole("img", { name: /2D intelligence relationship map/ });
+    expect(map.querySelectorAll("line")).toHaveLength(250);
+    expect(map).toHaveAccessibleDescription(/Map shows 250 of 5,000 relationships/);
+    expect(screen.getByRole("note")).toHaveTextContent(/Map shows 250 of 5,000 relationships/);
   });
 });
 
@@ -101,5 +126,25 @@ describe("RelationshipExplorer", () => {
     fireEvent.keyDown(campaign, { key: "End" });
     expect(onSelectNode).toHaveBeenCalledWith("asset-demo");
     expect(screen.getByRole("button", { name: /Demo research workstation/ })).toHaveFocus();
+  });
+
+  it("paginates the accessible relationship list for large graphs", () => {
+    render(
+      <RelationshipExplorer
+        nodes={DEMO_NODES}
+        relationships={buildRelationships(5_000)}
+        selectedNodeId="actor-demo"
+        locale="en"
+        onSelectNode={vi.fn()}
+      />,
+    );
+
+    const relationshipList = screen.getByRole("list", { name: /Relationships/ });
+    expect(within(relationshipList).getAllByRole("listitem")).toHaveLength(50);
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 50 of 5,000");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more relationships" }));
+    expect(within(relationshipList).getAllByRole("listitem")).toHaveLength(100);
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 100 of 5,000");
   });
 });

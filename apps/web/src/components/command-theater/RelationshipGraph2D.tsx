@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useMemo } from "react";
 import type { IntelligenceNode, IntelligenceRelationship, Locale } from "./types";
 import { getMessages } from "./translations";
 import styles from "./CommandTheater.module.css";
@@ -12,6 +12,7 @@ type RelationshipGraph2DProps = {
 
 const WIDTH = 1000;
 const HEIGHT = 520;
+const MAX_MAP_RELATIONSHIPS = 250;
 
 const entityColors: Record<IntelligenceNode["type"], string> = {
   "threat-actor": "#c4a6ff",
@@ -25,6 +26,13 @@ function mapPoint(node: IntelligenceNode) {
   return { x: node.position.x * 10, y: node.position.y * 5.1 };
 }
 
+function fillCountTemplate(template: string, shown: number, total: number, locale: Locale) {
+  const numberFormat = new Intl.NumberFormat(locale);
+  return template
+    .replace("{shown}", numberFormat.format(shown))
+    .replace("{total}", numberFormat.format(total));
+}
+
 export function RelationshipGraph2D({
   nodes,
   relationships,
@@ -33,7 +41,30 @@ export function RelationshipGraph2D({
 }: RelationshipGraph2DProps) {
   const messages = getMessages(locale);
   const id = useId().replaceAll(":", "");
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const visibleRelationships = useMemo(() => {
+    const selected = relationships.filter(
+      (relationship) =>
+        relationship.sourceId === selectedNodeId ||
+        relationship.targetId === selectedNodeId,
+    );
+    if (selected.length >= MAX_MAP_RELATIONSHIPS) {
+      return selected.slice(0, MAX_MAP_RELATIONSHIPS);
+    }
+
+    const selectedIds = new Set(selected.map((relationship) => relationship.id));
+    const remaining = relationships.filter((relationship) => !selectedIds.has(relationship.id));
+    return [...selected, ...remaining].slice(0, MAX_MAP_RELATIONSHIPS);
+  }, [relationships, selectedNodeId]);
+  const limitNotice =
+    relationships.length > MAX_MAP_RELATIONSHIPS
+      ? fillCountTemplate(
+          messages.mapLimitNotice,
+          visibleRelationships.length,
+          relationships.length,
+          locale,
+        )
+      : null;
 
   return (
     <div className={styles.mapFrame}>
@@ -41,11 +72,15 @@ export function RelationshipGraph2D({
         className={styles.relationshipMap}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
-        aria-labelledby={`${id}-title ${id}-description`}
+        aria-labelledby={`${id}-title`}
+        aria-describedby={`${id}-description`}
         preserveAspectRatio="xMidYMid meet"
+        direction="ltr"
       >
         <title id={`${id}-title`}>{messages.mapLabel}</title>
-        <desc id={`${id}-description`}>{messages.mapDescription}</desc>
+        <desc id={`${id}-description`}>
+          {limitNotice ? `${messages.mapDescription} ${limitNotice}` : messages.mapDescription}
+        </desc>
         <defs>
           <marker
             id={`${id}-arrowhead`}
@@ -61,7 +96,7 @@ export function RelationshipGraph2D({
         </defs>
 
         <g className={styles.edgeLayer}>
-          {relationships.map((relationship) => {
+          {visibleRelationships.map((relationship) => {
             const source = nodeById.get(relationship.sourceId);
             const target = nodeById.get(relationship.targetId);
             if (!source || !target) return null;
@@ -129,6 +164,7 @@ export function RelationshipGraph2D({
                   x={point.x}
                   y={point.y + 48}
                   textAnchor="middle"
+                  direction="ltr"
                 >
                   {node.label}
                 </text>
@@ -137,6 +173,7 @@ export function RelationshipGraph2D({
           })}
         </g>
       </svg>
+      {limitNotice && <p className={styles.mapHint} role="note">{limitNotice}</p>}
       <p className={styles.mapHint}>{messages.keyboardHelp}</p>
     </div>
   );

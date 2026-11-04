@@ -8,9 +8,9 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Html, Line, OrbitControls } from "@react-three/drei";
+import { Html, OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import type { Vector3Tuple } from "three";
+import { createRelationshipLineGeometry, toScenePosition } from "./graph-geometry";
 import type {
   IntelligenceNode,
   IntelligenceRelationship,
@@ -36,14 +36,6 @@ const entityColors: Record<IntelligenceNode["type"], string> = {
   asset: "#9be3a7",
 };
 
-function toScenePosition(node: IntelligenceNode): Vector3Tuple {
-  return [
-    (node.position.x - 50) / 9,
-    (48 - node.position.y) / 8,
-    node.position.z * 1.5,
-  ];
-}
-
 function RelationshipScene({
   nodes,
   relationships,
@@ -57,6 +49,26 @@ function RelationshipScene({
     () => new Map(nodes.map((node) => [node.id, toScenePosition(node)])),
     [nodes],
   );
+  const selectedRelationships = useMemo(
+    () =>
+      relationships.filter(
+        (relationship) =>
+          relationship.sourceId === selectedNodeId ||
+          relationship.targetId === selectedNodeId,
+      ),
+    [relationships, selectedNodeId],
+  );
+  const allEdgeGeometry = useMemo(
+    () => createRelationshipLineGeometry(nodes, relationships),
+    [nodes, relationships],
+  );
+  const selectedEdgeGeometry = useMemo(
+    () => createRelationshipLineGeometry(nodes, selectedRelationships),
+    [nodes, selectedRelationships],
+  );
+
+  useEffect(() => () => allEdgeGeometry.dispose(), [allEdgeGeometry]);
+  useEffect(() => () => selectedEdgeGeometry.dispose(), [selectedEdgeGeometry]);
 
   return (
     <>
@@ -65,26 +77,16 @@ function RelationshipScene({
       <pointLight position={[0, 4, 7]} intensity={24} color="#7ddde2" />
       <pointLight position={[-5, -3, 2]} intensity={9} color="#648fff" />
 
-      {relationships.map((relationship) => {
-        const start = positions.get(relationship.sourceId);
-        const end = positions.get(relationship.targetId);
-        if (!start || !end) return null;
-
-        const isSelected =
-          selectedNodeId === relationship.sourceId ||
-          selectedNodeId === relationship.targetId;
-
-        return (
-          <Line
-            key={relationship.id}
-            points={[start, end]}
-            color={isSelected ? "#6fe2d9" : "#3f8296"}
-            lineWidth={isSelected ? 1.8 : 1}
-            transparent
-            opacity={isSelected ? 0.95 : 0.58}
-          />
-        );
-      })}
+      {relationships.length > 0 && (
+        <lineSegments geometry={allEdgeGeometry}>
+          <lineBasicMaterial color="#3f8296" transparent opacity={0.58} />
+        </lineSegments>
+      )}
+      {selectedRelationships.length > 0 && (
+        <lineSegments geometry={selectedEdgeGeometry}>
+          <lineBasicMaterial color="#6fe2d9" transparent opacity={0.98} />
+        </lineSegments>
+      )}
 
       {nodes.map((node) => {
         const position = positions.get(node.id);
@@ -120,7 +122,7 @@ function RelationshipScene({
               />
             </mesh>
             <Html position={[0, -0.68, 0]} center distanceFactor={9}>
-              <span className={styles.nodeLabel}>{node.label}</span>
+              <bdi className={styles.nodeLabel} dir="auto">{node.label}</bdi>
             </Html>
           </group>
         );
@@ -141,6 +143,7 @@ function RelationshipScene({
 type ErrorBoundaryProps = {
   children: ReactNode;
   fallback: ReactNode;
+  onError: () => void;
 };
 
 type ErrorBoundaryState = {
@@ -161,6 +164,10 @@ class SceneErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryStat
     return { hasError: true };
   }
 
+  componentDidCatch() {
+    this.props.onError();
+  }
+
   render() {
     return this.state.hasError ? this.props.fallback : this.props.children;
   }
@@ -176,7 +183,10 @@ export function Theater3DCanvas({
 }: Theater3DCanvasProps) {
   const messages = getMessages(locale);
   const [canvasUnavailable, setCanvasUnavailable] = useState(false);
-  const reportCanvasUnavailable = useCallback(() => setCanvasUnavailable(true), []);
+  const reportCanvasUnavailable = useCallback(() => {
+    setCanvasUnavailable(true);
+    onFallback();
+  }, [onFallback]);
   const fallback = (
     <div className={styles.fallback} role="alert">
       <p>{messages.canvasFallback}</p>
@@ -192,7 +202,7 @@ export function Theater3DCanvas({
 
   return (
     <div className={styles.canvasFrame}>
-      <SceneErrorBoundary fallback={fallback}>
+      <SceneErrorBoundary fallback={fallback} onError={onFallback}>
         <div aria-hidden="true">
           <Canvas
             camera={{ position: [0, 0, 12], fov: 48 }}

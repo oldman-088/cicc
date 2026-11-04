@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandTheater } from "./CommandTheater";
 import { detectWebGLAvailability } from "./webgl-support";
 
+const theaterMock = vi.hoisted(() => ({ throwsOnRender: false }));
+
 vi.mock("next/dynamic", () => ({
   default: () =>
     function MockTheater3D({ onFallback }: { onFallback: () => void }) {
+      if (theaterMock.throwsOnRender) throw new Error("3D chunk initialization failed");
       return (
         <div data-testid="mock-3d-theater">
           <button type="button" onClick={onFallback}>simulate WebGL failure</button>
@@ -21,6 +24,7 @@ vi.mock("./webgl-support", () => ({
 
 describe("CommandTheater", () => {
   beforeEach(() => {
+    theaterMock.throwsOnRender = false;
     vi.mocked(detectWebGLAvailability).mockReturnValue(false);
   });
 
@@ -32,8 +36,17 @@ describe("CommandTheater", () => {
 
     const threeDButton = screen.getByRole("button", { name: "3D theater" });
     await waitFor(() => expect(threeDButton).toBeDisabled());
-    expect(screen.getByRole("status")).toHaveTextContent(/3D is unavailable/i);
+    expect(screen.getByText(/3D is unavailable/i)).toBeInTheDocument();
     expect(screen.queryByTestId("mock-3d-theater")).not.toBeInTheDocument();
+  });
+
+  it("labels fixtures as synthetic and confidence scores as illustrative, not verified intelligence", () => {
+    render(<CommandTheater />);
+
+    expect(screen.getAllByText(/Synthetic sample only · no live feeds or verified evidence connected/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Synthetic UI fixture")).toBeInTheDocument();
+    expect(screen.getAllByText(/illustrative only/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/No verified evidence attached/i).length).toBeGreaterThan(0);
   });
 
   it("loads the 3D module only after the user opts into the 3D view", async () => {
@@ -58,7 +71,22 @@ describe("CommandTheater", () => {
     fireEvent.click(await screen.findByRole("button", { name: "simulate WebGL failure" }));
 
     expect(screen.getByRole("img", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/3D is unavailable/i);
+    expect(screen.getByText(/3D is unavailable/i)).toBeInTheDocument();
+  });
+
+  it("falls back to the 2D map if the lazy 3D scene throws during initialization", async () => {
+    vi.mocked(detectWebGLAvailability).mockReturnValue(true);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<CommandTheater />);
+
+    const threeDButton = screen.getByRole("button", { name: "3D theater" });
+    await waitFor(() => expect(threeDButton).toBeEnabled());
+    theaterMock.throwsOnRender = true;
+    fireEvent.click(threeDButton);
+
+    expect(screen.getByRole("img", { name: /2D intelligence relationship map/i })).toBeInTheDocument();
+    expect(screen.getByText(/3D is unavailable/i)).toBeInTheDocument();
+    consoleError.mockRestore();
   });
 
   it("applies Arabic and Persian language direction and local labels", () => {
@@ -67,6 +95,7 @@ describe("CommandTheater", () => {
     const main = screen.getByRole("main");
     expect(main).toHaveAttribute("dir", "rtl");
     expect(screen.getByRole("heading", { name: "مسرح قيادة الاستخبارات" })).toBeInTheDocument();
+    expect(screen.getAllByText(/توضيحية فقط/).length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByRole("combobox", { name: "لغة الواجهة" }), {
       target: { value: "fa" },
@@ -75,5 +104,6 @@ describe("CommandTheater", () => {
     expect(main).toHaveAttribute("lang", "fa");
     expect(main).toHaveAttribute("dir", "rtl");
     expect(screen.getByRole("heading", { name: "تالار فرماندهی اطلاعات" })).toBeInTheDocument();
+    expect(screen.getAllByText(/صرفاً نمایشی/).length).toBeGreaterThan(0);
   });
 });

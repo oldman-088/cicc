@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { Component, useCallback, useEffect, useState, type ReactNode } from "react";
 import { RelationshipExplorer } from "./RelationshipExplorer";
 import { RelationshipGraph2D } from "./RelationshipGraph2D";
 import { DEMO_NODES, DEMO_RELATIONSHIPS } from "./demo-graph";
@@ -31,12 +31,41 @@ type CommandTheaterProps = {
 
 type GraphicsSupport = "checking" | "available" | "unavailable";
 
+type SceneChunkErrorBoundaryProps = {
+  children: ReactNode;
+  fallback: ReactNode;
+  onError: () => void;
+};
+
+class SceneChunkErrorBoundary extends Component<
+  SceneChunkErrorBoundaryProps,
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch() {
+    this.props.onError();
+  }
+
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
 export function CommandTheater({ locale: initialLocale }: CommandTheaterProps) {
   const [locale, setLocale] = useState<Locale>(initialLocale ?? "en");
   const [graphicsSupport, setGraphicsSupport] = useState<GraphicsSupport>("checking");
   const [view, setView] = useState<"2d" | "3d">("2d");
   const [selectedNodeId, setSelectedNodeId] = useState(DEMO_NODES[0]?.id ?? "");
   const messages = getMessages(locale);
+  const handleGraphicsFallback = useCallback(() => {
+    setGraphicsSupport("unavailable");
+    setView("2d");
+  }, []);
 
   useEffect(() => {
     if (initialLocale) {
@@ -143,17 +172,30 @@ export function CommandTheater({ locale: initialLocale }: CommandTheaterProps) {
                 />
               ) : (
                 <div className={styles.canvas3dFrame}>
-                  <LazyTheater3DCanvas
-                    nodes={DEMO_NODES}
-                    relationships={DEMO_RELATIONSHIPS}
-                    selectedNodeId={selectedNodeId}
-                    locale={locale}
-                    onSelectNode={setSelectedNodeId}
-                    onFallback={() => {
-                      setGraphicsSupport("unavailable");
-                      setView("2d");
-                    }}
-                  />
+                  <SceneChunkErrorBoundary
+                    onError={handleGraphicsFallback}
+                    fallback={
+                      <div className={styles.canvasFallback} role="alert">
+                        <p>{messages.canvasFallback}</p>
+                        <button
+                          className={styles.fallbackButton}
+                          type="button"
+                          onClick={handleGraphicsFallback}
+                        >
+                          {messages.switchTo2d}
+                        </button>
+                      </div>
+                    }
+                  >
+                    <LazyTheater3DCanvas
+                      nodes={DEMO_NODES}
+                      relationships={DEMO_RELATIONSHIPS}
+                      selectedNodeId={selectedNodeId}
+                      locale={locale}
+                      onSelectNode={setSelectedNodeId}
+                      onFallback={handleGraphicsFallback}
+                    />
+                  </SceneChunkErrorBoundary>
                 </div>
               )}
             </div>

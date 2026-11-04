@@ -233,6 +233,7 @@
 .localeControl select:focus-visible,
 .entityButton:focus-visible,
 .entityButtonSelected:focus-visible,
+.showMoreRelationships:focus-visible,
 .fallbackButton:focus-visible {
   outline: 3px solid #f3bf68;
   outline-offset: 3px;
@@ -386,6 +387,31 @@
   list-style: none;
 }
 
+.relationshipCount {
+  margin: -0.15rem 0 0.65rem;
+  color: #8096ad;
+  font-size: 0.7rem;
+}
+
+.showMoreRelationships {
+  width: 100%;
+  min-height: 2.45rem;
+  margin-block-start: 0.7rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #315064;
+  border-radius: 0.6rem;
+  color: #c5e4eb;
+  background: #0b202d;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.showMoreRelationships:hover {
+  border-color: #58b4b9;
+  background: #10313c;
+}
+
 .entityButton,
 .entityButtonSelected {
   display: flex;
@@ -408,7 +434,7 @@
 }
 
 .entityButtonSelected {
-  box-shadow: inset 3px 0 0 #70dbd0;
+  border-inline-start: 3px solid #70dbd0;
 }
 
 .entityGlyph {

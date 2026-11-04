@@ -18,6 +18,9 @@ export type TheaterMessages = {
   view3d: string;
   mapLabel: string;
   mapDescription: string;
+  mapLimitNotice: string;
+  relationshipCountStatus: string;
+  showMoreRelationships: string;
   explorerTitle: string;
   entitiesTitle: string;
   relationshipsTitle: string;
@@ -56,6 +59,9 @@ const messages: Record<Locale, TheaterMessages> = {
     view3d: "3D theater",
     mapLabel: "2D intelligence relationship map",
     mapDescription: "A visual overview of the synthetic entity and relationship sample.",
+    mapLimitNotice: "Map shows {shown} of {total} relationships; use the explorer for the full list.",
+    relationshipCountStatus: "Showing {shown} of {total} relationships.",
+    showMoreRelationships: "Show more relationships",
     explorerTitle: "Intelligence graph explorer",
     entitiesTitle: "Entities",
     relationshipsTitle: "Relationships",
@@ -103,6 +109,9 @@ const messages: Record<Locale, TheaterMessages> = {
     view3d: "مسرح ثلاثي الأبعاد",
     mapLabel: "خريطة العلاقات الاستخباراتية ثنائية الأبعاد",
     mapDescription: "عرض مرئي لعينة الكيانات والعلاقات الاصطناعية.",
+    mapLimitNotice: "تعرض الخريطة {shown} من أصل {total} علاقة؛ استخدم المستكشف للاطلاع على القائمة كاملة.",
+    relationshipCountStatus: "يُعرض {shown} من أصل {total} علاقة.",
+    showMoreRelationships: "عرض المزيد من العلاقات",
     explorerTitle: "مستكشف الرسم الاستخباراتي",
     entitiesTitle: "الكيانات",
     relationshipsTitle: "العلاقات",
@@ -150,6 +159,9 @@ const messages: Record<Locale, TheaterMessages> = {
     view3d: "تالار سه‌بعدی",
     mapLabel: "نقشهٔ دوبعدی پیوندهای اطلاعاتی",
     mapDescription: "نمایی بصری از نمونهٔ ساختگی موجودیت‌ها و پیوندها.",
+    mapLimitNotice: "نقشه {shown} مورد از {total} پیوند را نشان می‌دهد؛ برای فهرست کامل از کاوشگر استفاده کنید.",
+    relationshipCountStatus: "نمایش {shown} از {total} پیوند.",
+    showMoreRelationships: "نمایش پیوندهای بیشتر",
     explorerTitle: "کاوشگر گراف اطلاعاتی",
     entitiesTitle: "موجودیت‌ها",
     relationshipsTitle: "پیوندها",
