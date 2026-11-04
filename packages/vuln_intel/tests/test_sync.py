@@ -276,3 +276,51 @@ class TestFileCheckpointStore:
     def test_negative_record_count_is_rejected(self):
         with pytest.raises(ValidationError):
             Checkpoint(source="nvd", records=-1)
+
+
+class TestSyncToHealth:
+    """A completed sync must be able to feed the health report.
+
+    These two subsystems were built separately; without `to_source_state` a sync
+    run is invisible to readiness, so the source that actually collects the data
+    would be reported as never collected.
+    """
+
+    def _outcome(self):
+        store = MemoryStore()
+        return sync(
+            ScriptedFetcher([([record("CVE-2026-0001")], True, None)]), store
+        ).run(since=NOW, until=NOW + timedelta(days=1), step=timedelta(days=1))
+
+    def test_successful_sync_projects_to_an_ok_state(self):
+        from vuln_intel.schema import CollectionStatus, SourceKind
+        from vuln_intel.sync import to_source_state
+
+        state = to_source_state(self._outcome(), kind=SourceKind.NVD, now=NOW)
+        assert state.status is CollectionStatus.OK
+        assert state.records == 1
+        assert state.last_success == NOW
+
+    def test_sync_feeds_a_ready_health_report(self):
+        from vuln_intel.health import Readiness, build_health_report
+        from vuln_intel.schema import SourceKind
+        from vuln_intel.sync import to_source_state
+
+        report = build_health_report(
+            [to_source_state(self._outcome(), kind=SourceKind.NVD, now=NOW)],
+            kev_age=timedelta(hours=1),
+            now=NOW,
+        )
+        assert report.readiness is Readiness.READY
+
+    def test_failed_sync_projects_to_a_failed_state_with_no_success(self):
+        from vuln_intel.schema import CollectionStatus, SourceKind
+        from vuln_intel.sync import to_source_state
+
+        outcome = sync(
+            ScriptedFetcher([([], False, "connection refused")]), MemoryStore()
+        ).run(since=NOW, until=NOW + timedelta(days=1), step=timedelta(days=1))
+        state = to_source_state(outcome, kind=SourceKind.NVD, now=NOW)
+        assert state.status is CollectionStatus.FAILED
+        assert state.last_success is None
+        assert "connection refused" in (state.error or "")

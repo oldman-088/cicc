@@ -24,16 +24,11 @@ Scoring does not live here; this module only decides *what is the same thing*.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
 from .errors import MixedOriginError
-from .schema import (
-    CveId,
-    NormalizedVulnerability,
-    Origin,
-    merge_records,
-)
+from .schema import NormalizedVulnerability, Origin, merge_records
 
 __all__ = [
     "IDENTIFIER_PATTERNS",
@@ -329,27 +324,3 @@ class ClusterIndex:
     def __len__(self) -> int:
         return len(self._clusters)
 
-
-def cve_of(record: NormalizedVulnerability) -> CveId:
-    """The validated CVE of a record (records always carry one)."""
-    return record.cve
-
-
-@dataclass
-class CorrelationStats:
-    """Aggregate facts for observability."""
-
-    input_records: int = 0
-    clusters: int = 0
-    deduplicated: int = 0
-    contested: int = 0
-    by_source: dict[str, int] = field(default_factory=dict)
-
-    def as_dict(self) -> dict[str, object]:
-        return {
-            "input_records": self.input_records,
-            "clusters": self.clusters,
-            "deduplicated": self.deduplicated,
-            "contested": self.contested,
-            "by_source": dict(sorted(self.by_source.items())),
-        }

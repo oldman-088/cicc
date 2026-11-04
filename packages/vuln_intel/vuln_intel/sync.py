@@ -44,6 +44,7 @@ __all__ = [
     "SyncOutcome",
     "SyncWindow",
     "plan_windows",
+    "to_source_state",
 ]
 
 #: NVD rejects a lastMod window wider than 120 consecutive days.
@@ -455,12 +456,19 @@ class IncrementalSync:
         )
 
 
-def to_source_state(outcome: SyncOutcome, *, kind: SourceKind) -> SourceState:
-    """Project a sync outcome onto the schema's collection state."""
+def to_source_state(
+    outcome: SyncOutcome, *, kind: SourceKind, now: datetime | None = None
+) -> SourceState:
+    """Project a sync outcome onto the schema's collection state.
+
+    This is the join between collection and observability: without it a sync
+    run cannot feed the health report, and readiness would silently ignore the
+    source that actually collects the data.
+    """
     return SourceState(
         kind=kind,
         status=outcome.status,
-        checked_at=utcnow(),
+        checked_at=now or utcnow(),
         last_success=outcome.checkpoint.completed_at if outcome.advanced else None,
         error="; ".join(outcome.warnings[:3]) or None,
         records=len(outcome.records),

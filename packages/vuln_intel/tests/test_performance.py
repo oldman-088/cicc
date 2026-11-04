@@ -13,6 +13,9 @@ Measured on Python 3.11 / 2 vCPU sandbox (recorded 2026-11):
 | rank 5k records                    | 0.056 s       | 3 s          |
 | sha256 digest of one payload       | 7 µs          | —            |
 | payload JSON, per 1000 obs.        | 428 KB        | —            |
+| correlate 10k records              | 0.065 s       | 4 s          |
+| exposure 5k inventory x 5k adv.    | 0.063 s       | 5 s          |
+| affected-version verdict, 1 record  | < 50 µs       | —            |
 """
 
 from __future__ import annotations
@@ -28,6 +31,15 @@ from vuln_intel.schema import CveId, CvssScore, NormalizedVulnerability, Origin,
 from .conftest import FIXED_NOW
 
 SCALE = 5000
+
+
+def _affected(name: str):
+    """Small helper so the scaling tests describe intent, not construction."""
+    from vuln_intel.schema import AffectedPackage
+
+    return (
+        AffectedPackage(ecosystem="npm", name=name, introduced="0", fixed="2.0.0"),
+    )
 
 
 def _records(count: int) -> list[NormalizedVulnerability]:
@@ -92,3 +104,64 @@ def test_payload_size_stays_bounded() -> None:
     observation = to_observations(record, tenant_id="t1", collected_at=FIXED_NOW)[0]
     size = len(json.dumps(observation.payload))
     assert size < 20_000, f"observation payload is {size} bytes; review before storage"
+
+
+class TestIntelligenceLayerScaling:
+    """The intelligence layer must stay near-linear in the number of records.
+
+    A quadratic correlation or exposure pass would make a realistic estate
+    (thousands of dependencies) unusable, so the shapes are pinned here.
+    """
+
+    def test_correlation_scales_linearly(self):
+        from vuln_intel.correlation import correlate
+
+        records = [
+            NormalizedVulnerability(
+                cve=CveId.parse(f"CVE-2024-{1000 + i}"),
+                origin=Origin.LIVE,
+                sources=("nvd",),
+            )
+            for i in range(SCALE * 2)
+        ]
+        started = time.perf_counter()
+        clusters = correlate(records)
+        elapsed = time.perf_counter() - started
+        assert len(clusters) == SCALE * 2
+        assert elapsed < 4.0, f"correlate {len(records)} records took {elapsed:.3f}s"
+
+    def test_exposure_scales_with_inventory_size(self):
+        from vuln_intel.watchlist import Dependency, Inventory, analyse_exposure
+
+        inventory = Inventory(
+            dependencies=tuple(
+                Dependency(
+                    ecosystem="npm", name=f"pkg-{i}", version="1.0.0", asset=f"svc-{i % 20}"
+                )
+                for i in range(SCALE)
+            )
+        )
+        advisories = [
+            NormalizedVulnerability(
+                cve=CveId.parse(f"CVE-2024-{1000 + i}"),
+                origin=Origin.LIVE,
+                affected=_affected(f"pkg-{i}"),
+                sources=("osv",),
+            )
+            for i in range(SCALE)
+        ]
+        started = time.perf_counter()
+        report = analyse_exposure(inventory, advisories)
+        elapsed = time.perf_counter() - started
+        assert len(report.affected) == SCALE
+        assert elapsed < 5.0, f"exposure scan took {elapsed:.3f}s"
+
+    def test_affected_verdict_is_cheap_enough_for_per_asset_evaluation(self):
+        from vuln_intel.affected import assess_affected
+
+        packages = _affected("pkg")
+        started = time.perf_counter()
+        for _ in range(2000):
+            assess_affected(packages, ecosystem="npm", name="pkg", version="1.0.0")
+        elapsed = time.perf_counter() - started
+        assert elapsed < 1.0, f"2000 verdicts took {elapsed:.3f}s"

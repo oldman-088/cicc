@@ -185,15 +185,6 @@ def assess_upgrade_cost(
     return UpgradeCost.PATCH
 
 
-def _kev_due(record: NormalizedVulnerability) -> date | None:
-    raw = getattr(record, "kev_due_date", None)
-    if isinstance(raw, datetime):
-        return raw.date()
-    if isinstance(raw, date):
-        return raw
-    return None
-
-
 def _parse_due(entry: NormalizedVulnerability) -> date | None:
     """CISA publishes ``dueDate`` as ``YYYY-MM-DD``; it is stored as text."""
     raw = getattr(entry, "kev_due_date", None)
