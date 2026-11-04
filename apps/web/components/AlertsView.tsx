@@ -97,6 +97,16 @@ export default function AlertsView({
                     <span className={`rounded-full border px-2 py-0.5 text-xs ${SEV_COLORS[a.severity] ?? SEV_COLORS.info}`}>
                       {t(`severity_${a.severity}`)}
                     </span>
+                    {a.escalated && (
+                      <span className="ms-1 rounded-full border border-red-500/60 px-2 py-0.5 text-xs text-red-300">
+                        {t("escalated")}
+                      </span>
+                    )}
+                    {a.flapping && (
+                      <span className="ms-1 rounded-full border border-orange-500/60 px-2 py-0.5 text-xs text-orange-300">
+                        {t("flapping")}
+                      </span>
+                    )}
                   </td>
                   <td className="td font-mono text-xs text-slate-300">{a.rule}</td>
                   <td className="td text-slate-300">{a.component_key ?? "—"}</td>

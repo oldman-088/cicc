@@ -139,5 +139,7 @@
   "colCount": "Count",
   "colLastSeen": "Last seen",
   "noTasks": "No task runs recorded yet — POST /api/v1/ops/tasks",
-  "noFailures": "No failures in the last 24h."
+  "noFailures": "No failures in the last 24h.",
+  "escalated": "escalated",
+  "flapping": "flapping"
 }

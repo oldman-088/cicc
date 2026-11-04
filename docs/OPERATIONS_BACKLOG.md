@@ -105,3 +105,37 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 4. Alerting escalation policies + notification channels — NOTIFY DISABLED
    until owner authorizes outbound notifications/costs.
 5. RLS/tenant isolation — only against the VERIFIED platform auth contract.
+
+
+## Done — Milestone 5 (PR #4 update)
+
+- Alerting: severity escalation on occurrences (OPS_ALERT_ESCALATE_OCCURRENCES),
+  flap detection (OPS_ALERT_FLAP_WINDOW_S), both event-logged; notifications
+  still DISABLED. Additive dialect-aware alert columns (escalated/flapping).
+- Perf: task stats via SQL aggregation — 20k-row window p50 224ms → 21ms.
+- Auth: platform-auth adapter (verified contract from arena/da631853-cicc),
+  inert unless enabled, fail-closed, role allow-lists; static tokens fallback.
+  Tenant-isolation PLAN written (docs/TENANT_ISOLATION_PLAN.md); scoping NOT
+  enabled (shared-contract decision pending).
+- RabbitMQ: verify_rabbitmq.py extended with REAL AMQP 0-9-1 roundtrip (pika);
+  management parsing covered by labeled fixture tests; live broker run is
+  blocked in the Arena sandbox (no Docker, egress allowlist) — exact external
+  procedure in docs/RABBITMQ_VERIFICATION.md.
+- Integration: scripts/ops_client.py reference client; issue #5 updated with
+  the final contract proposal for Agent 4.
+- Tests: API 73/73 (incl. 7 real-PG); web 17/17, tsc clean; dashboard shows
+  escalated/flapping chips (EN/AR 143 keys).
+
+## Next (backlog, priority order)
+
+1. Execute RabbitMQ live verification where Docker/broker is reachable; attach
+   real evidence to PR #4 / RABBITMQ_VERIFICATION.md.
+2. Issue #5: get Agent 4's confirmation on heartbeat/task contract; implement
+   compatibility only after agreement.
+3. Tenant isolation: execute docs/TENANT_ISOLATION_PLAN.md after owner decides
+   shared DB vs read-only replica + ops read roles per tenant.
+4. Alerting: escalation policies per rule (multi-level), notification channels
+   — still DISABLED until owner authorizes outbound notifications/costs.
+5. Per-tenant rate limiting on ops endpoints; ops audit events into platform
+   audit table via adapter port.
+6. Merge-time apps/ reorganization per APPS_INTEGRATION_STRATEGY.md.

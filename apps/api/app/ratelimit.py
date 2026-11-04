@@ -52,9 +52,17 @@ def rate_limit_dependency(request: Request) -> None:
 
 
 def read_token_dependency(authorization: str | None = Header(default=None)) -> None:
-    """Read gate. When both tokens are configured, the WRITE token also
-    satisfies read access (write is strictly stronger than read), so a single
-    Authorization header can authorize writer clients for reads+writes."""
+    """Read gate. If platform auth is enabled (CICC_OPS_USE_PLATFORM_AUTH=1 +
+    CICC_PLATFORM_DB_URL), verify the platform bearer session instead of the
+    static env token (fail closed). Otherwise env-token logic applies: when
+    both tokens are configured, the WRITE token also satisfies read access."""
+    from app import platform_auth
+
+    if platform_auth.platform_auth_enabled():
+        principal = platform_auth.resolve_principal(authorization)
+        if not platform_auth.read_allowed(principal):
+            raise HTTPException(status_code=401, detail="invalid platform session or role not allowed")
+        return
     token = os.getenv("CICC_OPS_READ_TOKEN")
     if token:
         write_token = os.getenv("CICC_OPS_WRITE_TOKEN")
@@ -66,6 +74,13 @@ def read_token_dependency(authorization: str | None = Header(default=None)) -> N
 
 
 def require_write_token(authorization: str | None) -> None:
+    from app import platform_auth
+
+    if platform_auth.platform_auth_enabled():
+        principal = platform_auth.resolve_principal(authorization)
+        if not platform_auth.write_allowed(principal):
+            raise HTTPException(status_code=401, detail="invalid platform session or role not allowed for writes")
+        return
     token = os.getenv("CICC_OPS_WRITE_TOKEN")
     if token and authorization != f"Bearer {token}":
         raise HTTPException(status_code=401, detail="invalid or missing write token")

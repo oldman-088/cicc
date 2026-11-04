@@ -9,7 +9,7 @@ rows are seeded.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
 from app.db import Base
 
@@ -180,6 +180,10 @@ class Alert(Base):
     acked_at = Column(DateTime(timezone=True), nullable=True)
     acked_by = Column(String(128), nullable=True)
     occurrences = Column(Integer, default=1)
+    # M5: escalation (severity bumped after OPS_ALERT_ESCALATE_OCCURRENCES)
+    # and flap detection (resolved then re-fired within OPS_ALERT_FLAP_WINDOW_S)
+    escalated = Column(Boolean, default=False, nullable=False)
+    flapping = Column(Boolean, default=False, nullable=False)
 
 
 class MaintenanceWindow(Base):

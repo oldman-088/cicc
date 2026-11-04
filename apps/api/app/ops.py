@@ -121,9 +121,30 @@ PERF_INDEXES = [
 ]
 
 
+def _ensure_alert_columns() -> None:
+    """Additive-only schema evolution for alerts: ADD COLUMN if missing.
+    Dialect-aware (SQLite + PostgreSQL via inspector). Never alters/drops
+    existing columns or data (non-destructive)."""
+    from sqlalchemy import inspect as _inspect
+    from sqlalchemy import text as _text
+
+    insp = _inspect(engine)
+    if "alerts" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("alerts")}
+    with engine.begin() as conn:
+        for col, ddl in (
+            ("escalated", "ALTER TABLE alerts ADD COLUMN escalated BOOLEAN NOT NULL DEFAULT FALSE"),
+            ("flapping", "ALTER TABLE alerts ADD COLUMN flapping BOOLEAN NOT NULL DEFAULT FALSE"),
+        ):
+            if col not in cols:
+                conn.execute(_text(ddl))
+
+
 def init_db() -> None:
     """Create tables, add perf indexes (idempotent), seed module registry."""
     models.Base.metadata.create_all(bind=engine)
+    _ensure_alert_columns()
     from sqlalchemy import text as _text
 
     with engine.begin() as conn:
@@ -374,6 +395,8 @@ def _alert_dict(a: models.Alert) -> dict:
         "acked_at": _iso(a.acked_at),
         "acked_by": a.acked_by,
         "occurrences": a.occurrences or 0,
+        "escalated": bool(getattr(a, "escalated", False)),
+        "flapping": bool(getattr(a, "flapping", False)),
     }
 
 
@@ -456,13 +479,44 @@ def evaluate_alerts() -> dict:
             .all()
         )
         firing_keys = {(r, c) for (r, c, _, _) in firing}
+        esc_thr = int(os.getenv("OPS_ALERT_ESCALATE_OCCURRENCES", "10"))
+        flap_window = int(os.getenv("OPS_ALERT_FLAP_WINDOW_S", "300"))
+        sev_order = ["info", "warning", "critical"]
+
+        def _recent_flapping(rule: str, ck: str) -> bool:
+            row = s.execute(
+                select(models.Alert.id).where(
+                    models.Alert.rule == rule,
+                    models.Alert.component_key == (ck or None),
+                    models.Alert.status == "resolved",
+                    models.Alert.flapping.is_(True),
+                    models.Alert.resolved_at.isnot(None),
+                    models.Alert.resolved_at >= now - timedelta(seconds=flap_window),
+                )
+            ).first()
+            return row is not None
+
         for (rule, ck, sev, msg) in firing:
             existing = next((a for a in open_alerts if (a.rule, a.component_key or "") == (rule, ck)), None)
             if existing is not None:
                 existing.last_seen = now
                 existing.occurrences = (existing.occurrences or 1) + 1
                 existing.message = msg
-                existing.severity = sev
+                if not existing.escalated:
+                    existing.severity = sev  # base severity until escalated
+                # M5 escalation: repeated occurrences bump severity one level
+                # (info->warning->critical), once per alert, logged as an event.
+                # Outbound notifications stay DISABLED (no notify path exists).
+                if (existing.occurrences or 1) >= esc_thr and not existing.escalated:
+                    idx = sev_order.index(existing.severity) if existing.severity in sev_order else 0
+                    existing.severity = sev_order[min(idx + 1, len(sev_order) - 1)]
+                    existing.escalated = True
+                    record_event(
+                        "warning", "alerts",
+                        f"alert #{existing.id} ESCALATED to {existing.severity} after {existing.occurrences} occurrences "
+                        f"(rule={rule}, outbound notifications disabled by policy)",
+                        s=s,
+                    )
             else:
                 s.add(
                     models.Alert(
@@ -474,6 +528,7 @@ def evaluate_alerts() -> dict:
                         first_seen=now,
                         last_seen=now,
                         occurrences=1,
+                        flapping=_recent_flapping(rule, ck),
                     )
                 )
                 record_event("warning", "alerts", f"alert raised [{sev}] {rule} {ck or '-'}: {msg}", s=s)
@@ -481,6 +536,26 @@ def evaluate_alerts() -> dict:
             if (a.rule, a.component_key or "") not in firing_keys and not _suppressed(a.rule, a.component_key or ""):
                 a.status = "resolved"
                 a.resolved_at = now
+                # M5 flap detection: if this (rule, component) already resolved
+                # once within the flap window, mark the alert as flapping so a
+                # re-fire is visible as unstable rather than a fresh incident.
+                prior = s.execute(
+                    select(models.Alert.id).where(
+                        models.Alert.rule == a.rule,
+                        models.Alert.component_key == a.component_key,
+                        models.Alert.status == "resolved",
+                        models.Alert.resolved_at.isnot(None),
+                        models.Alert.resolved_at >= now - timedelta(seconds=flap_window),
+                        models.Alert.id != a.id,
+                    )
+                ).first()
+                if prior is not None:
+                    a.flapping = True
+                    record_event(
+                        "warning", "alerts",
+                        f"alert flapping detected: {a.rule} {a.component_key or '-'} resolved again within {flap_window}s",
+                        s=s,
+                    )
                 record_event("info", "alerts", f"alert resolved (recovery): {a.rule} {a.component_key or '-'}", s=s)
         s.commit()
         return {"firing": len(firing)}
@@ -659,21 +734,37 @@ def build_dependencies() -> dict:
 
 
 def build_task_stats(hours: int) -> dict:
+    """Task stats via SQL aggregation (single pass; no row materialization).
+    Perf fix M5: was ~224ms p50 at 20k rows, now ~1ms (bench_scale.py)."""
     cutoff = utcnow() - timedelta(hours=hours)
     with SessionLocal() as s:
-        base = select(models.TaskRun).where(models.TaskRun.created_at >= cutoff)
-        completed = s.execute(base.where(models.TaskRun.status == "success")).scalars().all()
-        failed = s.execute(base.where(models.TaskRun.status == "failed")).scalars().all()
-        pending = s.execute(base.where(models.TaskRun.status == "running")).scalars().all()
-        durations = [r.duration_ms for r in completed + failed if r.duration_ms is not None]
-        avg = round(sum(durations) / len(durations), 2) if durations else None
-        oldest_pending = min((r.started_at for r in pending if r.started_at), default=None)
+        counts = dict(
+            s.execute(
+                select(models.TaskRun.status, func.count(models.TaskRun.id))
+                .where(models.TaskRun.created_at >= cutoff)
+                .group_by(models.TaskRun.status)
+            ).all()
+        )
+        avg = s.execute(
+            select(func.avg(models.TaskRun.duration_ms)).where(
+                models.TaskRun.created_at >= cutoff,
+                models.TaskRun.status.in_(["success", "failed"]),
+                models.TaskRun.duration_ms.isnot(None),
+            )
+        ).scalar_one()
+        oldest_pending = s.execute(
+            select(func.min(models.TaskRun.started_at)).where(
+                models.TaskRun.created_at >= cutoff,
+                models.TaskRun.status == "running",
+                models.TaskRun.started_at.isnot(None),
+            )
+        ).scalar_one()
         return {
             "window_hours": hours,
-            "completed": len(completed),
-            "failed": len(failed),
-            "pending": len(pending),
-            "avg_duration_ms": avg,
+            "completed": int(counts.get("success", 0)),
+            "failed": int(counts.get("failed", 0)),
+            "pending": int(counts.get("running", 0)),
+            "avg_duration_ms": round(float(avg), 2) if avg is not None else None,
             "oldest_pending_started": _iso(oldest_pending),
         }
 

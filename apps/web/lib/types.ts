@@ -94,6 +94,8 @@ export interface Alert {
   acked_at: string | null;
   acked_by: string | null;
   occurrences: number;
+  escalated: boolean;
+  flapping: boolean;
 }
 
 export interface WorkerInfo {

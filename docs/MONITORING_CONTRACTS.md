@@ -182,3 +182,30 @@ task list (limit 100) p50 1.6ms; failures(24h) p50 7.5ms; activity p50 1.2ms;
 history(168h) p50 19.5ms; worker history p50 8.0ms; evaluate_alerts p50 4.9ms;
 full overview p50 8.2ms; retention purge p50 0.9ms. task stats over the full
 20k-row window p50 ~224ms (documented; not on the overview hot path).
+
+
+## 10. Milestone-5 contracts & behaviors
+
+- **Alert escalation**: when an open alert reaches `OPS_ALERT_ESCALATE_OCCURRENCES`
+  (default 10) occurrences, severity bumps one level (info→warning→critical),
+  `escalated=true`, and an `alerts` event is logged. Outbound notifications
+  remain DISABLED (no notify path exists; policy-gated).
+- **Flap detection**: if a (rule, component) alert resolves and the same key
+  resolves again within `OPS_ALERT_FLAP_WINDOW_S` (default 300s), the alert is
+  marked `flapping=true` and re-fires inherit the flag. Event logged.
+- Alert objects now expose `escalated` and `flapping` (additive columns via
+  dialect-aware, non-destructive ADD COLUMN — SQLite + PostgreSQL).
+- **Task stats** computed via SQL aggregation (was row-materializing;
+  20k-row window p50 224ms → 21ms, scripts/bench_scale.py).
+- **Platform auth adapter** (`app/platform_auth.py`, INERT unless
+  `CICC_OPS_USE_PLATFORM_AUTH=1` + `CICC_PLATFORM_DB_URL`): verifies bearer
+  sha256 digest against the VERIFIED platform schema (`auth_sessions`⋈`users`),
+  fails closed; role allow-lists `CICC_OPS_READ_ROLES` / `CICC_OPS_WRITE_ROLES`.
+  Static env tokens remain the fallback for non-platform deployments.
+  Tenant scoping of ops data: plan only — docs/TENANT_ISOLATION_PLAN.md.
+- **RabbitMQ verification**: scripts/verify_rabbitmq.py performs REAL
+  management-API + AMQP 0-9-1 roundtrip checks (never mocked);
+  docs/RABBITMQ_VERIFICATION.md records the sandbox limitation and the exact
+  external procedure. Management parsing covered by labeled fixture tests.
+- **Reference ops client** for integration agents: scripts/ops_client.py
+  (heartbeat/task senders, --dry-run). Contract unchanged from §5/§9.

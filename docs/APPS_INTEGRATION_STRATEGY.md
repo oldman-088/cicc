@@ -41,3 +41,18 @@ Rules:
 Nothing structural yet: PR #4 is under review with `apps/api` + `apps/web`.
 The move to `apps/ops/*` is a **merge-time rename** to be executed only after
 coordination, so review diffs stay readable. No other branch is touched.
+
+## Merge-time organization plan (prepared, NOT executed)
+
+1. Keep PR #4 reviewable: no renames while PR #4 is open/under review.
+2. At merge time (after coordination on issue #5 and PR comments), move this
+   subsystem to `apps/ops/` (`apps/ops/api`, `apps/ops/web`) with a single
+   mechanical commit; update root compose/scripts/docs paths accordingly.
+3. Root `package.json` workspaces: enumerate web packages explicitly
+   (`apps/web`, `apps/ops/web`) — never a bare glob. Coordinate with PR #2
+   (which adds `workspaces: ["apps/web"]`) via PR comment before merging.
+4. Suggested merge order to minimize conflicts: PR #3 (apps/threat_intelligence,
+   no conflict) → PR #1 (packages/, no conflict) → PR #2 (apps/web) → PR #4
+   (apps/api + apps/web) → then the apps/ops rename. Final order by PR owners.
+5. Shared contracts stay in `docs/MONITORING_CONTRACTS.md` + issue #5; code
+   references docs, not other branches.

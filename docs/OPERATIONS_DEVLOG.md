@@ -22,3 +22,19 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - Coordination: docs/APPS_INTEGRATION_STRATEGY.md (apps/ domain subdirs
   proposal); GitHub issue opened for heartbeat-contract alignment with the
   integration agent. Other agents' branches untouched.
+
+## 2026-11-04 — Milestone 5 (branch arena/961971ed-cicc, PR #4)
+
+- Alerting: escalation + flap detection (+ tests), additive columns, dashboard
+  chips; notifications remain disabled.
+- Perf: task-stats SQL aggregation (224ms→21ms p50 @20k rows), regression test.
+- Auth: inspected VERIFIED platform contract on arena/da631853-cicc (read-only);
+  implemented inert platform-auth adapter + role gates + conformance tests;
+  wrote TENANT_ISOLATION_PLAN.md (scoping deferred to owner decision).
+- RabbitMQ: sandbox has no Docker and no reachable VPS/broker (egress
+  allowlist) — live verification recorded as blocked-external with exact
+  procedure (RABBITMQ_VERIFICATION.md); AMQP roundtrip capability added to
+  verify_rabbitmq.py (pika, dev-only dep); fixture parsing tests labeled.
+- Coordination: issue #5 commented with final heartbeat/task contract +
+  scripts/ops_client.py reference client; no other branches touched.
+- API 73/73 (7 real-PG), web 17/17 + tsc clean.

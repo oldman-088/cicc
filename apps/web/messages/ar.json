@@ -139,5 +139,7 @@
   "colCount": "العدد",
   "colLastSeen": "آخر ظهور",
   "noTasks": "لا توجد مهام مسجلة بعد — POST /api/v1/ops/tasks",
-  "noFailures": "لا أخطاء في آخر 24 ساعة."
+  "noFailures": "لا أخطاء في آخر 24 ساعة.",
+  "escalated": "مُصعَّدة",
+  "flapping": "متقلبة"
 }

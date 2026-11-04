@@ -150,6 +150,8 @@ class AlertItem(BaseModel):
     acked_at: Optional[str] = None
     acked_by: Optional[str] = None
     occurrences: int
+    escalated: bool = False
+    flapping: bool = False
 
 
 class AlertsResponse(BaseModel):
