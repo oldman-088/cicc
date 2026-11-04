@@ -177,11 +177,22 @@ exploited".
 
 ### CVSS is recomputed, not trusted
 
-`schema.cvss_from_source` prefers the vector and computes the base score locally
-(CVSS v3.0/v3.1, FIRST spec incl. Appendix-A rounding). When a source's stated
-`baseScore` disagrees with its own vector, the computed value wins **and** the
-disagreement is recorded. CVSS v2/v4 vectors are kept as evidence but marked
-`assessed=False` — never scored with v3 maths.
+`schema.cvss_from_source` prefers the vector and computes the score locally:
+CVSS v3.0/v3.1 via `cvss.py` (FIRST spec incl. Appendix-A rounding) and CVSS
+v4.0 via `cvss40.py` (macrovector lookup + interpolation, spec v1.2). When a
+source's stated `baseScore` disagrees with its own vector, the computed value
+wins **and** the disagreement is recorded. CVSS v2 vectors are kept as evidence
+but marked `assessed=False` — never scored with v3 or v4 maths.
+
+v4.0 is scored by its own module because it is not a revision of v3: it replaces
+the formula entirely, and v3 and v4 scores are **not comparable**. `best_cvss`
+therefore prefers v4 over v3 when a record carries both, and never selects v2.
+
+The v4 implementation is validated against vectors and scores published by FIRST
+in the CVSS v4.0 Examples document, covering base, threat, environmental and
+supplemental scoring. The 270-entry macrovector table is reproduced verbatim
+from FIRST's reference implementation (BSD-2-Clause, attributed in the module
+header); deriving it by hand would reintroduce transcription risk.
 
 ## 6. EPSS integration interface
 
@@ -370,8 +381,9 @@ recorded outcomes with no I/O, so it is safe as a liveness probe.
    POST endpoints and are unimplemented. The watchlist already builds the bodies.
 4. **Rate gating is per-process**, not cluster-wide, and does not coordinate
    across workers. A breaker is per instance too.
-5. **No CVSS v4.0 scoring.** v4 metrics are parsed and carried, but only v3.0/v3.1
-   base scores are computed locally, so a v4-only record has no computed score.
+5. **v4.0 scoring is base-quality only in one sense:** the *environmental* group
+   is honoured, but this package never sets it — it carries whatever the source
+   supplied. Nothing here assesses exploit maturity beyond the source's `E`.
 6. **Version ordering is unavailable for some ecosystems** (rubygems,
    cocoapods, oss-fuzz). Those verdicts are `UNKNOWN` by decision, not oversight.
 7. **Prioritization is decision support**, not an automated remediation
