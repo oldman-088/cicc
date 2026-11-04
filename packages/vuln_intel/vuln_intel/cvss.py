@@ -5,11 +5,14 @@ some only publish the vector.  Computing locally lets the platform compare
 "what the source said" against "what the vector implies" and record a conflict
 instead of silently picking one.
 
-Scope is deliberately narrow:
+Scope:
 
-* only the **base** metrics of CVSS v3.0 and v3.1 (identical formulas);
-* CVSS v2 and v4.0 vectors are reported as *not assessed* — they are never
-  guessed with a v3 formula.
+* the **base** metrics of CVSS v3.0 and v3.1 (identical formulas);
+* CVSS v4.0 base/threat/environmental vectors are delegated to
+  :mod:`vuln_intel.cvss40`, which implements the specification's macrovector
+  algorithm and is validated against FIRST's published examples;
+* CVSS v2 vectors are reported as *not assessed* — a v3 or v4 formula would
+  produce a plausible but wrong number, which is worse than none.
 
 References: FIRST CVSS v3.1 specification, sections 7.1 (base equations) and
 7.4 (rounding).
@@ -20,11 +23,14 @@ from __future__ import annotations
 import math
 from typing import Mapping
 
+from .cvss40 import is_v4_vector, score_vector_v4
 from .errors import UnsupportedVector, ValidationError
 from .schema import CvssScore, Severity, severity_from_score
 
 __all__ = ["SUPPORTED_VERSIONS", "cvss_from_source", "parse_vector", "score_vector"]
 
+#: Versions scored by *this* module.  v4.0 is deliberately absent: it is scored
+#: by `cvss40.score_vector_v4` and reaches callers through `score_vector`.
 SUPPORTED_VERSIONS = ("3.0", "3.1")
 
 _AV = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.2}
@@ -50,6 +56,13 @@ def parse_vector(vector: str) -> tuple[str, dict[str, str]]:
         raise ValidationError("CVSS vector must start with 'CVSS:<version>/'", field="vector")
     version = head.split(":", 1)[1].strip()
     if version not in SUPPORTED_VERSIONS:
+        if version == "4.0":
+            # Route rather than fail: `score_vector` handles v4 before reaching
+            # this parser, so arriving here means a direct caller used the v3 API.
+            raise UnsupportedVector(
+                "CVSS v4.0 is scored by vuln_intel.cvss40; use score_vector()",
+                field="vector",
+            )
         raise UnsupportedVector(
             f"CVSS version {version!r} is not scored here (supported: "
             + ", ".join(SUPPORTED_VERSIONS)
@@ -88,11 +101,13 @@ def _metric(table: Mapping[str, float], metrics: Mapping[str, str], name: str) -
 
 
 def score_vector(vector: str, *, source: str | None = None) -> CvssScore:
-    """Compute the CVSS v3 base score for ``vector``.
+    """Compute the base score for a CVSS v3.x or v4.0 ``vector``.
 
-    Raises :class:`UnsupportedVector` (v2/v4) or :class:`ValidationError`
+    Raises :class:`UnsupportedVector` (v2) or :class:`ValidationError`
     (malformed vector).  It never returns a fabricated score.
     """
+    if is_v4_vector(vector):
+        return score_vector_v4(vector, source=source)
     version, metrics = parse_vector(vector)
     scope_changed = metrics["S"] == "C"
     if metrics["S"] not in ("U", "C"):
@@ -156,7 +171,12 @@ def cvss_from_source(
     if vector:
         try:
             computed = score_vector(vector, source=source)
-        except UnsupportedVector:
+        except (UnsupportedVector, ValidationError):
+            # A vector this package cannot evaluate is *evidence*, not an error
+            # in the caller.  Previously a malformed vector propagated a
+            # ValidationError out of the connector and aborted the whole batch;
+            # external data must never be able to do that.  It falls through to
+            # the stated score, or to an unassessed placeholder.
             computed = None
         if computed is not None:
             return computed

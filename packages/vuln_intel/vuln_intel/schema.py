@@ -285,9 +285,22 @@ class NormalizedVulnerability:
     # -- convenience ------------------------------------------------------
     @property
     def best_cvss(self) -> CvssScore | None:
-        """Highest assessed CVSS v3 score, or ``None`` when nothing is scored."""
-        scored = [c for c in self.cvss if c.assessed and c.version.startswith("3")]
-        return max(scored, key=lambda c: c.base_score, default=None)
+        """Highest assessed CVSS score, preferring the newest specification.
+
+        v4.0 is preferred over v3.x because it is the current standard and its
+        scores are not comparable to v3's (the same flaw scores differently).
+        Within one version the highest wins, which matches how a security team
+        reads "the score" for a record carrying several ratings.
+
+        This previously considered only ``3.x`` vectors, so a record that NVD
+        published with ``cvssMetricV40`` alone reported no score at all — the
+        score was computed correctly and then discarded.
+        """
+        for prefix in ("4", "3"):
+            scored = [c for c in self.cvss if c.assessed and c.version.startswith(prefix)]
+            if scored:
+                return max(scored, key=lambda c: c.base_score)
+        return None
 
     @property
     def effective_severity(self) -> Severity:

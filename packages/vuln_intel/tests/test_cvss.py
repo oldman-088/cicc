@@ -40,11 +40,24 @@ def test_severity_bands_follow_specification() -> None:
     assert severity_from_score(10.0) is Severity.CRITICAL
 
 
-def test_parse_vector_rejects_version_two_and_four() -> None:
+def test_parse_vector_rejects_version_two() -> None:
+    """v2 has no vector parser here: a v3 formula applied to a v2 vector would
+    produce a plausible wrong number."""
     with pytest.raises(UnsupportedVector):
         parse_vector("CVSS:2.0/AV:N/AC:L/Au:N/C:P/I:P/A:P")
+
+
+def test_parse_vector_rejects_version_four_but_scoring_accepts_it() -> None:
+    """`parse_vector` is the v3 parser, so it must refuse a v4 vector.
+
+    v4 has its own specification and lives in `cvss40`; the unified
+    `score_vector` entry point routes to it. Keeping the refusal here means a
+    caller can never accidentally run v3 maths over v4 metrics.
+    """
+    v4 = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
     with pytest.raises(UnsupportedVector):
-        parse_vector("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N")
+        parse_vector(v4)
+    assert score_vector(v4).base_score == 9.3
 
 
 @pytest.mark.parametrize(
@@ -70,8 +83,12 @@ def test_source_score_is_kept_verbatim_when_no_vector() -> None:
     assert score.assessed is True
 
 
-def test_unscorable_vector_is_kept_but_not_assessed() -> None:
-    """A CVSS v4 vector must not be silently scored with v3 maths."""
+def test_incomplete_v4_vector_is_kept_but_not_assessed() -> None:
+    """An unusable vector is evidence, not an exception.
+
+    External data must never abort a batch: a truncated v4 vector (missing its
+    mandatory SC/SI/SA) degrades to an unassessed placeholder.
+    """
     score = cvss_from_source(
         version="4.0",
         vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H",

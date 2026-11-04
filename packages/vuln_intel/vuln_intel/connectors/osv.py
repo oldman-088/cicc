@@ -318,8 +318,14 @@ class OsvConnector:
             if raw.upper().startswith("CVSS:"):
                 try:
                     cvss_scores.append(score_vector(raw, source="osv"))
-                except UnsupportedVector:
-                    notes.append(f"OSV severity vector not assessed here: {raw[:40]}")
+                except (UnsupportedVector, ValidationError) as exc:
+                    # One malformed vector from OSV must not abort the page.
+                    # A truncated vector (e.g. a v4 string missing SC/SI/SA) used
+                    # to propagate out of here and fail the whole collection run.
+                    # The record is still useful, so keep it and say what happened.
+                    notes.append(
+                        f"OSV severity vector not assessed ({type(exc).__name__}): {raw[:40]}"
+                    )
             elif raw.replace(".", "", 1).isdigit():
                 notes.append("OSV supplied a bare numeric score without a vector; ignored")
 
