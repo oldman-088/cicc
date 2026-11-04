@@ -4,3 +4,4 @@ vuln_intel/DEMO_OUTPUT.json
 __pycache__/
 *.pyc
 .pytest_cache/
+vuln_intel/integration/INTEGRATION_PREVIEW.json

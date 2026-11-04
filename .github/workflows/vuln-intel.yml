@@ -53,3 +53,27 @@ jobs:
               sys.exit(f"demo leaked non-fixture records: {origins}")
           print("demo output is fixture-only")
           PY
+      - name: Integration preview + separation rules
+        # Exits non-zero if a fixture/demo record could reach a store payload, or
+        # if the enrichment contract is missing.
+        run: python -m vuln_intel.integration.preview
+      - name: Guard against live-verification claims
+        # Fails if anyone flips the "verified live" flags without evidence.
+        run: |
+          python - <<'PY'
+          import sys
+          from vuln_intel.connectors import epss, nvd, osv
+          problems = []
+          if nvd.LAST_VERIFIED_LIVE is not None:
+              problems.append("nvd.LAST_VERIFIED_LIVE must stay None until a real fetch is recorded")
+          if osv.LAST_VERIFIED_LIVE is not None:
+              problems.append("osv.LAST_VERIFIED_LIVE must stay None until a real fetch is recorded")
+          if epss.LIVE_PROVIDER_AVAILABLE:
+              problems.append("epss.LIVE_PROVIDER_AVAILABLE must stay False: no live provider exists")
+          if problems:
+              sys.exit("; ".join(problems))
+          print("no unverified live-connectivity claims")
+          PY
+      - name: No network access in the test suite
+        run: |
+          grep -rn "HttpxTransport()" tests/ && { echo "tests must not construct a live transport"; exit 1; } || echo "no live transport in tests"

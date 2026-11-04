@@ -5,7 +5,7 @@ an **EPSS** integration interface, **unified CVE normalization** and transparent
 **prioritization**.
 
 - Package: `vuln_intel` (distribution name `cicc-vuln-intel`), version `0.1.0`
-- Status: **IMPLEMENTED and TESTED offline; NOT live-verified**
+- Status: **IMPLEMENTED and TESTED offline; integration PROPOSED, not wired; NOT live-verified**
 - Runtime dependencies: **none** (stdlib only). `httpx` is required only for
   live collection, via the optional `live` extra.
 
@@ -49,7 +49,8 @@ packages/vuln_intel/
 │   │   └── epss.py         EPSS interface + strict parser (no HTTP call)
 │   ├── normalization.py    cross-source merge, KEV signals, EPSS attach
 │   ├── priorities.py       additive 0-100 ranking with explanations
-│   └── demo.py             offline pipeline demo (fixtures only)
+│   ├── demo.py             offline pipeline demo (fixtures only)
+│   └── integration/        proposed host contract (ports + mapping + service)
 ├── tests/                  153 tests, synthetic fixtures only
 │   └── fixtures/           hand-written payloads shaped after public docs
 ├── pyproject.toml
@@ -208,6 +209,8 @@ Properties enforced by tests:
 
 ## 9. Known limitations (do not overstate)
 
+0. **Integration is proposed, not wired.** The adapter is the host's job; the storage decision (Path A/B) is open.
+
 1. **No live verification.** Both connectors are fixture-tested only. Endpoint
    shape, provider terms, API-key behaviour and real rate limits are unverified.
 2. **No persistence.** Nothing writes to the database; the API layer must map
@@ -224,7 +227,31 @@ Properties enforced by tests:
 9. **`sources.py` integration is pending review** — deliberately not modified,
    per the task rules.
 
-## 10. Integration checklist for the reviewer
+## 10. Proposed integration (review only — nothing wired)
+
+`vuln_intel/integration/` defines the seam without touching the host:
+
+- `contracts.py` — `VulnerabilityStore` and `AuditPort` protocols the host implements;
+- `mapping.py` — `NormalizedVulnerability` → the host's
+  `Entity(kind='vulnerability')` + `*_catalog_records.details` shape, with the
+  package's own fields under `details["cicc_enrichment"]` so existing readers
+  keep working;
+- `service.py` — `IngestionService`: origin gate, dry-run by default, age gate,
+  audit coupling, per-record outcomes (no batch-wide abort);
+- `store.py` — reference in-memory store honouring the same invariants, plus
+  `RefusingStore` (deny by default when no approval exists);
+- `preview.py` — generates the review artifact and **exits non-zero** if a
+  separation rule breaks.
+
+Compatibility with the current repository, the database requirements (Path A:
+reuse existing tables / Path B: one new table) and the credential conditions are
+documented in [`docs/vulnerability-intelligence/INTEGRATION.md`](../../docs/vulnerability-intelligence/INTEGRATION.md).
+A reviewer checklist lives in
+[`REVIEW_CHECKLIST.md`](../../docs/vulnerability-intelligence/REVIEW_CHECKLIST.md).
+
+**No migration is authored by this change.**
+
+## 11. Integration checklist for the reviewer
 
 - [ ] Confirm the target integration point (`apps/api/app/sources.py` in the
       lineage that owns it) before wiring.
