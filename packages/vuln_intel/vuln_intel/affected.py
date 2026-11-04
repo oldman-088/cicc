@@ -110,6 +110,11 @@ class VersionRange:
     introduced: str | None = None
     fixed: str | None = None
     last_affected: str | None = None
+    #: Upper bound of the range document (OSV ``limit`` event).  Recorded so the
+    #: bound is not lost, deliberately *not* folded into ``intervals``: the schema
+    #: says it bounds the range, not that a fix exists at that version.  When a
+    #: range carries several ``limit`` events the first is kept here and the
+    #: complete list remains available in :attr:`AffectedPackage.events`.
     limit: str | None = None
     intervals: tuple[tuple[str | None, str | None, str | None], ...] = ()
 
@@ -171,7 +176,11 @@ def _range_from_package(pkg: AffectedPackage) -> list[VersionRange]:
         for index, ekind, evalue in events:
             by_range.setdefault(index, []).append((ekind, evalue))
         return [
-            VersionRange(kind=kind, intervals=_build_intervals(evs))
+            VersionRange(
+                kind=kind,
+                limit=next((v for k, v in evs if k == "limit"), None),
+                intervals=_build_intervals(evs),
+            )
             for _, evs in sorted(by_range.items())
         ]
     if pkg.introduced is None and pkg.fixed is None:

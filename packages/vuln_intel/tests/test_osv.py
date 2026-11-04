@@ -281,3 +281,133 @@ class TestQueryBatch:
         (identifier, modified), = groups[0]
         assert identifier == "GHSA-a"
         assert modified == "2026-01-01"
+
+
+# --- OSV id charset: the schema's contract, not a hand-picked blocklist --------
+#
+# The connector used to reject only ids containing "/" or "?".  Every earlier SSRF
+# probe happened to contain one of those, so the check looked correct while most of
+# the unsafe charset was still accepted.  The schema guarantees ids match
+# ^[a-zA-Z0-9:_.-]+$, so that pattern is now enforced verbatim.
+
+_ILLEGAL_ID_CHARS = [
+    "/",           # path separator
+    "\\",          # Windows separator; also an escape in some URL builders
+    "?",           # query injection
+    "#",           # fragment injection
+    "%",           # pre-encoded percent: "%2e%2e" traverses without a "/"
+    " ",           # space
+    "\t",          # control whitespace
+    "\n",          # header/line injection
+    "\x00",        # NUL truncation
+    "@",           # authority injection ("osv.dev@evil.example")
+    "&",           # parameter smuggling
+    "+",           # decodes to a space in form encoding
+    "(", ")", "!",
+    "\u202e",      # right-to-left override: renders "gpj.exe" as "exe.jpg"
+]
+
+
+@pytest.mark.parametrize("illegal", _ILLEGAL_ID_CHARS, ids=repr)
+def test_every_illegal_id_character_is_rejected(illegal: str) -> None:
+    # A scripted response is supplied so that a *missed* validation would surface as
+    # an unexpected parse result rather than being masked by an empty script.
+    with pytest.raises(ValidationError):
+        connector([response(fx.OSV_CVE)]).get_vulnerability(f"GHSA-abcd{illegal}1234")
+
+
+@pytest.mark.parametrize(
+    "legal",
+    ["GHSA-xxxx-yyyy-zzzz", "CVE-2021-44228", "PYSEC-2021-1", "OSV-2020-111",
+     "RUSTSEC-2020-0001", "GO-2023-1234", "x_local:db.entry_1", "DEBIAN-CVE-2019--1"],
+)
+def test_legal_ids_are_accepted(legal: str) -> None:
+    # Guards against over-tightening: a stricter check that also rejects real ids
+    # would break collection silently, which is worse than the original bug.
+    record, _advisory = connector([response(fx.OSV_CVE)]).get_vulnerability(legal)
+    assert record is not None
+
+
+def test_traversal_without_slash_is_rejected() -> None:
+    # The specific case the old "/"-and-"?" check missed.
+    for probe in ("%2e%2e", "a\\b"):
+        with pytest.raises(ValidationError):
+            connector([response(fx.OSV_CVE)]).get_vulnerability(probe)
+
+
+# --- ranges[].events: `fixed` with no `introduced` must not be dropped ---------
+
+
+def _range_record(events: list[dict[str, str]]) -> dict:
+    return {
+        "id": "GHSA-rang-0000-0001",
+        "modified": "2026-01-01T00:00:00Z",
+        "summary": "range folding",
+        # Without a CVE alias the connector returns record=None by design (it will
+        # not invent an identifier), so the range would never be observable here.
+        "aliases": ["CVE-2026-7777"],
+        "affected": [
+            {
+                "package": {"ecosystem": "npm", "name": "left-pad"},
+                "ranges": [{"type": "SEMVER", "events": events}],
+            }
+        ],
+    }
+
+
+def test_fixed_without_introduced_opens_at_zero() -> None:
+    script = [response(_range_record([{"fixed": "1.2.0"}]))]
+    record, _advisory = connector(script).get_vulnerability("GHSA-rang-0000-0001")
+    package = record.affected[0]
+    assert package.introduced == "0", (
+        "a `fixed` event with no preceding `introduced` means 'everything below "
+        "this version'; dropping it reports an affected package as unaffected"
+    )
+    assert package.fixed == "1.2.0"
+
+
+def test_limit_event_does_not_become_a_fix() -> None:
+    # `limit` bounds the range document; it does not assert that a fix exists.
+    # Folding it into `fixed` would publish a remedy version the source never
+    # claimed, so the interval must stay open.
+    script = [response(_range_record([{"introduced": "1.0.0"}, {"limit": "2.0.0"}]))]
+    record, _advisory = connector(script).get_vulnerability("GHSA-rang-0000-0001")
+    package = record.affected[0]
+    assert package.fixed is None
+    assert package.introduced == "1.0.0"
+    # The raw event is still preserved for consumers that need the boundary.
+    assert ("limit", "2.0.0") in {(kind, value) for _, kind, value in package.events}
+
+
+# --- forward compatibility and schema fidelity --------------------------------
+
+
+def test_unknown_fields_are_ignored_not_rejected() -> None:
+    """The schema guarantees new fields appear in minor versions, so ignore them."""
+    body = dict(fx.OSV_CVE)
+    body["x_some_future_field"] = {"nested": ["value"]}
+    record, _advisory = connector([response(body)]).get_vulnerability("CVE-2026-0002")
+    assert record is not None
+    assert not any("x_some_future_field" in note for note in record.conflict_notes)
+
+
+def test_unmodelled_fields_are_reported_rather_than_silently_dropped() -> None:
+    body = dict(fx.OSV_CVE)
+    body["credits"] = [{"name": "A. Researcher", "type": "FINDER"}]
+    body["schema_version"] = "1.9.2"
+    record, _advisory = connector([response(body)]).get_vulnerability("CVE-2026-0002")
+    notes = " ".join(record.conflict_notes)
+    assert "'credits'" in notes
+    assert "'schema_version'" in notes
+
+
+def test_top_level_and_affected_severity_together_is_reported() -> None:
+    """The schema forbids setting both; a malformed record must not be resolved silently."""
+    body = dict(fx.OSV_CVE)
+    affected = [dict(entry) for entry in body["affected"]]
+    affected[0]["severity"] = [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}]
+    body["affected"] = affected
+    assert body.get("severity"), "fixture must carry a top-level severity for this test"
+    record, _advisory = connector([response(body)]).get_vulnerability("CVE-2026-0002")
+    assert any("top-level" in note and "affected[].severity" in note
+               for note in record.conflict_notes)

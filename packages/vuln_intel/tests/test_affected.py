@@ -11,6 +11,7 @@ import pytest
 
 from vuln_intel.affected import (
     Verdict,
+    _range_from_package,
     assess_affected,
     normalize_ecosystem,
 )
@@ -395,3 +396,51 @@ class TestWatchlistAndExposure:
 
         with pytest.raises(ValueError):
             Dependency(ecosystem="npm", name="  ", version="1.0")
+
+
+class TestRangeLimitEvent:
+    """OSV ``limit`` bounds the range *document*, it does not assert a fix.
+
+    The risk in both directions is real: folding it into ``fixed`` publishes a
+    remedy version no source claimed, while ignoring it loses a documented upper
+    bound.  The chosen behaviour is to record it and never interpret it as a fix.
+    """
+
+    ENTRY = {
+        "package": {"ecosystem": "npm", "name": "left-pad"},
+        "ranges": [
+            {"type": "SEMVER", "events": [{"introduced": "1.0.0"}, {"limit": "2.0.0"}]}
+        ],
+    }
+
+    def packages(self):
+        return _parse_affected([self.ENTRY])
+
+    def test_limit_is_preserved_in_the_event_list(self) -> None:
+        assert ("limit", "2.0.0") in {
+            (kind, value) for _, kind, value in self.packages()[0].events
+        }
+
+    def test_limit_is_exposed_on_the_version_range(self) -> None:
+        limit = _range_from_package(self.packages()[0])[0].limit
+        assert limit == "2.0.0"
+
+    def test_limit_does_not_become_a_fixed_boundary(self) -> None:
+        (package,) = self.packages()
+        assert package.fixed is None
+
+    def test_version_below_limit_is_affected(self) -> None:
+        result = assess_affected(
+            self.packages(), ecosystem="npm", name="left-pad", version="1.5.0"
+        )
+        assert result.verdict is Verdict.AFFECTED
+
+    def test_version_above_limit_is_still_affected(self) -> None:
+        """Cautious direction: an unbounded interval over-reports, never under-reports."""
+        result = assess_affected(
+            self.packages(), ecosystem="npm", name="left-pad", version="2.5.0"
+        )
+        assert result.verdict is Verdict.AFFECTED, (
+            "the range document ends at 2.0.0, but that is not evidence the "
+            "vulnerability is fixed there"
+        )

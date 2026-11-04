@@ -39,6 +39,7 @@ Normalization rules worth stating explicitly:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Mapping, Sequence
@@ -75,6 +76,12 @@ from ..transport import Transport, transport_kind
 __all__ = ["LAST_VERIFIED_LIVE", "OSV_API", "AdvisoryOnly", "OsvConnector"]
 
 OSV_API = "https://api.osv.dev/v1"
+
+#: The OSV schema guarantees every id matches this charset across all exporting
+#: databases. Validating against the documented contract is stronger than an ad-hoc
+#: check, and it removes path-traversal, query-injection and fragment-injection
+#: reachability from the URL builder in one step.
+OSV_ID_PATTERN = re.compile(r"^[a-zA-Z0-9:_.-]+$")
 
 #: Set only after a recorded, successful real fetch.
 LAST_VERIFIED_LIVE: str | None = None
@@ -242,7 +249,11 @@ class OsvConnector:
         if not isinstance(osv_id, str) or not osv_id.strip():
             raise ValidationError("OSV id must be a non-empty string", field="id")
         identifier = osv_id.strip()
-        if "/" in identifier or "?" in identifier:
+        # The OSV schema guarantees ids match ^[a-zA-Z0-9:_.-]+$ for every
+        # exporting database, so validating against that is strictly stronger than
+        # checking for a path separator. It also removes any possibility of path
+        # traversal, query injection or fragment injection reaching the URL builder.
+        if not OSV_ID_PATTERN.match(identifier):
             raise ValidationError("OSV id contains illegal characters", field="id")
         body = self._get(f"vulns/{identifier}")
         return self.parse_record(body, fetched_at=utcnow())
@@ -457,6 +468,14 @@ class OsvConnector:
         if withdrawn is not None:
             notes.append(f"record withdrawn by OSV at {withdrawn.isoformat()}")
 
+        top_level_severity = body.get("severity")
+        notes.extend(
+            _spec_fidelity_notes(
+                body,
+                affected,
+                isinstance(top_level_severity, list) and bool(top_level_severity),
+            )
+        )
         record = NormalizedVulnerability(
             cve=CveId.parse(cve_alias),
             origin=self.origin,
@@ -548,10 +567,18 @@ def _parse_affected(value: object) -> tuple[AffectedPackage, ...]:
                 for key in ("introduced", "fixed", "last_affected", "limit"):
                     if key in event and isinstance(event[key], (str, int)):
                         range_events.append((key, str(event[key])))
-                        if key != "limit":
-                            events.append((index, key, str(event[key])))
+                        # Every event is preserved, `limit` included.  It is not
+                        # folded into an interval below, but dropping it from the
+                        # record made the documented upper bound unrecoverable.
+                        events.append((index, key, str(event[key])))
             if not range_events:
                 continue
+            # ``limit`` is deliberately *not* folded into the intervals.  The schema
+            # describes it as "an upper limit on the range being described", not as a
+            # fix: mapping it to ``fixed`` would make this package publish a remedy
+            # version the source never claimed exists.  Keeping the interval open is
+            # the cautious direction (it can over-report affectedness, never
+            # under-report), and it matches ``affected._build_intervals``.
             # Every interval of the range is preserved; introduced/fixed stay as
             # an ergonomic summary of the first interval for simple consumers.
             opened: str | None = None
@@ -565,6 +592,15 @@ def _parse_affected(value: object) -> tuple[AffectedPackage, ...]:
                                            opened, None, None, tuple(events))
                         )
                     opened, open_flag = evalue, True
+                elif ekind == "fixed" and not open_flag:
+                    # `fixed` with no preceding `introduced` means "everything below
+                    # this version", which the schema expresses as introduced="0".
+                    # Skipping it (the previous behaviour) silently dropped the
+                    # interval, reporting an affected package as unaffected.
+                    intervals.append(
+                        _one_interval(ecosystem, name, purl, versions, kind,
+                                       "0", evalue, None, tuple(events))
+                    )
                 elif ekind == "fixed" and open_flag:
                     intervals.append(
                         _one_interval(ecosystem, name, purl, versions, kind,
@@ -625,6 +661,38 @@ def _one_interval(
         last_affected=last_affected,
         events=events or (),
     )
+
+
+#: Fields the OSV schema defines that this package does not (yet) model as
+#: first-class data.  They are *ignored* rather than rejected, which the schema
+#: requires for forward compatibility, but silently dropping them would let a
+#: caller believe the record was fully ingested.  Naming them in ``conflict_notes``
+#: makes the gap visible in the data instead of only in the documentation.
+_UNMODELLED_FIELDS = ("credits", "upstream", "related", "schema_version")
+
+
+def _spec_fidelity_notes(
+    body: Mapping[str, Any],
+    affected: Sequence[AffectedPackage],
+    top_level_severity: bool,
+) -> list[str]:
+    """Report places where the parsed record is narrower than the source document."""
+    notes: list[str] = []
+
+    for field in _UNMODELLED_FIELDS:
+        if body.get(field):
+            notes.append(f"OSV field {field!r} is present but not modelled; ignored")
+
+    # The schema states that if any ``affected[].severity`` is set then the
+    # top-level ``severity`` must not be.  A record doing both is malformed, and
+    # picking a winner silently would hide that: say so and keep the top-level
+    # value, which is what the CVSS loop above already read.
+    if top_level_severity and any("severity" in entry for entry in (body.get("affected") or []) if isinstance(entry, Mapping)):
+        notes.append(
+            "OSV record sets both top-level and affected[].severity, which the "
+            "schema forbids; top-level severity kept"
+        )
+    return notes
 
 
 def _database_specific_severity(body: Mapping[str, Any]) -> Severity | None:
