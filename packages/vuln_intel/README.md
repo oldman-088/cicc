@@ -1,11 +1,13 @@
 # CICC Vulnerability Intelligence (`packages/vuln_intel`)
 
-Self-contained vulnerability-intelligence layer: **NVD** and **OSV** connectors,
-an **EPSS** integration interface, **unified CVE normalization** and transparent
-**prioritization**.
+Self-contained vulnerability-intelligence layer covering the full lifecycle:
+**NVD** and **OSV** collection, **CISA KEV** exploitation evidence, an **EPSS**
+integration interface, ecosystem-aware **affected-version evaluation**,
+**cross-source correlation**, transparent **prioritization**, actionable
+**remediation**, and dependency **exposure analysis**.
 
 - Package: `vuln_intel` (distribution name `cicc-vuln-intel`), version `0.1.0`
-- Size: 5,457 lines of source, 2,968 lines of tests, 252 tests
+- Size: 33 source modules, 21 test modules, **466 tests**
 - Status: **IMPLEMENTED and TESTED offline; integration layer ready; NOT live-verified**
 - Runtime dependencies: **none** (stdlib only). `httpx` is required only for
   live collection, via the optional `live` extra.
@@ -53,6 +55,19 @@ packages/vuln_intel/
 │   ├── pipeline.py         collect → observe → merge → KEV → EPSS → rank
 │   ├── normalization.py    cross-source merge, KEV signals, EPSS attach
 │   ├── priorities.py       additive 0-100 ranking with explanations
+│   │
+│   │   ── intelligence layer ─────────────────────────────────────────────
+│   ├── versions.py         version ordering: semver, PEP440, deb, rpm, maven, go
+│   ├── affected.py         three-valued "is this version affected?"
+│   ├── correlation.py      identity resolution and cross-source deduplication
+│   ├── remediation.py      actionable plans, KEV due dates, upgrade cost
+│   ├── watchlist.py        dependency inventory × advisory exposure
+│   ├── assessment.py       end-to-end report: collect→correlate→rank→remediate
+│   ├── sync.py             incremental NVD sync with a safe checkpoint
+│   │
+│   │   ── operations ─────────────────────────────────────────────────────
+│   ├── config.py           env settings; `Secret` masks itself everywhere
+│   ├── health.py           readiness/health report + metrics (no I/O)
 │   ├── demo.py             offline pipeline demo (fixtures only)
 │   └── integration/
 │       ├── contracts.py    VulnerabilityStore / AuditPort protocols
@@ -61,7 +76,7 @@ packages/vuln_intel/
 │       ├── store.py        reference store + deny-by-default store
 │       ├── observations.py append-only, source-specific evidence log
 │       └── preview.py      review artifact + separation-rule validation
-├── tests/                  252 tests, synthetic fixtures only, sockets blocked
+├── tests/                  466 tests, synthetic fixtures only, sockets blocked
 │   └── fixtures/           hand-written payloads shaped after public docs
 ├── pyproject.toml
 └── README.md
@@ -257,7 +272,81 @@ from a partial index would be wrong. `CachedKevCatalog` keeps the **last good
 snapshot** across outages and reports staleness, so an outage degrades quality
 instead of erasing knowledge.
 
-## 9. Error handling contract
+## 9. Intelligence layer (versions → correlation → remediation)
+
+The connectors answer "what did the provider say"; these modules answer what an
+operator asks. Each keeps the package's core rule: **an honest "unknown" beats a
+confident wrong answer.**
+
+```python
+from vuln_intel.assessment import AssessmentWorkflow
+from vuln_intel.watchlist import Dependency, Inventory
+
+inventory = Inventory(dependencies=(
+    Dependency(ecosystem="maven", name="log4j-core", version="2.14.1", asset="payments-api"),
+    Dependency(ecosystem="npm",   name="lodash",      version="4.17.21", asset="web"),
+))
+
+report = AssessmentWorkflow(
+    collectors={"nvd": lambda: [nvd_record], "osv": lambda: [osv_records]},
+    inventory=inventory,
+).run()
+
+report.top_risks[0].instruction
+# 'emergency upgrade log4j-core to 2.15.0 — CISA remediation due 2021-12-24'
+report.as_dict()["summary"]
+# {'clusters': 2, 'actionable': 1, 'overdue': 1,
+#  'assets_at_risk': ['payments-api'], 'incomplete': False}
+```
+
+### Affected-version evaluation (`versions.py`, `affected.py`)
+
+Six real ordering schemes, chosen per ecosystem, with `opaque` for the ones
+without a defensible ordering (rubygems, cocoapods, oss-fuzz). Comparison returns
+`None` rather than guessing; the evaluator returns `UNKNOWN`, never
+`NOT_AFFECTED`, when it cannot decide.
+
+The two orderings that break naive implementations and are pinned by tests:
+
+| Case | Rule |
+|---|---|
+| `1.0~rc1 < 1.0` | Debian/`dpkg`: `~` sorts before the end of the string |
+| `1.0-alpha < 1.0 == 1.0.0 < 1.0.1 < 1.0-sp1` | Maven: qualifiers rank below a missing component |
+
+### Correlation (`correlation.py`)
+
+Twelve identifier families; records merge only on an identifier a source
+actually published. Two different defects in one package stay two findings.
+
+### Remediation (`remediation.py`)
+
+| Action | When |
+|---|---|
+| `emergency_patch` | in KEV (exploited in the wild), or the CISA due date is near/past |
+| `patch` | a fixed release exists |
+| `upgrade_major` | the fix crosses a major boundary (flagged: test needed) |
+| `mitigate` | affected, no fixed release — suggests vector-derived mitigations |
+| `monitor` | not affected now, or applicability could not be determined |
+| `none` | not applicable |
+
+The target is the **lowest** published fix: advise the smallest change that
+removes the risk. Upgrade cost is a stated *proxy* for bump risk, not a model.
+
+### Incremental sync (`sync.py`)
+
+NVD's `lastModStartDate`/`lastModEndDate` windows with a checkpoint that advances
+**only over fully completed windows**. A failed page or an exhausted page budget
+holds the watermark, because advancing past unfetched records loses coverage
+permanently and silently.
+
+### Operations (`config.py`, `health.py`)
+
+`Settings.from_env()` reads ten documented variables with live collection
+**off by default**; `Secret` masks itself in `repr`, `str`, `format` and
+f-strings. `build_health_report()` derives `ready`/`degraded`/`not_ready` from
+recorded outcomes with no I/O, so it is safe as a liveness probe.
+
+## 10. Error handling contract
 
 | Situation | Result |
 |---|---|
@@ -268,31 +357,36 @@ instead of erasing knowledge.
 | malformed single record in a batch | record skipped, batch → `PARTIAL`, reason in `warnings` |
 | credentials in an error message | redacted by `errors.sanitize` (redacts to end of line) |
 
-## 10. Known limitations (do not overstate)
+## 11. Known limitations (do not overstate)
 
-1. **No live verification.** NVD, OSV and CISA KEV are fixture-tested only;
-   EPSS has no HTTP client. Endpoint shape, provider terms, API keys and real
-   rate limits are unverified. `LAST_VERIFIED_LIVE` is `None` in all three
-   connectors and a CI guard fails the build if that changes without evidence.
+1. **No live verification.** NVD, OSV and CISA KEV are fixture-tested only; EPSS
+   has no HTTP client. Endpoint shape, provider terms, API keys and real rate
+   limits are unverified. `LAST_VERIFIED_LIVE` is `None` in all three connectors
+   and a CI guard fails the build if that changes without evidence.
 2. **No persistence.** Nothing writes to a database. Storage requirements are
    documented (`docs/vulnerability-intelligence/INTEGRATION.md`); the strategy
    decision is the owner's.
 3. **No OSV batch/POST query.** Only `GET /vulns/<id>`; `query`/`querybatch` are
-   POST endpoints and are unimplemented.
+   POST endpoints and are unimplemented. The watchlist already builds the bodies.
 4. **Rate gating is per-process**, not cluster-wide, and does not coordinate
    across workers. A breaker is per instance too.
-5. **No version-range evaluation.** Affected ranges are stored, not compared;
-   that needs per-ecosystem ordering and is out of scope.
-6. **Prioritization is decision support**, not an automated remediation
-   decision: no exploit-availability feed and no asset join.
-7. **`search_all()` is a bounded window**, not a full NVD mirror.
-8. **KEV membership depends on catalogue freshness.** A stale cache is flagged,
+5. **No CVSS v4.0 scoring.** v4 metrics are parsed and carried, but only v3.0/v3.1
+   base scores are computed locally, so a v4-only record has no computed score.
+6. **Version ordering is unavailable for some ecosystems** (rubygems,
+   cocoapods, oss-fuzz). Those verdicts are `UNKNOWN` by decision, not oversight.
+7. **Prioritization is decision support**, not an automated remediation
+   decision: the weights are provisional and require owner sign-off.
+8. **`search_all()` is a bounded window**, not a full NVD mirror.
+   `IncrementalSync` is the mechanism for real coverage.
+9. **KEV membership depends on catalogue freshness.** A stale cache is flagged,
    never silently treated as current.
-9. **Observation log is in-memory here.** Durability, retention and tamper
-   resistance are properties of the host adapter, not of this reference log.
-10. **`sources.py` is not integrated** — deliberately, per the assignment rules.
+10. **Observation log is in-memory here.** Durability, retention and tamper
+    resistance are properties of the host adapter, not of this reference log.
+11. **`sources.py` is not integrated** — deliberately, per the assignment rules.
+12. **No API endpoints.** The package provides services, not routes; routing is
+    the host application's decision.
 
-## 11. Integration layer
+## 12. Integration layer
 
 `vuln_intel/integration/` defines the seam without touching the host:
 
@@ -316,7 +410,7 @@ A reviewer checklist lives in
 
 **No migration is authored by this change.**
 
-## 12. Integration checklist for the reviewer
+## 13. Integration checklist for the reviewer
 
 - [ ] Confirm the target integration point (`apps/api/app/sources.py` in the
       lineage that owns it) before wiring.
