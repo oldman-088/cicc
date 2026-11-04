@@ -185,7 +185,9 @@ def test_server_error_is_not_swallowed() -> None:
 
 
 def test_search_all_is_bounded_and_says_so() -> None:
-    full_page = response(fx.NVD_PAGE)
+    # The replay transport serves this page for every request, standing in for
+    # "NVD holds far more than we are willing to page through".
+    full_page = response({**fx.NVD_PAGE, "totalResults": 100})
     nvd = connector([full_page], page_size=2, max_pages=3)
     result = nvd.search_all()
     assert len(result.records) == 6
@@ -194,7 +196,11 @@ def test_search_all_is_bounded_and_says_so() -> None:
 
 
 def test_search_all_stops_on_short_page() -> None:
-    nvd = connector([response(fx.NVD_PAGE), response(fx.NVD_EMPTY)], page_size=2, max_pages=5)
+    nvd = connector(
+        [response({**fx.NVD_PAGE, "totalResults": 100}), response(fx.NVD_EMPTY)],
+        page_size=2,
+        max_pages=5,
+    )
     result = nvd.search_all()
     assert len(result.records) == 2
     assert not any("bounded window" in warning for warning in result.warnings)
@@ -202,7 +208,7 @@ def test_search_all_stops_on_short_page() -> None:
 
 def test_search_all_keeps_earlier_pages_when_a_later_page_fails() -> None:
     nvd = connector(
-        [response(fx.NVD_PAGE), response({"message": "boom"}, status=503)],
+        [response({**fx.NVD_PAGE, "totalResults": 100}), response({"message": "boom"}, status=503)],
         page_size=2,
         max_pages=3,
     )
@@ -223,3 +229,15 @@ def test_invalid_cve_identifier_is_rejected_before_any_call() -> None:
 def test_page_size_bounds(size: int) -> None:
     with pytest.raises(ValueError):
         NvdConnector(transport=FakeTransport(), page_size=size)
+
+
+def test_truncated_page_is_reported_not_paged_forever() -> None:
+    """NVD can claim more results than it returns (proxy truncation, partial write).
+
+    Silently paging on would loop on the same short page, and reporting OK would
+    claim a complete collection that never happened.
+    """
+    truncated = {**fx.NVD_PAGE, "totalResults": 10}
+    result = connector([response(truncated)]).search()
+    assert result.state.status is CollectionStatus.PARTIAL
+    assert any("short page" in warning for warning in result.warnings)

@@ -191,15 +191,30 @@ class NvdConnector:
             )
         return records[0]
 
-    def search(self, *, start_index: int = 0, results_per_page: int | None = None) -> CollectionResult:
-        """Fetch one page of NVD records."""
+    def search(
+        self,
+        *,
+        start_index: int = 0,
+        results_per_page: int | None = None,
+        modified_window: Mapping[str, str] | None = None,
+    ) -> CollectionResult:
+        """Fetch one page of NVD records.
+
+        ``modified_window`` carries ``lastModStartDate``/``lastModEndDate`` for
+        incremental synchronisation.  Both bounds are sent together because NVD
+        rejects a lone ``lastModStartDate`` with 404, and the pair is documented
+        to be limited to 120 consecutive days (enforced by :mod:`vuln_intel.sync`).
+        """
         if start_index < 0:
             raise ValueError("start_index must be >= 0")
         size = results_per_page or self.page_size
         if not 1 <= size <= 2000:
             raise ValueError("results_per_page must be within 1-2000")
+        params = {"startIndex": str(start_index), "resultsPerPage": str(size)}
+        if modified_window:
+            params.update(modified_window)
         try:
-            body = self._request({"startIndex": str(start_index), "resultsPerPage": str(size)})
+            body = self._request(params)
             entries = self._envelope(body)
         except SourceRateLimited as exc:
             return CollectionResult.failed(
@@ -213,6 +228,16 @@ class NvdConnector:
         records, problems = self._parse_entries(
             entries, utcnow(), str(body.get("timestamp") or "")
         )
+        total = body.get("totalResults")
+        if isinstance(total, int) and not isinstance(total, bool):
+            expected_remaining = max(0, total - start_index - len(entries))
+            if expected_remaining > 0 and len(entries) < size:
+                # The source says more records exist but returned a short page;
+                # paging on this would loop forever, so surface it instead.
+                problems.append(
+                    f"NVD reported {total} results but returned a short page at "
+                    f"index {start_index}: stop paging and investigate"
+                )
         status = CollectionStatus.OK if not problems else CollectionStatus.PARTIAL
         if problems and not records:
             status = CollectionStatus.FAILED

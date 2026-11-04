@@ -127,10 +127,13 @@ NVD_SPARSE: dict[str, Any] = {
     ],
 }
 
+# A page that is *complete*: totalResults matches the number of rows returned.
+# An earlier version declared 3 while carrying 2 rows, which is a truncated
+# response in NVD terms; the connector now flags that, so the fixture is honest.
 NVD_PAGE: dict[str, Any] = {
     "resultsPerPage": 2,
     "startIndex": 0,
-    "totalResults": 3,
+    "totalResults": 2,
     "timestamp": "2026-01-02T03:04:05.000",
     "vulnerabilities": [
         NVD_SINGLE["vulnerabilities"][0],
