@@ -160,3 +160,39 @@ export interface BannerAlert {
   name: string;
   detail: string;
 }
+
+export interface CoordinationTask {
+  id: number;
+  task_id: string;
+  event_id: string | null;
+  source: string;
+  kind: string;
+  agent: string | null;
+  state: string;
+  priority: number;
+  repo: string | null;
+  pr_ref: string | null;
+  branch_ref: string | null;
+  title: string | null;
+  attempts: number;
+  result: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CoordinationTasksResponse {
+  tasks: CoordinationTask[];
+}
+
+export interface GitHubEventItem {
+  delivery_id: string;
+  event: string;
+  action: string | null;
+  repo: string | null;
+  sender: string | null;
+  received_at: string | null;
+}
+
+export interface CoordinationEventsResponse {
+  events: GitHubEventItem[];
+}

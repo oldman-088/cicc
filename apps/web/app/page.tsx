@@ -15,6 +15,7 @@ import OverviewCards from "../components/OverviewCards";
 import Section from "../components/Section";
 import TrendChart from "../components/TrendChart";
 import WorkersView from "../components/WorkersView";
+import CoordinationView from "../components/CoordinationView";
 import { deriveAlerts } from "../lib/alerts.mjs";
 import { formatTime } from "../lib/format";
 import { useLocale } from "../lib/i18n";
@@ -32,6 +33,8 @@ import type {
   WorkersResponse,
   TaskRunItem,
   TaskFailuresResponse,
+  CoordinationTask,
+  GitHubEventItem,
 } from "../lib/types";
 
 const REFRESH_MS = 15000;
@@ -43,7 +46,8 @@ type View =
   | "activity"
   | "dependencies"
   | "alerts"
-  | "workers";
+  | "workers"
+  | "coordination";
 
 export default function DashboardPage() {
   const { t, locale } = useLocale();
@@ -58,6 +62,8 @@ export default function DashboardPage() {
   const [system, setSystem] = useState<SystemMetrics | null>(null);
   const [tasks, setTasks] = useState<TaskRunItem[]>([]);
   const [taskFailures, setTaskFailures] = useState<TaskFailuresResponse | null>(null);
+  const [coordTasks, setCoordTasks] = useState<CoordinationTask[]>([]);
+  const [coordEvents, setCoordEvents] = useState<GitHubEventItem[]>([]);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +72,7 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [h, o, d, hi, a, ts, al, w, sy, tk, tf] = await Promise.all([
+      const [h, o, d, hi, a, ts, al, w, sy, tk, tf, ct, ce] = await Promise.all([
         fetch("/api/health", { cache: "no-store" }),
         fetch("/api/v1/ops/overview", { cache: "no-store" }),
         fetch("/api/v1/ops/dependencies", { cache: "no-store" }),
@@ -78,6 +84,8 @@ export default function DashboardPage() {
         fetch("/api/v1/ops/system", { cache: "no-store" }),
         fetch("/api/v1/ops/tasks?limit=25", { cache: "no-store" }),
         fetch("/api/v1/ops/tasks/failures?hours=24&limit=10", { cache: "no-store" }),
+        fetch("/api/v1/coordination/tasks?limit=100", { cache: "no-store" }),
+        fetch("/api/v1/coordination/events?limit=50", { cache: "no-store" }),
       ]);
       setHealth(h.ok ? await h.json() : null);
       if (!o.ok) throw new Error(`overview_http_${o.status}`);
@@ -91,6 +99,8 @@ export default function DashboardPage() {
       setSystem(sy.ok ? await sy.json() : null);
       setTasks(tk.ok ? (await tk.json()).tasks : []);
       setTaskFailures(tf.ok ? await tf.json() : null);
+      setCoordTasks(ct.ok ? (await ct.json()).tasks : []);
+      setCoordEvents(ce.ok ? (await ce.json()).events : []);
       setLastRefresh(new Date().toISOString());
     } catch {
       setHealth(null);
@@ -152,6 +162,7 @@ export default function DashboardPage() {
     { id: "dependencies", label: t("navDependencies") },
     { id: "alerts", label: `${t("navAlerts")}${alerts.filter((a) => a.status === "active").length ? ` (${alerts.filter((a) => a.status === "active").length})` : ""}` },
     { id: "workers", label: t("navWorkers") },
+    { id: "coordination", label: t("navCoordination") },
   ];
 
   return (
@@ -256,6 +267,10 @@ export default function DashboardPage() {
           {view === "dependencies" && <DependencyGraph deps={deps} nameOf={nameOf} />}
 
           {view === "alerts" && <AlertsView alerts={alerts} onAction={load} />}
+
+          {view === "coordination" && (
+            <CoordinationView tasks={coordTasks} events={coordEvents} />
+          )}
 
           {view === "workers" && (
             <WorkersView

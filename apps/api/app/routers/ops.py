@@ -1,9 +1,14 @@
 """Operations endpoints: overview, components, metrics (+history),
 activity, dependencies, tasks, workers, alerts, broker history, system."""
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
 from app import ops
-from app.ratelimit import rate_limit_dependency, read_token_dependency, require_write_token
+from app.ratelimit import (
+    rate_limit_dependency,
+    read_token_dependency,
+    require_write_token,
+    write_rate_limit_dependency,
+)
 from app.schemas import (
     ActivityListResponse,
     AckIn,
@@ -25,6 +30,9 @@ from app.schemas import (
     TaskRunCreated,
     TaskRunIn,
     TaskStatsResponse,
+    WorkerRegisterIn,
+    WorkerRegistered,
+    AssignIn,
     WorkerHeartbeatCreated,
     WorkerHeartbeatIn,
     WorkerHistoryResponse,
@@ -84,10 +92,11 @@ def get_task_stats(hours: int = Query(24, ge=1, le=168)):
 
 
 @router.post("/tasks", response_model=TaskRunCreated, status_code=201)
-def post_task_run(payload: TaskRunIn, authorization: str | None = Header(default=None)):
+def post_task_run(payload: TaskRunIn, request: Request, authorization: str | None = Header(default=None)):
     """Record a worker-reported task run (token-gated when CICC_OPS_WRITE_TOKEN
     is set; otherwise trusted-network/dev only — see contracts doc)."""
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     run_id = ops.record_task_run(payload.model_dump())
     ops.record_event("info", "ops", f"task run reported: worker={payload.worker} queue={payload.queue} status={payload.status}")
     return {"id": run_id}
@@ -99,10 +108,21 @@ def get_workers():
     return ops.build_workers()
 
 
+@router.post("/workers/register", response_model=WorkerRegistered, status_code=201)
+def register_worker(payload: WorkerRegisterIn, request: Request, authorization: str | None = Header(default=None)):
+    """Worker self-registration (idempotent upsert). Workers only — never an
+    Arena-session claim."""
+    require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
+    created = ops.register_worker(payload.worker, payload.queue, payload.version, payload.capabilities)
+    return {"worker": payload.worker, "created": created}
+
+
 @router.post("/workers/heartbeat", response_model=WorkerHeartbeatCreated, status_code=201)
-def post_heartbeat(payload: WorkerHeartbeatIn, authorization: str | None = Header(default=None)):
+def post_heartbeat(payload: WorkerHeartbeatIn, request: Request, authorization: str | None = Header(default=None)):
     """Record a worker heartbeat (local worker liveness only)."""
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     created = ops.post_heartbeat(payload.worker, payload.details or "")
     return {"worker": payload.worker, "created": created}
 
@@ -119,7 +139,19 @@ def get_alerts(
 
 @router.post("/alerts/{alert_id}/ack", response_model=AlertActionResponse)
 def ack_alert(alert_id: int, body: AckIn):
-    res = ops.ack_alert(alert_id, body.acked_by)
+    res = ops.ack_alert(alert_id, body.acked_by, owner=body.owner)
+    if res is None:
+        raise HTTPException(status_code=404, detail="alert_not_found")
+    if res == "conflict":
+        raise HTTPException(status_code=409, detail="alert_already_resolved")
+    return res
+
+
+@router.post("/alerts/{alert_id}/assign", response_model=AlertActionResponse)
+def assign_alert(alert_id: int, body: AssignIn, authorization: str | None = Header(default=None)):
+    """Assign alert ownership (write-gated)."""
+    require_write_token(authorization)
+    res = ops.assign_alert(alert_id, body.owner)
     if res is None:
         raise HTTPException(status_code=404, detail="alert_not_found")
     if res == "conflict":

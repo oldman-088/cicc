@@ -28,6 +28,7 @@ def _isolate_db(monkeypatch, tmp_path):
     ops._overview_cache["data"] = None
     ops._overview_cache["ts"] = 0.0
     ratelimit.limiter.reset()
+    ratelimit.write_limiter.reset()
     checks.reset_circuit_breakers()
     yield
     engine.dispose()

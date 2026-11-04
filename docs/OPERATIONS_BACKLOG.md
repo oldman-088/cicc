@@ -139,3 +139,36 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 5. Per-tenant rate limiting on ops endpoints; ops audit events into platform
    audit table via adapter port.
 6. Merge-time apps/ reorganization per APPS_INTEGRATION_STRATEGY.md.
+
+
+## Done — Milestone 6 (PR #4 update)
+
+- Ops: MAINTENANCE health state; escalation policy engine (occurrence + time
+  based, per-rule overrides); alert ownership/assign; worker registry
+  (register endpoint, merged into /workers); task attempts; tasks_per_min;
+  per-principal write rate limiting (sha256-keyed, auth-before-429);
+  notifications adapter registry (disabled, suppression events only).
+- Coordination (new, docs/COORDINATION_ARCHITECTURE.md): signed GitHub webhook
+  ingestion (HMAC sha256, fail-closed, replay dedup, secrets stripped,
+  provenance kept) → durable task registry (10 validated states + audit
+  history) → routing engine (DB rules + specialization defaults, unmatched →
+  BLOCKED) → delivery (real RabbitMQ durable publish when RABBITMQ_AMQP_URL
+  set, else copy-ready human-assisted handoff; dead broker → RETRYING, never
+  false delivery) → agent ack/complete/fail reporting. Dashboard Coordination
+  tab (EN/AR 161 keys).
+- Tests: API 93/93 (incl. 7 real-PG); web 17/17, tsc clean, build OK.
+- Live smoke (:8000/:3000): webhook bad-sig 401 → good-sig ingest → replay
+  dedup → route → human-assisted deliver → secret-stripped payload → events;
+  maintenance state on overview; register; attempts; stats per_min; proxy+page.
+- Bench: task_stats p50 ~33ms @20k rows (incl. per_min query), overview 7.6ms.
+
+## Next (backlog, priority order)
+
+1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
+   Docker exists (blocked in sandbox; procedure in RABBITMQ_VERIFICATION.md).
+2. Agent 4 contract confirmation (PR #4 comment / issue #5).
+3. Coordination: workload-aware routing, WAITING_FOR_APPROVAL flow, CI event
+   routing, webhook secret rotation doc.
+4. Tenant isolation execution after owner decides DB model
+   (docs/TENANT_ISOLATION_PLAN.md); per-tenant rate buckets; ops audit adapter.
+5. Notification channel adapters — only after explicit owner authorization.

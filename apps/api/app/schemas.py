@@ -85,6 +85,7 @@ class TaskStatsResponse(BaseModel):
     pending: int
     avg_duration_ms: Optional[float] = None
     oldest_pending_started: Optional[str] = None
+    tasks_per_min: Optional[float] = None  # processing rate (M6)
 
 
 class TaskRunIn(BaseModel):
@@ -101,6 +102,7 @@ class TaskRunIn(BaseModel):
     finished_at: Optional[datetime] = None
     duration_ms: Optional[int] = Field(default=None, ge=0)
     error: Optional[str] = Field(default=None, max_length=500)
+    attempts: int = Field(default=1, ge=1, le=100)  # retry count (M6)
 
 
 class TaskRunCreated(BaseModel):
@@ -129,7 +131,11 @@ class WorkerInfo(BaseModel):
     stalled: bool
     tasks_24h: int
     failed_24h: int
-    details: str = ""
+    details: str
+    registered: bool = False
+    version: Optional[str] = None
+    capabilities: list[str] = []
+    registered_at: Optional[str] = None
 
 
 class WorkersResponse(BaseModel):
@@ -152,6 +158,7 @@ class AlertItem(BaseModel):
     occurrences: int
     escalated: bool = False
     flapping: bool = False
+    owner: Optional[str] = None
 
 
 class AlertsResponse(BaseModel):
@@ -160,11 +167,19 @@ class AlertsResponse(BaseModel):
 
 class AckIn(BaseModel):
     acked_by: Optional[str] = Field(default=None, max_length=128)
+    owner: Optional[str] = Field(default=None, max_length=128)
+
+
+class AssignIn(BaseModel):
+    owner: str = Field(min_length=1, max_length=128)
 
 
 class AlertActionResponse(BaseModel):
     id: int
     status: str
+
+
+    owner: Optional[str] = None
 
 
 class BrokerSnapshotItem(BaseModel):
@@ -246,6 +261,7 @@ class TaskRunItem(BaseModel):
     finished_at: Optional[str] = None
     duration_ms: Optional[int] = None
     error: Optional[str] = None
+    attempts: int = 1
     created_at: Optional[str] = None
 
 
@@ -275,3 +291,17 @@ class WorkerHistoryResponse(BaseModel):
     worker: Optional[str] = None
     sample_interval_s: int
     samples: list[WorkerHistorySample]
+
+
+class WorkerRegisterIn(BaseModel):
+    """Worker self-registration contract (POST /api/v1/ops/workers/register)."""
+
+    worker: str = Field(min_length=1, max_length=128)
+    queue: str = Field(default="default", max_length=128)
+    version: Optional[str] = Field(default=None, max_length=64)
+    capabilities: Optional[list[str]] = Field(default=None, max_length=32)
+
+
+class WorkerRegistered(BaseModel):
+    worker: str
+    created: bool

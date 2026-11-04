@@ -51,6 +51,25 @@ def rate_limit_dependency(request: Request) -> None:
         raise HTTPException(status_code=429, detail="rate_limited")
 
 
+# Per-principal write limiter (M6): keyed by sha256 of the bearer credential
+# (raw tokens are never stored) or by client host for anonymous writes.
+write_limiter = SlidingWindowLimiter(
+    limit=int(os.getenv("OPS_WRITE_RATE_LIMIT", "300")),
+    window_s=60.0,
+)
+
+
+def write_rate_limit_dependency(request: Request, authorization: str | None = Header(default=None)) -> None:
+    import hashlib
+
+    if authorization:
+        key = "tok:" + hashlib.sha256(authorization.encode()).hexdigest()[:16]
+    else:
+        key = "anon:" + (request.client.host if request.client else "unknown")
+    if not write_limiter.allow(key):
+        raise HTTPException(status_code=429, detail="write_rate_limited")
+
+
 def read_token_dependency(authorization: str | None = Header(default=None)) -> None:
     """Read gate. If platform auth is enabled (CICC_OPS_USE_PLATFORM_AUTH=1 +
     CICC_PLATFORM_DB_URL), verify the platform bearer session instead of the

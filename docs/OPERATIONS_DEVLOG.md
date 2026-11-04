@@ -38,3 +38,22 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - Coordination: issue #5 commented with final heartbeat/task contract +
   scripts/ops_client.py reference client; no other branches touched.
 - API 73/73 (7 real-PG), web 17/17 + tsc clean.
+
+## 2026-11-04 — Milestone 6 (branch arena/961971ed-cicc, PR #4)
+
+- Ops M6: maintenance health state, escalation policy engine (time+occurrence,
+  per-rule JSON overrides), alert owner/assign, worker registry, task attempts,
+  tasks_per_min, per-principal write rate limit (auth before 429), notifications
+  adapter (disabled by design, suppression events).
+- Coordination M6 (new subpackage app/coordination + docs/COORDINATION_ARCHITECTURE.md):
+  GitHub webhook (HMAC, fail-closed, replay dedup, secret stripping), durable
+  task registry (validated 10-state machine + audit), routing engine (DB rules
+  + defaults, BLOCKED on no match), handoff (real broker publish when
+  configured, human-assisted otherwise, dead-broker fallback to RETRYING),
+  agent reporting endpoints, dashboard tab. Kept on this branch per Arena
+  session rules; splittable into its own PR later.
+- Fixed: webhook exempt from read-token gate (HMAC-only auth); conftest resets
+  write_limiter; registry events flush under autoflush=False.
+- API 93/93 (7 real-PG), web 17/17 + tsc + build; live smoke full pipeline.
+- Env-blocked (honest): real broker delivery/verification — no Docker/reachable
+  broker in sandbox; procedures committed.

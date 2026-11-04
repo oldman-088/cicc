@@ -209,3 +209,36 @@ full overview p50 8.2ms; retention purge p50 0.9ms. task stats over the full
   external procedure. Management parsing covered by labeled fixture tests.
 - **Reference ops client** for integration agents: scripts/ops_client.py
   (heartbeat/task senders, --dry-run). Contract unchanged from §5/§9.
+
+
+## 11. Milestone-6 contracts & behaviors
+
+- Health vocabulary now includes **MAINTENANCE**: a component covered by an
+  active maintenance window reports `status: "maintenance"` with the window
+  label as detail (never silently "ok"). Overall severity mapping treats
+  maintenance as informational.
+- **Escalation policy engine**: per-alert escalation triggers on occurrences
+  (`OPS_ALERT_ESCALATE_OCCURRENCES`, default 10) OR age
+  (`OPS_ALERT_ESCALATE_AFTER_S`, default 3600s); per-rule overrides via
+  `OPS_ALERT_ESCALATE_RULES` JSON (`{"<rule>": {"occurrences": n, "after_s": s}}`).
+  Escalation bumps severity one level (info→warning→critical), sets
+  `escalated=true`, logs an event, and calls the notification adapter — which
+  is DISABLED (records suppression event, sends nothing).
+- **Alert ownership**: `alerts.owner` (additive column), `POST /alerts/{id}/assign`
+  (write-gated, 404/409), optional `owner` on ack.
+- **Worker registry**: `POST /workers/register` {worker, queue, version,
+  capabilities[]} → 201 {worker, created} (idempotent upsert); `GET /workers`
+  merges registry info (registered/version/capabilities/registered_at);
+  registered-without-heartbeat workers show as stalled.
+- **Task attempts**: `task_runs.attempts` (additive, default 1, 1..100) on
+  POST /tasks and in GET /tasks rows.
+- **Processing rate**: `GET /tasks/stats` now includes `tasks_per_min`.
+- **Per-principal write rate limit**: write endpoints additionally limited by
+  `OPS_WRITE_RATE_LIMIT` (default 300/min) keyed by sha256(bearer) or client
+  host; auth check runs BEFORE the rate limit (401 not masked by 429).
+- **Notifications**: `app/notifications.py` adapter registry; only the
+  disabled recorder exists; `OPS_NOTIFY_ENABLED=1` + `OPS_NOTIFY_CHANNELS`
+  still sends nothing until an owner-authorized channel adapter exists.
+- **Coordination API** under `/api/v1/coordination` — see
+  docs/COORDINATION_ARCHITECTURE.md (webhook HMAC + replay dedup, task
+  registry state machine, routing rules, handoff/delivery, reporting).

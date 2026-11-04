@@ -78,6 +78,9 @@ app.add_middleware(
 )
 
 app.include_router(ops_router.router)
+from app.coordination.router import router as coordination_router
+
+app.include_router(coordination_router)
 
 
 @app.get("/")

@@ -111,6 +111,7 @@ class TaskRun(Base):
     finished_at = Column(DateTime(timezone=True), nullable=True)
     duration_ms = Column(Integer, nullable=True)
     error = Column(Text, nullable=True)
+    attempts = Column(Integer, default=1, nullable=False)  # retry count
     created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
 
 
@@ -184,6 +185,7 @@ class Alert(Base):
     # and flap detection (resolved then re-fired within OPS_ALERT_FLAP_WINDOW_S)
     escalated = Column(Boolean, default=False, nullable=False)
     flapping = Column(Boolean, default=False, nullable=False)
+    owner = Column(String(128), nullable=True)  # alert ownership/assignment
 
 
 class MaintenanceWindow(Base):
@@ -213,3 +215,89 @@ class WorkerHeartbeatHistory(Base):
     id = Column(Integer, primary_key=True)
     worker = Column(String(128), nullable=False, index=True)
     ts = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class Worker(Base):
+    """Registered worker identity (M6). Heartbeats update last_seen; the
+    broker never controls Arena sessions — this registry tracks WORKERS only."""
+
+    __tablename__ = "workers"
+
+    worker = Column(String(128), primary_key=True)
+    queue = Column(String(128), default="default")
+    version = Column(String(64), nullable=True)
+    capabilities = Column(Text, nullable=True)  # JSON array of strings
+    registered_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+# ---- Central Autonomous Coordination (separately reviewable; own tables) ----
+
+COORD_TASK_STATES = (
+    "NEW", "QUEUED", "DELIVERED", "IN_PROGRESS", "WAITING_FOR_APPROVAL",
+    "COMPLETED", "FAILED", "RETRYING", "BLOCKED",
+)
+
+
+class CoordinationTask(Base):
+    """Durable task registry entry for the coordination system (P4)."""
+
+    __tablename__ = "coord_tasks"
+
+    id = Column(Integer, primary_key=True)
+    task_id = Column(String(64), unique=True, index=True)  # e.g. gh-<delivery>-<n>
+    event_id = Column(String(128), nullable=True, index=True)  # X-GitHub-Delivery
+    source = Column(String(32), default="github")  # provenance
+    kind = Column(String(64), index=True)  # pr_opened, issue_comment, ci_failed, manual...
+    agent = Column(String(64), nullable=True, index=True)  # assigned agent
+    state = Column(String(32), default="NEW", index=True)
+    priority = Column(Integer, default=5)
+    repo = Column(String(256), nullable=True)
+    pr_ref = Column(String(64), nullable=True)
+    branch_ref = Column(String(256), nullable=True)
+    title = Column(Text, nullable=True)
+    payload = Column(Text, nullable=True)  # normalized event JSON (no secrets)
+    handoff = Column(Text, nullable=True)  # copy-ready handoff payload
+    attempts = Column(Integer, default=0)
+    result = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class CoordinationTaskEvent(Base):
+    """Audit history for coordination tasks (state transitions, acks...)."""
+
+    __tablename__ = "coord_task_events"
+
+    id = Column(Integer, primary_key=True)
+    task_id = Column(String(64), index=True)
+    at = Column(DateTime(timezone=True), default=utcnow)
+    kind = Column(String(64))  # created, routed, delivered, acked, completed...
+    detail = Column(Text, nullable=True)
+
+
+class GitHubEvent(Base):
+    """Deduplicated GitHub webhook deliveries with provenance (replay-safe)."""
+
+    __tablename__ = "coord_github_events"
+
+    delivery_id = Column(String(128), primary_key=True)  # X-GitHub-Delivery
+    event = Column(String(64), index=True)  # X-GitHub-Event
+    received_at = Column(DateTime(timezone=True), default=utcnow)
+    action = Column(String(64), nullable=True)
+    repo = Column(String(256), nullable=True)
+    sender = Column(String(128), nullable=True)
+    normalized = Column(Text, nullable=True)  # canonical JSON, secrets stripped
+
+
+class RoutingRule(Base):
+    """Configurable routing rules: match JSON -> agent."""
+
+    __tablename__ = "coord_routing_rules"
+
+    id = Column(Integer, primary_key=True)
+    priority = Column(Integer, default=100, index=True)
+    name = Column(String(128), unique=True)
+    match = Column(Text, nullable=False)  # JSON: {"kind": ..., "labels": [...], "path": ...}
+    agent = Column(String(64), nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)

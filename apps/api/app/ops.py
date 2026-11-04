@@ -75,7 +75,7 @@ MODULE_REGISTRY = [
     },
 ]
 
-SEVERITY = {"ok": 0, "not_configured": 1, "not_implemented": 1, "degraded": 2, "down": 3}
+SEVERITY = {"ok": 0, "not_configured": 1, "not_implemented": 1, "maintenance": 1, "degraded": 2, "down": 3}
 
 SNAPSHOT_MIN_INTERVAL_S = 60
 OVERVIEW_CACHE_TTL_S = 2.0
@@ -122,23 +122,32 @@ PERF_INDEXES = [
 
 
 def _ensure_alert_columns() -> None:
-    """Additive-only schema evolution for alerts: ADD COLUMN if missing.
+    """Additive-only schema evolution: ADD COLUMN if missing, per table.
     Dialect-aware (SQLite + PostgreSQL via inspector). Never alters/drops
     existing columns or data (non-destructive)."""
     from sqlalchemy import inspect as _inspect
     from sqlalchemy import text as _text
 
-    insp = _inspect(engine)
-    if "alerts" not in insp.get_table_names():
-        return
-    cols = {c["name"] for c in insp.get_columns("alerts")}
-    with engine.begin() as conn:
-        for col, ddl in (
+    wanted = {
+        "alerts": [
             ("escalated", "ALTER TABLE alerts ADD COLUMN escalated BOOLEAN NOT NULL DEFAULT FALSE"),
             ("flapping", "ALTER TABLE alerts ADD COLUMN flapping BOOLEAN NOT NULL DEFAULT FALSE"),
-        ):
-            if col not in cols:
-                conn.execute(_text(ddl))
+            ("owner", "ALTER TABLE alerts ADD COLUMN owner VARCHAR(128)"),
+        ],
+        "task_runs": [
+            ("attempts", "ALTER TABLE task_runs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1"),
+        ],
+    }
+    insp = _inspect(engine)
+    tables = set(insp.get_table_names())
+    with engine.begin() as conn:
+        for table, cols_ddl in wanted.items():
+            if table not in tables:
+                continue
+            have = {c["name"] for c in insp.get_columns(table)}
+            for col, ddl in cols_ddl:
+                if col not in have:
+                    conn.execute(_text(ddl))
 
 
 def init_db() -> None:
@@ -151,6 +160,12 @@ def init_db() -> None:
         for stmt in PERF_INDEXES:
             conn.execute(_text(stmt))
     with SessionLocal() as s:
+        try:
+            from app.coordination import routing as _routing
+
+            _routing.seed_default_rules(s)
+        except Exception:
+            pass
         for entry in MODULE_REGISTRY:
             row = s.execute(
                 select(models.Component).where(models.Component.key == entry["key"])
@@ -315,6 +330,8 @@ def _service_components(s) -> list[dict]:
         )
     except Exception as exc:  # noqa: BLE001
         _add("workers", "Task Workers", {"status": "unknown", "detail": type(exc).__name__})
+    # M6: active maintenance windows surface as an explicit MAINTENANCE state
+    _apply_maintenance_state(s, services)
     return services
 
 
@@ -397,8 +414,48 @@ def _alert_dict(a: models.Alert) -> dict:
         "occurrences": a.occurrences or 0,
         "escalated": bool(getattr(a, "escalated", False)),
         "flapping": bool(getattr(a, "flapping", False)),
+        "owner": getattr(a, "owner", None),
     }
 
+
+
+
+def _active_windows(s, now=None):
+    now = now or utcnow()
+    return (
+        s.execute(
+            select(models.MaintenanceWindow).where(
+                models.MaintenanceWindow.starts_at <= now,
+                models.MaintenanceWindow.ends_at >= now,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _window_covers(w, key: str) -> bool:
+    keys = json.loads(w.component_keys) if w.component_keys else []
+    if w.rule is None and keys:
+        return key in keys
+    return True  # rule-scoped or global window covers the component
+
+
+def _apply_maintenance_state(s, services) -> None:
+    """Components covered by an ACTIVE maintenance window report the explicit
+    health state 'maintenance' (never silently 'ok')."""
+    try:
+        windows = _active_windows(s)
+    except Exception:
+        return
+    if not windows:
+        return
+    for svc in services:
+        for w in windows:
+            if _window_covers(w, svc["key"]):
+                svc["status"] = "maintenance"
+                svc["detail"] = f"maintenance window: {w.label}"
+                break
 
 def evaluate_alerts() -> dict:
     """Evaluate alert rules against REAL check results.
@@ -418,16 +475,7 @@ def evaluate_alerts() -> dict:
         services = _service_components(s)
         now = utcnow()
         # active maintenance windows suppress matching alerts
-        windows = (
-            s.execute(
-                select(models.MaintenanceWindow).where(
-                    models.MaintenanceWindow.starts_at <= now,
-                    models.MaintenanceWindow.ends_at >= now,
-                )
-            )
-            .scalars()
-            .all()
-        )
+        windows = _active_windows(s, now)
 
         def _suppressed(rule: str, ck: str) -> bool:
             for w in windows:
@@ -480,8 +528,26 @@ def evaluate_alerts() -> dict:
         )
         firing_keys = {(r, c) for (r, c, _, _) in firing}
         esc_thr = int(os.getenv("OPS_ALERT_ESCALATE_OCCURRENCES", "10"))
+        esc_after_s = float(os.getenv("OPS_ALERT_ESCALATE_AFTER_S", "3600"))
         flap_window = int(os.getenv("OPS_ALERT_FLAP_WINDOW_S", "300"))
         sev_order = ["info", "warning", "critical"]
+        # per-rule escalation overrides: OPS_ALERT_ESCALATE_RULES='{"task_failures":{"occurrences":5,"after_s":600}}'
+        rule_cfg: dict = {}
+        try:
+            rule_cfg = json.loads(os.getenv("OPS_ALERT_ESCALATE_RULES", "{}")) or {}
+        except Exception:
+            rule_cfg = {}
+
+        def _should_escalate(a, rule: str) -> bool:
+            """Occurrence-based OR time-based escalation, per-rule overridable."""
+            if a.escalated:
+                return False
+            cfg = rule_cfg.get(rule) or {}
+            thr = int(cfg.get("occurrences", esc_thr))
+            after = float(cfg.get("after_s", esc_after_s))
+            if (a.occurrences or 1) >= thr:
+                return True
+            return (now - _aware(a.first_seen or now)).total_seconds() >= after
 
         def _recent_flapping(rule: str, ck: str) -> bool:
             row = s.execute(
@@ -507,16 +573,20 @@ def evaluate_alerts() -> dict:
                 # M5 escalation: repeated occurrences bump severity one level
                 # (info->warning->critical), once per alert, logged as an event.
                 # Outbound notifications stay DISABLED (no notify path exists).
-                if (existing.occurrences or 1) >= esc_thr and not existing.escalated:
+                if _should_escalate(existing, rule):
                     idx = sev_order.index(existing.severity) if existing.severity in sev_order else 0
                     existing.severity = sev_order[min(idx + 1, len(sev_order) - 1)]
                     existing.escalated = True
+                    from app import notifications
+
                     record_event(
                         "warning", "alerts",
-                        f"alert #{existing.id} ESCALATED to {existing.severity} after {existing.occurrences} occurrences "
-                        f"(rule={rule}, outbound notifications disabled by policy)",
+                        f"alert #{existing.id} ESCALATED to {existing.severity} "
+                        f"(rule={rule}, occurrences={existing.occurrences}, "
+                        f"age_s={(now - _aware(existing.first_seen or now)).total_seconds():.0f})",
                         s=s,
                     )
+                    notifications.notify_alert(_alert_dict(existing), reason="escalated")
             else:
                 s.add(
                     models.Alert(
@@ -570,7 +640,7 @@ def build_alerts(state: str = "active", limit: int = 100) -> list[dict]:
         return [_alert_dict(a) for a in rows]
 
 
-def ack_alert(alert_id: int, acked_by: str | None):
+def ack_alert(alert_id: int, acked_by: str | None, owner: str | None = None):
     with SessionLocal() as s:
         a = s.get(models.Alert, alert_id)
         if a is None:
@@ -580,9 +650,25 @@ def ack_alert(alert_id: int, acked_by: str | None):
         a.status = "acknowledged"
         a.acked_at = utcnow()
         a.acked_by = acked_by
-        record_event("info", "alerts", f"alert #{a.id} acknowledged by {acked_by or 'unknown'}", s=s)
+        if owner:
+            a.owner = owner
+        record_event("info", "alerts", f"alert #{a.id} acknowledged by {acked_by or 'unknown'}" + (f", owner={owner}" if owner else ""), s=s)
         s.commit()
-        return {"id": a.id, "status": a.status}
+        return {"id": a.id, "status": a.status, "owner": a.owner}
+
+
+def assign_alert(alert_id: int, owner: str):
+    """Assign alert ownership (M6). Resolved alerts cannot be assigned."""
+    with SessionLocal() as s:
+        a = s.get(models.Alert, alert_id)
+        if a is None:
+            return None
+        if a.status == "resolved":
+            return "conflict"
+        a.owner = owner
+        record_event("info", "alerts", f"alert #{a.id} assigned to {owner}", s=s)
+        s.commit()
+        return {"id": a.id, "status": a.status, "owner": a.owner}
 
 
 def resolve_alert(alert_id: int):
@@ -759,6 +845,11 @@ def build_task_stats(hours: int) -> dict:
                 models.TaskRun.started_at.isnot(None),
             )
         ).scalar_one()
+        per_min = s.execute(
+            select(func.count(models.TaskRun.id)).where(
+                models.TaskRun.created_at >= utcnow() - timedelta(minutes=1)
+            )
+        ).scalar_one()
         return {
             "window_hours": hours,
             "completed": int(counts.get("success", 0)),
@@ -766,6 +857,7 @@ def build_task_stats(hours: int) -> dict:
             "pending": int(counts.get("running", 0)),
             "avg_duration_ms": round(float(avg), 2) if avg is not None else None,
             "oldest_pending_started": _iso(oldest_pending),
+            "tasks_per_min": round(int(per_min) / 60.0, 2),
         }
 
 
@@ -780,10 +872,49 @@ def record_task_run(payload: dict) -> int:
             finished_at=payload.get("finished_at"),
             duration_ms=payload.get("duration_ms"),
             error=payload.get("error"),
+            attempts=int(payload.get("attempts") or 1),
         )
         s.add(run)
         s.commit()
         return int(run.id)
+
+
+def register_worker(worker: str, queue: str = "default", version: str | None = None,
+                    capabilities: list | None = None) -> bool:
+    """Register (or refresh) a worker identity. Idempotent upsert. The broker
+    never controls Arena sessions; this registry tracks workers only."""
+    import json as _json
+
+    with SessionLocal() as s:
+        row = s.get(models.Worker, worker)
+        created = row is None
+        if row is None:
+            row = models.Worker(worker=worker, queue=queue)
+            s.add(row)
+        if queue:
+            row.queue = queue
+        if version:
+            row.version = version
+        if capabilities is not None:
+            row.capabilities = _json.dumps(capabilities)
+        row.updated_at = utcnow()
+        s.commit()
+        return created
+
+
+def _worker_registry(s) -> dict:
+    import json as _json
+
+    out = {}
+    for r in s.execute(select(models.Worker)).scalars().all():
+        out[r.worker] = {
+            "registered": True,
+            "queue": r.queue,
+            "version": r.version,
+            "capabilities": _json.loads(r.capabilities) if r.capabilities else [],
+            "registered_at": _iso(r.registered_at),
+        }
+    return out
 
 
 HEARTBEAT_SAMPLE_INTERVAL_S = 60
@@ -822,8 +953,19 @@ def build_workers() -> dict:
     stall_s = worker_stall_threshold_s()
     with SessionLocal() as s:
         workers = _worker_rows(s)
+        reg = _worker_registry(s)
     for w in workers:
         w["stalled"] = w["age_s"] is not None and w["age_s"] > stall_s
+        w.update(reg.get(w["worker"], {"registered": False}))
+    # registered workers without heartbeats yet still appear (as stalled)
+    seen = {w["worker"] for w in workers}
+    for name, info in reg.items():
+        if name not in seen:
+            workers.append({
+                "worker": name, "last_seen": None, "age_s": None,
+                "stalled": True, "tasks_24h": 0, "failed_24h": 0,
+                "details": "registered, no heartbeat yet", **info,
+            })
     return {"stall_threshold_s": stall_s, "workers": workers}
 
 
@@ -954,6 +1096,7 @@ def build_task_list(worker: str | None, queue: str | None, status: str | None, l
                 "finished_at": _iso(r.finished_at),
                 "duration_ms": r.duration_ms,
                 "error": r.error,
+                "attempts": getattr(r, "attempts", 1) or 1,
                 "created_at": _iso(r.created_at),
             }
             for r in rows
