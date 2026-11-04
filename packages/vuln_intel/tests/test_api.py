@@ -370,3 +370,52 @@ class TestDocumentedBindingStaysTrue:
         doc = self._doc()
         for code in ERROR_CODES:
             assert code in doc, f"error code {code!r} is not documented"
+
+
+class TestProjectStateFile:
+    """PROJECT_STATE.json is consumed by Agent 1's dashboard.
+
+    A machine-readable state file that drifts from the code is worse than none: it
+    reports a capability as ready while the flag that gates it says otherwise.
+    """
+
+    def _state(self):
+        import json
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return json.loads(
+            (root / "docs" / "vulnerability-intelligence" / "PROJECT_STATE.json").read_text()
+        )
+
+    def test_is_valid_json_with_required_keys(self):
+        state = self._state()
+        for key in (
+            "schema_version",
+            "subsystem",
+            "maturity",
+            "capabilities",
+            "honesty_invariants",
+            "owner_approvals_pending",
+        ):
+            assert key in state, f"PROJECT_STATE.json is missing {key!r}"
+
+    def test_honesty_invariants_match_the_code(self):
+        from vuln_intel import kev
+        from vuln_intel.connectors import epss, nvd, osv
+
+        state = self._state()["honesty_invariants"]
+        assert state["nvd_last_verified_live"] is nvd.LAST_VERIFIED_LIVE
+        assert state["osv_last_verified_live"] is osv.LAST_VERIFIED_LIVE
+        assert state["kev_last_verified_live"] is kev.LAST_VERIFIED_LIVE
+        assert state["epss_live_provider_available"] is epss.LIVE_PROVIDER_AVAILABLE
+
+    def test_no_capability_claims_live_verification(self):
+        """Nothing here has ever made a real provider request."""
+        for capability in self._state()["capabilities"]:
+            assert capability["live_verified"] is False, capability["name"]
+
+    def test_declared_test_count_is_plausible(self):
+        """Catches a stale number without hard-coding the exact count in two places."""
+        state = self._state()
+        assert state["quality_gates"]["tests_passed"] >= 600
