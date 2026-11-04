@@ -201,6 +201,19 @@ class AffectedPackage:
     fixed: str | None = None
     versions: tuple[str, ...] = ()
     purl: str | None = None
+    #: ``SEMVER`` / ``ECOSYSTEM`` / ``GIT``.  Kept because a GIT range holds commit
+    #: SHAs, and treating one as a version silently produces wrong answers.
+    range_type: str | None = None
+    #: Inclusive upper bound, mutually exclusive with ``fixed`` in OSV.
+    last_affected: str | None = None
+    #: Every event of every range for this package, as
+    #: ``(range_index, event_kind, value)``.  A single (introduced, fixed) pair
+    #: cannot represent an advisory that was fixed twice; this can.
+    events: tuple[tuple[int, str, str], ...] = ()
+
+    @property
+    def is_comparable_range(self) -> bool:
+        return (self.range_type or "").upper() in ("SEMVER", "ECOSYSTEM")
 
 
 @dataclass(frozen=True)

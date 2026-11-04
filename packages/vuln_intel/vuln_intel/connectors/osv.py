@@ -374,8 +374,21 @@ def _retry_after(headers: Mapping[str, str]) -> float | None:
 
 
 def _parse_affected(value: object) -> tuple[AffectedPackage, ...]:
+    """Parse OSV ``affected[]`` without losing range fidelity.
+
+    Three things the previous implementation discarded, each of which changed
+    the answer to "am I affected?":
+
+    * ``ranges[].type`` — a ``GIT`` range holds commit SHAs; comparing one to a
+      semantic version is meaningless, so the type must survive normalization;
+    * ``last_affected`` — an inclusive upper bound was dropped entirely, making
+      the last vulnerable release look safe;
+    * multi-interval ranges — a package fixed, reintroduced and fixed again has
+      four events; keeping only the first ``introduced``/``fixed`` pair hid the
+      second vulnerable window.
+    """
     packages: list[AffectedPackage] = []
-    seen: set[tuple[str, str, str | None, str | None]] = set()
+    seen: set[tuple[str, str, str | None, str | None, str | None, str | None]] = set()
     for entry in mapping_list(value, field_name="affected"):
         package = entry.get("package")
         if not isinstance(package, Mapping):
@@ -385,49 +398,103 @@ def _parse_affected(value: object) -> tuple[AffectedPackage, ...]:
         if not ecosystem or not name:
             continue
         purl = coerce_text(package.get("purl"), field_name="purl", limit=500)
-        versions = tuple(
-            str(v) for v in (entry.get("versions") or []) if isinstance(v, (str, int))
-        ) if isinstance(entry.get("versions", []), list) else ()
+        raw_versions = entry.get("versions", [])
+        versions = (
+            tuple(str(v) for v in raw_versions if isinstance(v, (str, int)))
+            if isinstance(raw_versions, list)
+            else ()
+        )
         ranges = mapping_list(entry.get("ranges"), field_name="ranges")
-        if not ranges:
-            plain_key: tuple[str, str, str | None, str | None] = (ecosystem, name, None, None)
-            if plain_key not in seen:
-                seen.add(plain_key)
-                packages.append(
-                    AffectedPackage(
-                        ecosystem=ecosystem,
-                        name=name,
-                        versions=versions,
-                        purl=purl,
-                    )
-                )
-            continue
-        for range_entry in ranges:
-            events = mapping_list(range_entry.get("events"), field_name="ranges[].events")
-            introduced = next(
-                (str(e["introduced"]) for e in events if "introduced" in e), None
-            )
-            fixed = next((str(e["fixed"]) for e in events if "fixed" in e), None)
-            range_key: tuple[str, str, str | None, str | None] = (
-                ecosystem,
-                name,
-                introduced,
-                fixed,
-            )
-            if range_key in seen:
+
+        events: list[tuple[int, str, str]] = []
+        intervals: list[AffectedPackage] = []
+        for index, range_entry in enumerate(ranges):
+            kind = coerce_text(range_entry.get("type"), field_name="ranges[].type", limit=20)
+            kind = (kind or "ECOSYSTEM").upper()
+            range_events: list[tuple[str, str]] = []
+            for event in mapping_list(
+                range_entry.get("events"), field_name="ranges[].events"
+            ):
+                for key in ("introduced", "fixed", "last_affected", "limit"):
+                    if key in event and isinstance(event[key], (str, int)):
+                        range_events.append((key, str(event[key])))
+                        if key != "limit":
+                            events.append((index, key, str(event[key])))
+            if not range_events:
                 continue
-            seen.add(range_key)
-            packages.append(
-                AffectedPackage(
-                    ecosystem=ecosystem,
-                    name=name,
-                    introduced=introduced,
-                    fixed=fixed,
-                    versions=versions,
-                    purl=purl,
+            # Every interval of the range is preserved; introduced/fixed stay as
+            # an ergonomic summary of the first interval for simple consumers.
+            opened: str | None = None
+            open_flag = False
+            for ekind, evalue in range_events:
+                if ekind == "introduced":
+                    if open_flag:
+                        # A re-opened interval: the previous one had no close.
+                        intervals.append(
+                            _one_interval(ecosystem, name, purl, versions, kind,
+                                           opened, None, None, tuple(events))
+                        )
+                    opened, open_flag = evalue, True
+                elif ekind == "fixed" and open_flag:
+                    intervals.append(
+                        _one_interval(ecosystem, name, purl, versions, kind,
+                                       opened, evalue, None, tuple(events))
+                    )
+                    open_flag = False
+                elif ekind == "last_affected" and open_flag:
+                    intervals.append(
+                        _one_interval(ecosystem, name, purl, versions, kind,
+                                       opened, None, evalue, tuple(events))
+                    )
+                    open_flag = False
+            if open_flag:
+                intervals.append(
+                    _one_interval(ecosystem, name, purl, versions, kind,
+                                   opened, None, None, tuple(events))
                 )
+
+        candidates = intervals or [
+            _one_interval(ecosystem, name, purl, versions, None, None, None, None,
+                          tuple(events))
+        ]
+        for candidate in candidates:
+            dedupe_key = (
+                candidate.ecosystem,
+                candidate.name,
+                candidate.introduced,
+                candidate.fixed,
+                candidate.last_affected,
+                candidate.range_type,
             )
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            packages.append(candidate)
     return tuple(packages)
+
+
+def _one_interval(
+    ecosystem: str,
+    name: str,
+    purl: str | None,
+    versions: tuple[str, ...],
+    range_type: str | None,
+    introduced: str | None,
+    fixed: str | None,
+    last_affected: str | None,
+    events: tuple[tuple[int, str, str], ...] | None,
+) -> AffectedPackage:
+    return AffectedPackage(
+        ecosystem=ecosystem,
+        name=name,
+        introduced=introduced,
+        fixed=fixed,
+        versions=versions,
+        purl=purl,
+        range_type=range_type,
+        last_affected=last_affected,
+        events=events or (),
+    )
 
 
 def _database_specific_severity(body: Mapping[str, Any]) -> Severity | None:
