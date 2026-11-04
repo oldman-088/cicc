@@ -72,7 +72,7 @@ from ..schema import (
 )
 from ..transport import Transport, transport_kind
 
-__all__ = ["OsvConnector", "OSV_API", "LAST_VERIFIED_LIVE", "AdvisoryOnly"]
+__all__ = ["LAST_VERIFIED_LIVE", "OSV_API", "AdvisoryOnly", "OsvConnector"]
 
 OSV_API = "https://api.osv.dev/v1"
 
@@ -166,10 +166,11 @@ class OsvConnector:
             if response.status == 404:
                 raise SourceNotFound("OSV id not found", status=404, source="osv")
             if response.status == 429:
-                retry_after = response.headers.get("retry-after")
-                seconds = float(retry_after) if (retry_after or "").isdigit() else None
                 raise SourceRateLimited(
-                    "OSV rate limited", retry_after=seconds, status=429, source="osv"
+                    "OSV rate limited",
+                    retry_after=_retry_after(response.headers),
+                    status=429,
+                    source="osv",
                 )
             if response.status != 200:
                 raise SourceResponseError(
@@ -228,7 +229,7 @@ class OsvConnector:
                 failures += 1
                 warnings.append(f"{identifier}: not found at OSV")
                 continue
-            except Exception as exc:  # noqa: BLE001 - converted to visible state
+            except Exception as exc:
                 failures += 1
                 warnings.append(f"{identifier}: {sanitize(exc)}")
                 continue
@@ -361,6 +362,17 @@ class OsvConnector:
         )
 
 
+def _retry_after(headers: Mapping[str, str]) -> float | None:
+    raw = headers.get("retry-after")
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 def _parse_affected(value: object) -> tuple[AffectedPackage, ...]:
     packages: list[AffectedPackage] = []
     seen: set[tuple[str, str, str | None, str | None]] = set()
@@ -378,9 +390,9 @@ def _parse_affected(value: object) -> tuple[AffectedPackage, ...]:
         ) if isinstance(entry.get("versions", []), list) else ()
         ranges = mapping_list(entry.get("ranges"), field_name="ranges")
         if not ranges:
-            key = (ecosystem, name, None, None)
-            if key not in seen:
-                seen.add(key)
+            plain_key: tuple[str, str, str | None, str | None] = (ecosystem, name, None, None)
+            if plain_key not in seen:
+                seen.add(plain_key)
                 packages.append(
                     AffectedPackage(
                         ecosystem=ecosystem,
@@ -396,10 +408,15 @@ def _parse_affected(value: object) -> tuple[AffectedPackage, ...]:
                 (str(e["introduced"]) for e in events if "introduced" in e), None
             )
             fixed = next((str(e["fixed"]) for e in events if "fixed" in e), None)
-            key = (ecosystem, name, introduced, fixed)
-            if key in seen:
+            range_key: tuple[str, str, str | None, str | None] = (
+                ecosystem,
+                name,
+                introduced,
+                fixed,
+            )
+            if range_key in seen:
                 continue
-            seen.add(key)
+            seen.add(range_key)
             packages.append(
                 AffectedPackage(
                     ecosystem=ecosystem,

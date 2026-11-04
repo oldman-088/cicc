@@ -105,7 +105,9 @@ def build() -> dict[str, Any]:
     )
     nvd_record = nvd.get_cve("CVE-2026-0001")
     osv_record, _ = osv.get_vulnerability("GHSA-preview-0000-0000")
-    merged = normalize_sources([nvd_record, osv_record])
+    # Advisory-only OSV results (record is None) are skipped, never passed on.
+    contributions = [nvd_record] + ([osv_record] if osv_record is not None else [])
+    merged = normalize_sources(contributions)
     kev = index_kev(KEV_PAYLOAD)
     records = [attach_kev(record, kev.get(cve)) for cve, record in merged.items()]
 

@@ -69,7 +69,7 @@ class FakeTransport:
 
 def no_wait(_: float) -> None:
     """Injectable sleep that never sleeps."""
-    return None
+    return
 
 
 def zero_gate(*_args: Any, **_kwargs: Any):
@@ -106,9 +106,9 @@ def raises(exc_type: type[BaseException]) -> Callable[[str, Mapping[str, str] | 
 # and weak (it could not see a request made through another library). This
 # fixture enforces the property that actually matters: no test may open a
 # socket. Any accidental live call fails loudly instead of passing silently.
-import socket as _socket  # noqa: E402
+import socket as _socket
 
-import pytest as _pytest  # noqa: E402
+import pytest as _pytest
 
 
 @_pytest.fixture(autouse=True)

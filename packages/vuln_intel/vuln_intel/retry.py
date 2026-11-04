@@ -21,7 +21,7 @@ from .errors import (
     SourceUnavailable,
 )
 
-__all__ = ["RetryPolicy", "call_with_retry", "TRANSIENT"]
+__all__ = ["TRANSIENT", "RetryPolicy", "call_with_retry"]
 
 T = TypeVar("T")
 
@@ -63,9 +63,9 @@ class RetryPolicy:
 
 def _is_retryable(exc: BaseException, policy: RetryPolicy) -> bool:
     if isinstance(exc, SourceRateLimited):
-        if exc.retry_after is not None and exc.retry_after > policy.max_retry_after:
-            return False
-        return True
+        return not (
+            exc.retry_after is not None and exc.retry_after > policy.max_retry_after
+        )
     if isinstance(exc, SourceResponseError):
         # Only server-side failures and explicit request timeouts are transient.
         return exc.status in (408, 425, 429, 500, 502, 503, 504)
@@ -86,12 +86,10 @@ def call_with_retry(
     class.  Non-retryable errors (validation, 404, oversized body) fail fast.
     """
     policy = policy or RetryPolicy()
-    last: BaseException | None = None
     for attempt in range(policy.attempts):
         try:
             return func()
         except SourceError as exc:
-            last = exc
             if attempt + 1 >= policy.attempts or not _is_retryable(exc, policy):
                 raise
             wait = policy.delay_for(attempt, rand=rand)
@@ -102,4 +100,5 @@ def call_with_retry(
             # Sleep even for a zero delay: the injected sleep may drive a virtual
             # clock (and tests assert the backoff sequence).
             sleep(wait)
-    raise last  # pragma: no cover - loop always returns or raises
+    # Unreachable by construction: the final iteration either returns or raises.
+    raise AssertionError("retry loop exited without a result or an error")

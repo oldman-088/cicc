@@ -32,16 +32,16 @@ from typing import Any, Mapping
 from ..schema import NormalizedVulnerability, Origin, utcnow
 
 __all__ = [
-    "ENTITY_KIND",
     "ENRICHMENT_KEY",
-    "record_origin",
-    "to_entity_payload",
-    "to_source_details",
-    "to_enrichment",
-    "to_provenance",
-    "to_store_payload",
-    "event_types",
+    "ENTITY_KIND",
     "assert_persistable",
+    "event_types",
+    "record_origin",
+    "to_enrichment",
+    "to_entity_payload",
+    "to_provenance",
+    "to_source_details",
+    "to_store_payload",
 ]
 
 ENTITY_KIND = "vulnerability"

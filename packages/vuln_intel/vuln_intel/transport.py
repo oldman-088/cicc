@@ -15,7 +15,6 @@ is exercised **nowhere** in the test suite.
 from __future__ import annotations
 
 import json
-import socket
 from dataclasses import dataclass, field
 from typing import Mapping, Protocol, runtime_checkable
 
@@ -28,11 +27,11 @@ from .errors import (
 
 __all__ = [
     "MAX_RESPONSE_BYTES",
-    "Transport",
-    "TransportResponse",
     "HttpxTransport",
-    "transport_kind",
+    "Transport",
     "TransportKind",
+    "TransportResponse",
+    "transport_kind",
 ]
 
 
@@ -162,8 +161,9 @@ class HttpxTransport:
         except (SourceResponseError, SourceUnavailable):
             raise
         except TimeoutError as exc:
+            # socket.timeout IS TimeoutError on 3.10+, so it must be listed once.
             raise SourceTimeout(sanitize(exc) or "timeout") from exc
-        except (socket.timeout, OSError) as exc:
+        except OSError as exc:
             raise SourceUnavailable(sanitize(exc) or "connection failed") from exc
         except Exception as exc:  # httpx raises its own hierarchy
             name = type(exc).__name__

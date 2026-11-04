@@ -25,3 +25,14 @@ minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
 filterwarnings = ["error::DeprecationWarning:vuln_intel.*"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+check_untyped_defs = true
+show_error_codes = true
+files = ["vuln_intel"]

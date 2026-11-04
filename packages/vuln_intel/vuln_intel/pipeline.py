@@ -39,14 +39,13 @@ from .kev import KevCatalog
 from .normalization import KevSignal, attach_epss, attach_kev, normalize_sources
 from .priorities import PriorityContext, PriorityResult, rank_vulnerabilities
 from .schema import (
+    CollectionStatus,
     NormalizedVulnerability,
     Origin,
-
-    CollectionStatus,
     utcnow,
 )
 
-__all__ = ["PipelineReport", "EnrichmentPipeline", "SourceOutcome"]
+__all__ = ["EnrichmentPipeline", "PipelineReport", "SourceOutcome"]
 
 
 @dataclass(frozen=True)
@@ -164,7 +163,7 @@ class EnrichmentPipeline:
                 )
                 report.warnings.append(f"{name} failed: collection error (no data recorded)")
                 continue
-            except Exception as exc:  # noqa: BLE001 - a broken collector must not abort the run
+            except Exception as exc:
                 report.outcomes.append(
                     SourceOutcome(
                         source=name,

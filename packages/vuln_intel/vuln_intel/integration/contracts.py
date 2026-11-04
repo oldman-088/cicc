@@ -16,12 +16,12 @@ from datetime import datetime
 from typing import Any, Mapping, Protocol
 
 __all__ = [
-    "UpsertOutcome",
-    "UpsertResult",
-    "VulnerabilityStore",
     "AuditPort",
     "ImportReport",
     "RecordOutcome",
+    "UpsertOutcome",
+    "UpsertResult",
+    "VulnerabilityStore",
 ]
 
 

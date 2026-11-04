@@ -27,9 +27,9 @@ from .service import IngestionPolicy, IngestionService
 from .store import InMemoryVulnerabilityStore, RecordingAudit, RefusingStore
 
 __all__ = [
-    "AuditPort",
     "ENRICHMENT_KEY",
     "ENTITY_KIND",
+    "AuditPort",
     "ImportReport",
     "InMemoryVulnerabilityStore",
     "IngestionPolicy",

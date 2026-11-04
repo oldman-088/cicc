@@ -52,9 +52,9 @@ from ..errors import (
 from ..ratelimit import RateGate, quota_for_nvd
 from ..retry import RetryPolicy, call_with_retry
 from ..schema import (
-    CveId,
     CollectionResult,
     CollectionStatus,
+    CveId,
     CvssScore,
     NormalizedVulnerability,
     Origin,
@@ -70,7 +70,7 @@ from ..schema import (
 )
 from ..transport import Transport, transport_kind
 
-__all__ = ["NvdConnector", "NVD_API", "LAST_VERIFIED_LIVE"]
+__all__ = ["LAST_VERIFIED_LIVE", "NVD_API", "NvdConnector"]
 
 NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
@@ -115,6 +115,18 @@ class NvdConnector:
             headers["apiKey"] = self.api_key
         return headers
 
+    @staticmethod
+    def _retry_after(headers: Mapping[str, str]) -> float | None:
+        """Parse ``Retry-After`` defensively; a malformed value means "unknown"."""
+        raw = headers.get("retry-after")
+        if not raw:
+            return None
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
     def _request(self, params: Mapping[str, str]) -> Mapping[str, Any]:
         if self.transport is None:
             raise SourceResponseError(
@@ -130,8 +142,7 @@ class NvdConnector:
             if response.status == 404:
                 raise SourceNotFound("record not found", status=404, source="nvd")
             if response.status == 429:
-                retry_after = response.headers.get("retry-after")
-                seconds = float(retry_after) if (retry_after or "").isdigit() else None
+                seconds = self._retry_after(response.headers)
                 self.gate.observe_retry_after(seconds)
                 raise SourceRateLimited(
                     "NVD quota exceeded", retry_after=seconds, status=429, source="nvd"
@@ -196,7 +207,7 @@ class NvdConnector:
                 f"rate limited: {sanitize(exc.message)}",
                 retry_after=exc.retry_after,
             )
-        except Exception as exc:  # noqa: BLE001 - converted to visible source state
+        except Exception as exc:
             return CollectionResult.failed(SourceKind.NVD, sanitize(exc))
 
         records, problems = self._parse_entries(
@@ -337,10 +348,12 @@ class NvdConnector:
 
         cwe: list[str] = []
         for weakness in mapping_list(cve.get("weaknesses"), field_name="weaknesses"):
-            for description in mapping_list(
+            # NOTE: do not name this loop variable ``description`` — it shadowed the
+            # CVE description used below and made the record body ambiguous.
+            for cwe_entry in mapping_list(
                 weakness.get("description"), field_name="weaknesses[].description"
             ):
-                value = _text(description.get("value"))
+                value = _text(cwe_entry.get("value"))
                 if value and value.upper().startswith("CWE-") and value not in cwe:
                     cwe.append(value.upper())
 

@@ -26,20 +26,20 @@ from .errors import MixedOriginError, ValidationError
 
 __all__ = [
     "CVE_PATTERN",
-    "Origin",
+    "AffectedPackage",
+    "CollectionResult",
     "CollectionStatus",
+    "CveId",
+    "CvssScore",
+    "NormalizedVulnerability",
+    "Origin",
+    "ProvenanceRecord",
+    "Reference",
+    "Severity",
     "SourceKind",
     "SourceState",
-    "CollectionResult",
-    "CveId",
-    "Severity",
-    "CvssScore",
-    "Reference",
-    "AffectedPackage",
-    "ProvenanceRecord",
-    "NormalizedVulnerability",
-    "merge_records",
     "compute_freshness",
+    "merge_records",
     "severity_from_score",
     "utcnow",
 ]
@@ -117,7 +117,7 @@ class CveId:
     number: int
 
     @classmethod
-    def parse(cls, value: object) -> "CveId":
+    def parse(cls, value: object) -> CveId:
         if not isinstance(value, str):
             raise ValidationError("CVE id must be a string", field="cve")
         text = value.strip().upper()
@@ -279,7 +279,7 @@ class NormalizedVulnerability:
         best = self.best_cvss
         return best.severity if best else Severity.UNKNOWN
 
-    def with_provenance(self, record: ProvenanceRecord) -> "NormalizedVulnerability":
+    def with_provenance(self, record: ProvenanceRecord) -> NormalizedVulnerability:
         return replace(self, provenance=self.provenance + (record,))
 
     def as_summary(self) -> dict[str, Any]:
@@ -347,7 +347,7 @@ class CollectionResult:
         retry_after: float | None = None,
         last_success: datetime | None = None,
         warnings: Sequence[str] = (),
-    ) -> "CollectionResult":
+    ) -> CollectionResult:
         return cls(
             state=SourceState(
                 kind=kind,
@@ -384,7 +384,10 @@ def compute_freshness(
     if observed is None:
         return Freshness(age=None, bucket="unknown")
     now = now or utcnow()
-    age = now - _ensure_aware(observed, field_name="observed")
+    observed_utc = _ensure_aware(observed, field_name="observed")
+    if observed_utc is None:  # unreachable (observed is not None) but explicit
+        return Freshness(age=None, bucket="unknown")
+    age = now - observed_utc
     if age < fresh_within:
         return Freshness(age=age, bucket="fresh")
     if age < stale_after:
@@ -489,7 +492,7 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
     kev_values = {i.kev for i in items if i.kev is not None}
     kev = None
     if kev_values:
-        kev = True if True in kev_values else False
+        kev = True in kev_values
         if len(kev_values) > 1:
             notes.append("sources disagree on CISA KEV membership; presence kept")
 

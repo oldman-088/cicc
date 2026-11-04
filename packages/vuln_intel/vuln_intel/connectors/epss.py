@@ -40,11 +40,11 @@ from ..schema import CveId, coerce_text, mapping_list, utcnow
 __all__ = [
     "EPSS_API",
     "LIVE_PROVIDER_AVAILABLE",
-    "EpssScore",
-    "EpssProvider",
     "EpssCache",
-    "InMemoryEpssCache",
+    "EpssProvider",
+    "EpssScore",
     "FixtureEpssProvider",
+    "InMemoryEpssCache",
     "UnavailableEpssProvider",
     "parse_epss_response",
 ]

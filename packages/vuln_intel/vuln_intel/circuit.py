@@ -17,7 +17,7 @@ from typing import Callable
 
 from .errors import SourceError, SourceUnavailable
 
-__all__ = ["CircuitBreaker", "BreakerState", "CircuitOpen"]
+__all__ = ["BreakerState", "CircuitBreaker", "CircuitOpen"]
 
 
 class BreakerState(str):

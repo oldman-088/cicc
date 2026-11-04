@@ -33,7 +33,7 @@ from .contracts import (
 )
 from .mapping import assert_persistable, to_store_payload
 
-__all__ = ["IngestionService", "IngestionPolicy"]
+__all__ = ["IngestionPolicy", "IngestionService"]
 
 
 class IngestionPolicy:
@@ -117,7 +117,9 @@ class IngestionService:
                 continue
 
             if self.policy.dry_run:
-                report.payloads.append(_jsonable(payload))
+                preview = _jsonable(payload)
+                assert isinstance(preview, dict)  # payload is always a mapping
+                report.payloads.append(preview)
                 report.outcomes.append(
                     RecordOutcome(cve=str(record.cve), outcome="previewed")
                 )
@@ -160,7 +162,7 @@ class IngestionService:
                 collected_at=payload["collected_at"],  # type: ignore[arg-type]
                 dry_run=False,
             )
-        except Exception as exc:  # noqa: BLE001 - surfaced per record, never hidden
+        except Exception as exc:
             return RecordOutcome(
                 cve=str(record.cve),
                 outcome=UpsertOutcome.SKIPPED,
@@ -185,7 +187,7 @@ class IngestionService:
                         "sources": list(record.sources),
                     },
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 if self.policy.stop_on_audit_failure:
                     return RecordOutcome(
                         cve=str(record.cve),

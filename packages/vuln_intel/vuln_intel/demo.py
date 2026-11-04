@@ -15,9 +15,9 @@ import json
 import pathlib
 from typing import Any
 
+from .connectors.epss import FixtureEpssProvider
 from .connectors.nvd import NvdConnector
 from .connectors.osv import OsvConnector
-from .connectors.epss import FixtureEpssProvider
 from .errors import VulnIntelError
 from .normalization import attach_epss, attach_kev, index_kev, normalize_sources
 from .priorities import PriorityContext, rank_vulnerabilities
@@ -115,7 +115,10 @@ def build() -> dict[str, Any]:
     nvd_record = nvd.get_cve("CVE-2026-0001")
     osv_record, _advisory = osv.get_vulnerability("GHSA-demo-0000-0000")
 
-    merged = normalize_sources([nvd_record, osv_record])
+    # An OSV record without a CVE alias is advisory-only (record is None). It must
+    # be skipped explicitly, never forwarded into normalization as None.
+    contributions = [nvd_record] + ([osv_record] if osv_record is not None else [])
+    merged = normalize_sources(contributions)
 
     kev = index_kev(KEV_PAYLOAD)
     epss = FixtureEpssProvider(scores=EPSS_FIXTURE)

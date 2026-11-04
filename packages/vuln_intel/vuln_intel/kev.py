@@ -50,11 +50,11 @@ from .transport import Transport, transport_kind
 __all__ = [
     "KEV_URL",
     "LAST_VERIFIED_LIVE",
-    "KevEntry",
+    "MAX_CATALOG_BYTES",
+    "CachedKevCatalog",
     "KevCatalog",
     "KevConnector",
-    "CachedKevCatalog",
-    "MAX_CATALOG_BYTES",
+    "KevEntry",
 ]
 
 KEV_URL = (
@@ -180,6 +180,17 @@ def _catalog_from_document(
     )
 
 
+def _retry_after(headers: Mapping[str, str]) -> float | None:
+    raw = headers.get("retry-after")
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 def _aware(moment: datetime) -> datetime:
     if moment.tzinfo is None:
         raise ValidationError("timestamps must be timezone-aware", field="fetched_at")
@@ -233,9 +244,12 @@ class KevConnector:
                 timeout=self.timeout,
             )
             if response.status == 429:
-                retry_after = response.headers.get("retry-after")
-                seconds = float(retry_after) if (retry_after or "").isdigit() else None
-                raise SourceRateLimited("CISA KEV rate limited", retry_after=seconds, status=429, source="cisa-kev")
+                raise SourceRateLimited(
+                    "CISA KEV rate limited",
+                    retry_after=_retry_after(response.headers),
+                    status=429,
+                    source="cisa-kev",
+                )
             if response.status != 200:
                 raise SourceResponseError(
                     f"unexpected CISA KEV status {response.status}",
@@ -313,7 +327,7 @@ class CachedKevCatalog:
         """
         try:
             fetched = self.connector.fetch()
-        except Exception as exc:  # noqa: BLE001 - outage is a state, not a crash
+        except Exception as exc:
             self._last_error = sanitize(exc)
             catalog, _, _ = self.get()
             return catalog, catalog is not None, self._last_error

@@ -25,6 +25,7 @@ Typical use::
     ranking = rank_vulnerabilities([record])
 """
 
+from .circuit import BreakerState, CircuitBreaker, CircuitOpen
 from .connectors import (
     EPSS_API,
     LIVE_PROVIDER_AVAILABLE,
@@ -42,7 +43,6 @@ from .connectors import (
     UnavailableEpssProvider,
     parse_epss_response,
 )
-from .circuit import BreakerState, CircuitBreaker, CircuitOpen
 from .cvss import cvss_from_source, parse_vector, score_vector
 from .errors import (
     MixedOriginError,
@@ -55,6 +55,12 @@ from .errors import (
     UnsupportedVector,
     ValidationError,
 )
+from .integration.observations import (
+    ImmutableObservationLog,
+    Observation,
+    digest_payload,
+    to_observations,
+)
 from .kev import KEV_URL, CachedKevCatalog, KevCatalog, KevConnector, KevEntry
 from .normalization import (
     KevSignal,
@@ -64,6 +70,7 @@ from .normalization import (
     index_kev,
     normalize_sources,
 )
+from .pipeline import EnrichmentPipeline, PipelineReport, SourceOutcome
 from .priorities import (
     WEIGHTS,
     PriorityContext,
@@ -71,7 +78,6 @@ from .priorities import (
     rank_vulnerabilities,
     score_vulnerability,
 )
-from .pipeline import EnrichmentPipeline, PipelineReport, SourceOutcome
 from .ratelimit import RateGate, quota_for_nvd, quota_for_osv
 from .retry import RetryPolicy, call_with_retry
 from .schema import (
@@ -92,59 +98,48 @@ from .schema import (
     merge_records,
     severity_from_score,
 )
-from .integration.observations import (
-    ImmutableObservationLog,
-    Observation,
-    digest_payload,
-    to_observations,
-)
 from .transport import HttpxTransport, Transport, TransportKind, TransportResponse, transport_kind
 
 __version__ = "0.1.0"
 
 __all__ = [
-    "BreakerState",
-    "CachedKevCatalog",
-    "CircuitBreaker",
-    "CircuitOpen",
     "EPSS_API",
-    "EnrichmentPipeline",
     "KEV_URL",
-    "KevCatalog",
-    "KevConnector",
-    "KevEntry",
-    "ImmutableObservationLog",
-    "Observation",
-    "PipelineReport",
-    "SourceOutcome",
-    "TransportKind",
-    "digest_payload",
-    "to_observations",
-    "transport_kind",
     "LIVE_PROVIDER_AVAILABLE",
     "NVD_API",
     "OSV_API",
     "WEIGHTS",
     "AdvisoryOnly",
     "AffectedPackage",
+    "BreakerState",
+    "CachedKevCatalog",
+    "CircuitBreaker",
+    "CircuitOpen",
     "CollectionResult",
     "CollectionStatus",
     "CveId",
     "CvssScore",
+    "EnrichmentPipeline",
     "EpssCache",
     "EpssProvider",
     "EpssScore",
     "FixtureEpssProvider",
     "Freshness",
     "HttpxTransport",
+    "ImmutableObservationLog",
     "InMemoryEpssCache",
+    "KevCatalog",
+    "KevConnector",
+    "KevEntry",
     "KevSignal",
     "MixedOriginError",
     "NormalizedVulnerability",
     "NvdConnector",
+    "Observation",
     "Origin",
     "OsvConnector",
     "OsvResult",
+    "PipelineReport",
     "PriorityContext",
     "PriorityResult",
     "ProvenanceRecord",
@@ -155,12 +150,14 @@ __all__ = [
     "SourceError",
     "SourceKind",
     "SourceNotFound",
+    "SourceOutcome",
     "SourceRateLimited",
     "SourceResponseError",
     "SourceState",
     "SourceTimeout",
     "SourceUnavailable",
     "Transport",
+    "TransportKind",
     "TransportResponse",
     "UnavailableEpssProvider",
     "UnsupportedVector",
@@ -172,6 +169,7 @@ __all__ = [
     "compute_freshness",
     "corroboration_report",
     "cvss_from_source",
+    "digest_payload",
     "index_kev",
     "merge_records",
     "normalize_sources",
@@ -183,4 +181,6 @@ __all__ = [
     "score_vector",
     "score_vulnerability",
     "severity_from_score",
+    "to_observations",
+    "transport_kind",
 ]

@@ -156,7 +156,7 @@ def test_pipeline_reports_a_failed_source_without_losing_the_others() -> None:
 
 def test_pipeline_distinguishes_empty_from_failed() -> None:
     pipeline = EnrichmentPipeline(now=lambda: RUN_AT)
-    report = pipeline.run({"nvd": lambda: []}, tenant_id="t1")
+    report = pipeline.run({"nvd": list}, tenant_id="t1")
     assert report.outcomes[0].status is CollectionStatus.OK
     assert any("empty answer, not a failure" in w for w in report.warnings)
 
@@ -262,7 +262,7 @@ def test_breaker_opens_after_threshold_and_fails_fast() -> None:
             breaker.call(fail)
     assert breaker.state == BreakerState.OPEN
     with pytest.raises(CircuitOpen):
-        breaker.call(lambda: [])
+        breaker.call(list)
     assert breaker.retry_in() == pytest.approx(10.0)
 
 

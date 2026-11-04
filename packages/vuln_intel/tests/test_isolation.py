@@ -89,5 +89,5 @@ def test_pytest_does_not_install_a_network_transport() -> None:
     """Guards against a future test accidentally using the real transport."""
     from vuln_intel.transport import HttpxTransport
 
-    assert "tests.conftest" in sys.modules or True  # conftest imported by pytest
-    assert HttpxTransport is not None  # available for production use, unused in tests
+    assert HttpxTransport is not None  # available for production use, never used in tests
+    assert "tests.conftest" in sys.modules  # the shared doubles are loaded

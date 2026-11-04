@@ -33,17 +33,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
-from ..schema import NormalizedVulnerability, Origin
+from ..schema import NormalizedVulnerability, Origin, ProvenanceRecord
 from .mapping import to_source_details
 
 __all__ = [
-    "Observation",
-    "AppendResult",
-    "ObservationLog",
-    "ImmutableObservationLog",
-    "to_observations",
-    "digest_payload",
     "MERGED_VIEW_NOTICE",
+    "AppendResult",
+    "ImmutableObservationLog",
+    "Observation",
+    "ObservationLog",
+    "digest_payload",
+    "to_observations",
 ]
 
 #: Every merged record produced from observations carries this statement.
@@ -180,21 +180,21 @@ def to_observations(
     details = to_source_details(record)
     observations: list[Observation] = []
 
-    provenance_by_source: dict[str, Any] = {}
-    for entry in record.provenance:
-        provenance_by_source.setdefault(str(entry.source), entry)
+    provenance_by_source: dict[str, ProvenanceRecord] = {}
+    for provenance_entry in record.provenance:
+        provenance_by_source.setdefault(str(provenance_entry.source), provenance_entry)
 
     sources = list(record.sources) or ["unknown"]
     for source in sources:
-        entry = provenance_by_source.get(source)
+        entry: ProvenanceRecord | None = provenance_by_source.get(source)
         # Source-scoped payload: only the fields that source can vouch for.
         payload: dict[str, Any] = {
             "cve_id": str(record.cve),
             "origin": record.origin.value,
             "source": source,
-            "source_reference": getattr(entry, "source_ref", None) if entry else None,
-            "url": getattr(entry, "url", None) if entry else None,
-            "transport": getattr(entry, "transport", "unknown") if entry else "unknown",
+            "source_reference": entry.source_ref if entry else None,
+            "url": entry.url if entry else None,
+            "transport": entry.transport if entry else "unknown",
             "published": details["published"],
             "last_modified": details["last_modified"],
             "severity": details["severity"],
@@ -211,7 +211,7 @@ def to_observations(
                 tenant_id=tenant_id,
                 cve=str(record.cve),
                 source=source,
-                source_ref=getattr(entry, "source_ref", None) if entry else None,
+                source_ref=entry.source_ref if entry else None,
                 origin=record.origin,
                 collected_at=moment,
                 payload=payload,

@@ -33,11 +33,11 @@ from .schema import (
 
 __all__ = [
     "KevSignal",
+    "attach_epss",
+    "attach_kev",
+    "corroboration_report",
     "index_kev",
     "normalize_sources",
-    "attach_kev",
-    "attach_epss",
-    "corroboration_report",
 ]
 
 _ORIGIN_TO_SOURCE_ORIGIN = {
@@ -57,7 +57,7 @@ class KevSignal:
     forbids.
     """
 
-    __slots__ = ("cve", "listed", "date_added", "checked", "catalog_version")
+    __slots__ = ("catalog_version", "checked", "cve", "date_added", "listed")
 
     def __init__(
         self,

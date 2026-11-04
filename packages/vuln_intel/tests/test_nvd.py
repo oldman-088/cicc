@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from vuln_intel.connectors.nvd import NVD_API, LAST_VERIFIED_LIVE, NvdConnector
+from vuln_intel.connectors.nvd import LAST_VERIFIED_LIVE, NVD_API, NvdConnector
 from vuln_intel.errors import (
     SourceNotFound,
     SourceRateLimited,

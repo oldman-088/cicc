@@ -23,7 +23,7 @@ from typing import Any, Mapping
 from .contracts import UpsertOutcome, UpsertResult
 from .mapping import ENRICHMENT_KEY, assert_persistable, event_types
 
-__all__ = ["InMemoryVulnerabilityStore", "RefusingStore", "RecordingAudit"]
+__all__ = ["InMemoryVulnerabilityStore", "RecordingAudit", "RefusingStore"]
 
 
 def _aware(value: datetime) -> datetime:

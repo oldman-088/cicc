@@ -50,8 +50,8 @@ __all__ = [
     "WEIGHTS",
     "PriorityContext",
     "PriorityResult",
-    "score_vulnerability",
     "rank_vulnerabilities",
+    "score_vulnerability",
 ]
 
 #: Maximum points contributed by each component. Must sum to 100.

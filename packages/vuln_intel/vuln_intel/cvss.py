@@ -23,7 +23,7 @@ from typing import Mapping
 from .errors import UnsupportedVector, ValidationError
 from .schema import CvssScore, Severity, severity_from_score
 
-__all__ = ["parse_vector", "score_vector", "cvss_from_source", "SUPPORTED_VERSIONS"]
+__all__ = ["SUPPORTED_VERSIONS", "cvss_from_source", "parse_vector", "score_vector"]
 
 SUPPORTED_VERSIONS = ("3.0", "3.1")
 
@@ -74,7 +74,7 @@ def parse_vector(vector: str) -> tuple[str, dict[str, str]]:
 
 def _roundup(value: float) -> float:
     """CVSS v3.1 Appendix A rounding: round up to one decimal place."""
-    integer = int(round(value * 100000))
+    integer = round(value * 100000)  # round(float) -> int
     if integer % 10000 == 0:
         return integer / 100000.0
     return (math.floor(integer / 10000) + 1) / 10.0

@@ -76,7 +76,7 @@ def test_withdrawn_record_is_surfaced_not_deleted() -> None:
 
 
 def test_record_keyed_by_cve_id_is_accepted() -> None:
-    record, advisory = connector([response(fx.OSV_ALIAS_ONLY_CVE)]).get_vulnerability("CVE-2026-0004")
+    record, _advisory = connector([response(fx.OSV_ALIAS_ONLY_CVE)]).get_vulnerability("CVE-2026-0004")
     assert record is not None
     assert str(record.cve) == "CVE-2026-0004"
 

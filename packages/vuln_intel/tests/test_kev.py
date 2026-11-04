@@ -10,7 +10,6 @@ from vuln_intel.errors import ValidationError
 from vuln_intel.kev import (
     LAST_VERIFIED_LIVE,
     CachedKevCatalog,
-
     KevConnector,
 )
 from vuln_intel.ratelimit import RateGate
