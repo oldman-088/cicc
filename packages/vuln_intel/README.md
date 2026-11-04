@@ -204,6 +204,14 @@ the wrong package. The endpoint returns ids and a `modified` timestamp only — 
 a lookup index, not intelligence, so full records still come from
 `get_vulnerability()`.
 
+`nvd_window_fetcher()` adapts `NvdConnector.search` to `sync.WindowFetcher`, which
+is what makes real incremental coverage possible: `search_all()` reads a bounded
+slice of the *current* catalogue, while a fetcher driven by `IncrementalSync` walks
+`lastModStartDate`/`lastModEndDate` windows from a persisted watermark, so repeated
+runs converge on a complete local view. A failed page is returned as an **error**,
+never as an empty window — an empty window would let the checkpoint advance over
+data that was never read.
+
 `nvd_collector()` and `osv_collector()` adapt the connectors to the pipeline's
 collector protocol. They exist mostly for one reason: a **failed** collection
 raises, so the pipeline records `FAILED` with the provider's error, while a

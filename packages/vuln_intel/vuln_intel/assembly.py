@@ -31,6 +31,7 @@ from .connectors.osv import OsvConnector
 from .errors import SourceError, SourceNotFound, SourceResponseError, ValidationError
 from .kev import CachedKevCatalog, KevConnector
 from .schema import CollectionStatus, NormalizedVulnerability, Origin
+from .sync import SyncWindow, WindowFetcher
 from .transport import Transport
 
 #: Marker kept on every bundle so health/summary output can state, truthfully,
@@ -285,3 +286,39 @@ def osv_collector(
         return result.records
 
     return collect
+
+
+def nvd_window_fetcher(connector: NvdConnector) -> WindowFetcher:
+    """Adapt :meth:`NvdConnector.search` to :class:`sync.WindowFetcher`.
+
+    This is what makes real incremental coverage possible: ``search_all()`` is a
+    bounded window of the *current* catalogue, whereas a fetcher driven by
+    :class:`sync.IncrementalSync` walks ``lastModStartDate``/``lastModEndDate``
+    windows from a persisted watermark, so repeated runs converge on a complete
+    local view instead of re-reading the same first N pages.
+
+    The translation matters: ``search`` returns a ``CollectionResult`` that reports
+    failure *in the result* rather than raising, while the fetcher contract
+    returns ``(records, exhausted, error)``. A failed page must surface as
+    ``error`` — returning ``([], False, None)`` for a 403 would look like an empty
+    window and let the checkpoint advance over data that was never read.
+    """
+
+    def fetch(
+        window: SyncWindow, *, start_index: int, page_size: int
+    ) -> tuple[Sequence[NormalizedVulnerability], bool, str | None]:
+        result = connector.search(
+            start_index=start_index,
+            results_per_page=page_size,
+            modified_window=window.params(),
+        )
+        if not result.ok:
+            state = result.state
+            return (), False, state.error or "NVD window page failed without an error message"
+        # A short page means the window is exhausted. NVD's totalResults is the
+        # authority, but a short page is the condition the sync engine can act on
+        # without trusting a counter that changed between requests.
+        exhausted = len(result.records) < page_size
+        return result.records, exhausted, None
+
+    return fetch

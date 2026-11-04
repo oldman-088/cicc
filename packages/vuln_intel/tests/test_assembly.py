@@ -298,3 +298,138 @@ class TestCollectors:
         )
         assert report.outcomes[0].status.value in ("ok", "partial")
         assert report.outcomes[0].records == 1
+
+
+class TestNvdWindowFetcher:
+    """The fetcher that lets IncrementalSync walk NVD modification windows.
+
+    `search_all()` reads a bounded slice of the current catalogue; windowed sync
+    converges on a complete local view. That only works if a failed page is
+    reported as an error rather than as an empty window, and if a full page does
+    not claim exhaustion.
+    """
+
+    def _nvd(self, *script):
+        from vuln_intel.connectors.nvd import NvdConnector
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+
+        return NvdConnector(
+            transport=FakeTransport(script=list(script)),
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=lambda _s: None),
+            retry=RetryPolicy(attempts=1),
+            sleep=lambda _s: None,
+            origin=Origin.FIXTURE,
+            page_size=2,
+        )
+
+    def _window(self):
+        from datetime import datetime, timedelta, timezone
+
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from vuln_intel.sync import SyncWindow
+
+        return SyncWindow(start=start, end=start + timedelta(days=1))
+
+    def _page(self, count):
+        def entry(index):
+            return {
+                "cve": {
+                    "id": f"CVE-2026-{index:04d}",
+                    "published": "2026-01-01T00:00:00.000",
+                    "lastModified": "2026-01-01T00:00:00.000",
+                    "descriptions": [{"lang": "en", "value": "x"}],
+                    "metrics": {},
+                    "weaknesses": [],
+                    "references": [],
+                }
+            }
+
+        return {
+            "resultsPerPage": count,
+            "startIndex": 0,
+            "totalResults": count,
+            "vulnerabilities": [entry(i) for i in range(count)],
+        }
+
+    def test_full_page_is_not_exhausted(self):
+        from vuln_intel.assembly import nvd_window_fetcher
+
+        connector = self._nvd(response(self._page(2)))
+        records, exhausted, error = nvd_window_fetcher(connector)(
+            self._window(), start_index=0, page_size=2
+        )
+        assert len(records) == 2
+        assert exhausted is False
+        assert error is None
+
+    def test_short_page_is_exhausted(self):
+        from vuln_intel.assembly import nvd_window_fetcher
+
+        connector = self._nvd(response(self._page(1)))
+        records, exhausted, error = nvd_window_fetcher(connector)(
+            self._window(), start_index=0, page_size=2
+        )
+        assert len(records) == 1
+        assert exhausted is True
+        assert error is None
+
+    def test_failed_page_reports_an_error_not_an_empty_window(self):
+        """Otherwise the checkpoint advances over data that was never read."""
+        from vuln_intel.assembly import nvd_window_fetcher
+
+        connector = self._nvd(response({"message": "forbidden"}, status=403))
+        records, exhausted, error = nvd_window_fetcher(connector)(
+            self._window(), start_index=0, page_size=2
+        )
+        assert records == ()
+        assert exhausted is False
+        assert error is not None
+
+    def test_window_bounds_are_sent_with_every_request(self):
+        from vuln_intel.assembly import nvd_window_fetcher
+
+        transport = FakeTransport(script=[response(self._page(1))])
+        from vuln_intel.connectors.nvd import NvdConnector
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+
+        connector = NvdConnector(
+            transport=transport,
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=lambda _s: None),
+            retry=RetryPolicy(attempts=1),
+            sleep=lambda _s: None,
+            origin=Origin.FIXTURE,
+        )
+        nvd_window_fetcher(connector)(self._window(), start_index=0, page_size=100)
+        params = transport.calls[0]["params"]
+        assert "lastModStartDate" in params
+        assert "lastModEndDate" in params
+
+    def test_drives_incremental_sync_end_to_end(self):
+        """The fetcher plus a real sync run advances a checkpoint."""
+        from vuln_intel.assembly import nvd_window_fetcher
+        from vuln_intel.sync import IncrementalSync
+
+        class Store:
+            def __init__(self):
+                self.saved = []
+
+            def load(self, source):
+                return None
+
+            def save(self, checkpoint):
+                self.saved.append(checkpoint)
+
+        store = Store()
+        connector = self._nvd(response(self._page(1)))
+        sync = IncrementalSync(
+            source="nvd",
+            fetch=nvd_window_fetcher(connector),
+            store=store,
+            page_size=2,
+            max_pages_per_window=1,
+        )
+        outcome = sync.run()
+        assert outcome.records
+        assert store.saved  # the checkpoint advanced only after a completed window
