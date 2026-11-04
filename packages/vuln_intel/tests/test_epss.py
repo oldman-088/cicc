@@ -238,16 +238,20 @@ class TestEpssConnector:
             connector.fetch([self._cve()])
 
     def test_unrequested_cve_in_the_response_raises(self):
-        """Guards against attributing a score to the wrong identifier."""
+        """Guards against attributing a score to the wrong identifier.
+
+        Reported as a SourceResponseError: it is a provider data fault, not a
+        caller error, so callers must be able to degrade on it.
+        """
         from tests.conftest import response
-        from vuln_intel.errors import ValidationError
+        from vuln_intel.errors import SourceResponseError
 
         wrong = dict(
             self.PAYLOAD,
             data=[dict(self.PAYLOAD["data"][0], cve="CVE-2024-0000")],
         )
         connector, _ = self._connector(response(wrong))
-        with pytest.raises(ValidationError):
+        with pytest.raises(SourceResponseError):
             connector.fetch([self._cve()])
 
     def test_large_request_is_split_into_bounded_batches(self):
@@ -280,3 +284,83 @@ class TestEpssConnector:
         from vuln_intel.connectors import epss
 
         assert epss.LIVE_PROVIDER_AVAILABLE is False
+
+
+class TestEpssPipelineIsolation:
+    """Malformed provider data must degrade, never abort an enrichment run.
+
+    `ValidationError` signals a caller/programming fault and is deliberately not
+    caught by the pipeline's EPSS handling, which degrades on `SourceError`. A
+    corrupt *row* is a data fault, so the client must not translate it into a
+    ValidationError — doing so crashed an entire run because one CVE carried an
+    out-of-range score.
+    """
+
+    BAD = {
+        "status": "OK",
+        "version": "1.0",
+        "data": [
+            {
+                "cve": "CVE-2026-0001",
+                "epss": "9.99",  # outside 0..1
+                "percentile": "0.5",
+                "date": "2025-03-14",
+            }
+        ],
+    }
+
+    def _client(self, payload):
+        from tests.conftest import FakeTransport, no_wait, response
+        from vuln_intel.connectors.epss import EpssConnector
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+
+        return EpssConnector(
+            transport=FakeTransport(script=[response(payload)]),
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=no_wait),
+            retry=RetryPolicy(attempts=1),
+            sleep=no_wait,
+            origin="fixture",
+        )
+
+    def test_corrupt_row_raises_source_error_not_validation_error(self):
+        from vuln_intel.errors import SourceError, ValidationError
+        from vuln_intel.schema import CveId
+
+        client = self._client(self.BAD)
+        with pytest.raises(SourceError):
+            client.fetch([CveId.parse("CVE-2026-0001")])
+        # And specifically not the type the pipeline treats as a bug.
+        try:
+            client.fetch([CveId.parse("CVE-2026-0001")])
+        except ValidationError:  # pragma: no cover
+            raise AssertionError(
+                "data faults must not surface as ValidationError"
+            ) from None
+        except SourceError:
+            pass
+
+    def test_pipeline_degrades_instead_of_crashing(self):
+        from tests import fixtures as fx
+        from tests.conftest import FakeTransport, no_wait, response
+        from vuln_intel.assembly import osv_collector
+        from vuln_intel.connectors.osv import OsvConnector
+        from vuln_intel.pipeline import EnrichmentPipeline
+        from vuln_intel.ratelimit import RateGate
+        from vuln_intel.retry import RetryPolicy
+        from vuln_intel.schema import Origin
+
+        osv = OsvConnector(
+            transport=FakeTransport(script=[response(fx.OSV_CVE)]),
+            gate=RateGate(min_interval=0.0, clock=lambda: 0.0, sleep=no_wait),
+            retry=RetryPolicy(attempts=1),
+            sleep=no_wait,
+            origin=Origin.FIXTURE,
+        )
+        report = EnrichmentPipeline(epss_provider=self._client(self.BAD)).run(
+            {"osv": osv_collector(osv, ["GHSA-0000-aaaa-bbbb"])}
+        )
+        assert len(report.records) == 1
+        # EPSS excluded, and explicitly recorded as unavailable rather than zero.
+        assert report.records[0].epss_score is None
+        assert any("EPSS unavailable" in warning for warning in report.warnings)

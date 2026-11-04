@@ -365,11 +365,22 @@ class EpssConnector:
             body = response.json()
             if not isinstance(body, Mapping):
                 raise SourceResponseError("EPSS body is not an object", source="epss")
-            return parse_epss_response(
-                body,
-                origin=self.origin,
-                requested=[CveId.parse(item) for item in batch],
-            )
+            try:
+                return parse_epss_response(
+                    body,
+                    origin=self.origin,
+                    requested=[CveId.parse(item) for item in batch],
+                )
+            except ValidationError as exc:
+                # A malformed row is a *data* fault, not a caller error, so it must
+                # not escape as ValidationError: callers treat that as a programming
+                # bug, and the pipeline's EPSS handling only degrades on SourceError.
+                # Letting it out crashed an entire enrichment run because one CVE
+                # carried an out-of-range score.
+                raise SourceResponseError(
+                    f"EPSS returned data this client cannot accept: {exc}",
+                    source="epss",
+                ) from exc
 
         return call_with_retry(
             attempt, policy=self.retry, sleep=self.sleep or time.sleep
