@@ -493,6 +493,8 @@ class OsvConnector:
         self, body: Mapping[str, Any], *, fetched_at: datetime
     ) -> tuple[NormalizedVulnerability | None, AdvisoryOnly]:
         """Normalize one OSV object. Pure function of its inputs (no I/O)."""
+        if not isinstance(body, Mapping):
+            raise ValidationError("OSV record body must be an object", field="body")
         advisory_id = coerce_text(body.get("id"), field_name="id", limit=200)
         if not advisory_id:
             raise ValidationError("OSV record has no id", field="id")
