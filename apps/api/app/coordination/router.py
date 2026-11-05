@@ -25,7 +25,7 @@ from sqlalchemy import select
 
 from app import models, ops
 from app.ratelimit import read_token_dependency, require_write_token, write_rate_limit_dependency
-from . import agents as agent_registry
+from . import agents as agent_registry, amendments
 from . import approvals, contract, github_sync, handoff, registry, routing, webhook
 
 router = APIRouter(prefix="/api/v1/coordination", tags=["coordination"])
@@ -119,8 +119,97 @@ async def github_webhook(
 
 @router.get("/contract")
 def contract_descriptor(_gate: None = Depends(read_token_dependency)):
-    """Machine-readable contract v1.0 self-description (M18, additive, read-only)."""
-    return contract.contract_v1()
+    """Machine-readable contract self-description (base v1.0, additive,
+    read-only). M29: includes effective version + amendment registry summary."""
+    with ops.SessionLocal() as s:
+        desc = contract.contract_v1()
+        desc["version"] = amendments.effective_version(s, desc.get("version", "1.0"))
+        desc["amendments"] = {
+            "base_version": "1.0",
+            "effective_version": desc["version"],
+            "pending": amendments.list_amendments(s, "pending"),
+            "accepted": amendments.list_amendments(s, "accepted"),
+            "rejected": amendments.list_amendments(s, "rejected"),
+        }
+        return desc
+
+
+class AmendmentIn(BaseModel):
+    amendment_id: str
+    title: str
+    description: str
+    proposed_by: str
+    affects: list[str] = []
+    compatibility: dict = {}
+    target_version: str | None = None
+
+
+class AmendmentDecisionIn(BaseModel):
+    decision: str  # accept | reject
+    decided_by: str
+    note: str | None = None
+    linked_refs: list[str] = []
+
+
+@router.post("/contract/amendments", status_code=201)
+def propose_amendment(body: AmendmentIn, _gate: None = Depends(read_token_dependency),
+                      authorization: str | None = Header(default=None)):
+    """M29: propose a contract amendment (recorded, pending owner review)."""
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        try:
+            row = amendments.propose(s, amendment_id=body.amendment_id, title=body.title,
+                                     description=body.description, proposed_by=body.proposed_by,
+                                     affects=body.affects, compatibility=body.compatibility,
+                                     target_version=body.target_version)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        s.commit()
+        return row
+
+
+@router.get("/contract/amendments")
+def list_amendments_api(status: str | None = Query(None), _gate: None = Depends(read_token_dependency)):
+    with ops.SessionLocal() as s:
+        return {"amendments": amendments.list_amendments(s, status)}
+
+
+@router.get("/contract/amendments/{amendment_id}")
+def get_amendment_api(amendment_id: str, _gate: None = Depends(read_token_dependency)):
+    with ops.SessionLocal() as s:
+        row = amendments.get(s, amendment_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="amendment_not_found")
+        return row
+
+
+@router.post("/contract/amendments/{amendment_id}/decide")
+def decide_amendment_api(amendment_id: str, body: AmendmentDecisionIn,
+                         _gate: None = Depends(read_token_dependency),
+                         authorization: str | None = Header(default=None)):
+    """M29: accept/reject an amendment. Approver-only, guarded CAS (loser 409)."""
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        r = amendments.decide(s, amendment_id, body.decision, body.decided_by,
+                              body.note, body.linked_refs)
+        s.commit()
+    if not r.get("ok"):
+        raise HTTPException(status_code=r["code"], detail=r["reason"])
+    return r
+
+
+@router.post("/contract/amendments/{amendment_id}/refs")
+def attach_amendment_refs(amendment_id: str, body: dict,
+                          _gate: None = Depends(read_token_dependency),
+                          authorization: str | None = Header(default=None)):
+    """M29: attach implementation refs (commits/PRs) for traceability."""
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        r = amendments.attach_refs(s, amendment_id, body.get("refs", []))
+        s.commit()
+    if not r.get("ok"):
+        raise HTTPException(status_code=r["code"], detail=r["reason"])
+    return r
 
 
 @router.get("/events")

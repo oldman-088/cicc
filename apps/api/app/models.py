@@ -351,6 +351,29 @@ class CoordinationApproval(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class CoordinationAmendment(Base):
+    """M29: cross-owner contract amendment proposal (auditable workflow).
+    Lifecycle: pending -> accepted|rejected (decided only by configured
+    approvers). Proposals never change the live contract by themselves."""
+
+    __tablename__ = "coord_amendments"
+
+    id = Column(Integer, primary_key=True)
+    amendment_id = Column(String(64), unique=True, index=True)  # slug, e.g. AMD-001
+    title = Column(String(256))
+    description = Column(Text)
+    affects = Column(Text, nullable=True)          # JSON list of contract keys affected
+    compatibility = Column(Text, nullable=True)    # JSON: {backward_compatible, notes, consumers_checked}
+    target_version = Column(String(16), nullable=True)  # e.g. 1.1
+    proposed_by = Column(String(128))
+    status = Column(String(16), default="pending", index=True)  # pending|accepted|rejected
+    decided_by = Column(String(128), nullable=True)
+    decision_note = Column(Text, nullable=True)
+    linked_refs = Column(Text, nullable=True)      # JSON list: commits/PRs implementing it
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class CoordinationDelivery(Base):
     """Delivery history record (M7): one row per delivery attempt. A task is
     DELIVERING only while a record is unconfirmed; publisher confirms update

@@ -243,3 +243,21 @@ def test_pg_ack_races_lease_recovery(pg_app, monkeypatch):
     sev = _state_events(pg_app, "m28-ar")
     assert t["state"].lower() == sev[0]["kind"].split("->")[-1].lower()
     assert t["state"].lower() in ("queued", "acknowledged")
+
+
+def test_pg_concurrent_amendment_decision_single_winner(pg_app):
+    """Real PG: 8 threads race accept/reject on one pending amendment — guarded
+    CAS lets exactly one decision apply; the rest get 409."""
+    from app.coordination import amendments
+    with ops.SessionLocal() as s:
+        amendments.propose(s, amendment_id="AMD-PG", title="t", description="d", proposed_by="agent-1")
+        s.commit()
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = [ex.submit(pg_app.post, "/api/v1/coordination/contract/amendments/AMD-PG/decide",
+                          json={"decision": "accept" if i % 2 == 0 else "reject", "decided_by": "owner"}, headers=W)
+                for i in range(8)]
+        rs = [f.result() for f in futs]
+    assert sum(1 for r in rs if r.status_code == 200) == 1
+    assert all(r.status_code in (200, 409) for r in rs), [r.status_code for r in rs]
+    a = pg_app.get("/api/v1/coordination/contract/amendments/AMD-PG", headers=R).json()
+    assert a["status"] in ("accepted", "rejected") and a["decided_by"] == "owner"

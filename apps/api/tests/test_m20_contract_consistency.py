@@ -227,3 +227,47 @@ def test_m28_task_trace_endpoint(client):
     assert kinds[0] == "created" and any(k.startswith("state:") for k in kinds)
     assert isinstance(tr["deliveries"], list) and len(tr["deliveries"]) >= 1
     assert client.get("/api/v1/coordination/tasks/nope/trace", headers=R).status_code == 404
+
+
+def _amd(aid="AMD-001", **kw):
+    body = {"amendment_id": aid, "title": "t", "description": "d", "proposed_by": "agent-1",
+            "affects": ["TaskDTO"], "compatibility": {"backward_compatible": True, "notes": "additive field"},
+            "target_version": "1.1"}
+    body.update(kw)
+    return body
+
+
+def test_m29_amendment_flow_propose_decide_trace(client):
+    """M29: amendments are proposed (pending), approver-only decisions, guarded
+    against duplicates; contract endpoint exposes the registry + effective version."""
+    r = client.post("/api/v1/coordination/contract/amendments", json=_amd(), headers=W)
+    assert r.status_code == 201 and r.json()["status"] == "pending"
+    # duplicate id rejected
+    assert client.post("/api/v1/coordination/contract/amendments", json=_amd(), headers=W).status_code == 422
+    # non-approver cannot decide
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-001/decide",
+                    json={"decision": "accept", "decided_by": "random"}, headers=W)
+    assert r.status_code == 403
+    # approver accepts with linked refs
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-001/decide",
+                    json={"decision": "accept", "decided_by": "owner", "linked_refs": ["PR#4@a85845b"]}, headers=W)
+    assert r.status_code == 200 and r.json()["status"] == "accepted"
+    # duplicate decision loses (409)
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-001/decide",
+                    json={"decision": "reject", "decided_by": "owner"}, headers=W)
+    assert r.status_code == 409
+    # contract exposes amendments + effective version
+    c = client.get("/api/v1/coordination/contract", headers=R).json()
+    assert c["amendments"]["accepted"][0]["amendment_id"] == "AMD-001"
+    assert c["version"] == "1.1"
+    assert c["amendments"]["accepted"][0]["linked_refs"] == ["PR#4@a85845b"]
+    # list + get + refs attach
+    assert len(client.get("/api/v1/coordination/contract/amendments", headers=R).json()["amendments"]) == 1
+    assert client.get("/api/v1/coordination/contract/amendments/AMD-001", headers=R).json()["status"] == "accepted"
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-001/refs", json={"refs": ["PR#7@117181f8"]}, headers=W)
+    assert r.status_code == 200 and "PR#7@117181f8" in r.json()["linked_refs"]
+    # write requires write token
+    assert client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-002")).status_code in (401, 403)
+    # bad slug / missing fields -> 422
+    assert client.post("/api/v1/coordination/contract/amendments", json=_amd("bad slug!"), headers=W).status_code == 422
+    assert client.get("/api/v1/coordination/contract/amendments/NOPE", headers=R).status_code == 404
