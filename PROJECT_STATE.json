@@ -19,7 +19,7 @@
         "DAG",
         "sweep"
       ],
-      "tests": "API 185/185 (7 real-PG + 1 live-GitHub, incl. 6 threaded-concurrency tests); contract_check 31/31 live; E2E 22/22 live"
+      "tests": "API 191/191 (9 real-PG incl. 2 PG-concurrency + 1 live-GitHub, incl. 10 threaded SQLite tests); contract_check 31/31 live; E2E 22/22 live"
     },
     "ops": {
       "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,7 +43,7 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M24"
+    "M1..M25"
   ],
   "contracts": {
     "version": "v1.0",
@@ -89,13 +89,15 @@
     "2": "744ccd3",
     "3": "1a46f70",
     "6": "a221003",
-    "checked": "2026-11-05T12:02Z"
+    "7": "6bf5f7f",
+    "checked": "2026-11-05T12:16Z"
   },
   "adoption": {
-    "agent2": "PENDING (primary TI owner)",
-    "agent6": "backup TI active (PR#6 a221003, owner-confirmed takeover); no coordination refs yet",
-    "agent3": "PENDING",
-    "agent4": "PARTIALLY COMPATIBLE \u2014 proxy code + verified-compatible surface; execution UNVERIFIED"
+    "agent2": "PENDING (primary TI)",
+    "agent6": "PENDING (authorized backup TI, PR#6)",
+    "agent3": "PENDING (PR#1)",
+    "agent4": "PR#2 code-level reads, surface verified compatible",
+    "backup_agent4": "PR#7 @6bf5f7f adopts canonical AgentDTO in code (AGENT-REPORTED); execution UNVERIFIED"
   },
-  "cross_agent_execution": "NONE (UNVERIFIED) \u2014 fixtures and read-only review only"
+  "cross_agent_execution": "NONE (UNVERIFIED) \u2014 controlled live-run evidence requested from Backup Agent 4 on PR #4"
 }

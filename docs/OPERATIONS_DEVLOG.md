@@ -302,3 +302,22 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   contract_check 31/31 @12:02:26Z; E2E 22/22 @12:02:29Z.
 - PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); cross-agent execution:
   NONE (UNVERIFIED). Master prompt README.md@main@ca8f82c unchanged.
+
+## 2026-11-05 — Milestone 25 (branch arena/961971ed-cicc, PR #4)
+
+- P1 concurrency expansion (real threads): test_m25_concurrency.py (4) —
+  webhook duplicate race 8x same delivery -> exactly 1 event row + 1 task;
+  approve/reject race -> exactly one decision wins (defect found & fixed:
+  approvals.decide now guarded compare-and-set, loser 409); concurrent
+  retry+fail -> legal final state + latest state event == persisted state;
+  sweep under load -> 10 RETRYING tasks requeued exactly once (2nd sweep no-op).
+- Real PostgreSQL concurrency (test_m25_pg_concurrency.py, 2, pgserver):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 applied,
+  exactly one state:RUNNING->COMPLETED event. PG concurrency claims rest on
+  these, not on SQLite tests.
+- P0: PR #7 = Backup Agent 4 takeover @6bf5f7f — canonical AgentDTO adopted
+  in code (AGENT-REPORTED), coordination reads via /api/integrations/*;
+  VISUAL_QA NOT YET EXECUTED (their own words). Controlled live-run evidence
+  request posted on PR #4. Real cross-agent execution: still NONE (UNVERIFIED).
+- API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc; contract_check
+  31/31 @12:16:11Z; E2E 22/22 @12:16:15Z. Master prompt unchanged @ca8f82c.

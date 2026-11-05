@@ -297,6 +297,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
 
+## Done — Milestone 25 (PR #4 update)
+
+- M25 P1: approval race fixed (guarded CAS); threaded tests: webhook dup
+  race, approve/reject race, retry+fail, sweep-under-load; REAL PG
+  concurrency tests (pgserver) — PG claims based on PG tests only.
+- M25 P0: first real cross-agent execution still NONE (UNVERIFIED) — Backup
+  Agent 4 (PR #7 @6bf5f7f) adopted canonical AgentDTO in code
+  (AGENT-REPORTED); controlled live-run evidence requested on PR #4 with the
+  7 required evidence items.
+- M25 P2: adoption table updated (2/3/6 PENDING; Agent 4 + Backup Agent 4
+  code-level, execution UNVERIFIED).
+- M25 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -533,6 +548,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M24 P8: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
+
+## Done — Milestone 25 (PR #4 update)
+
+- M25 P1: approval race fixed (guarded CAS); threaded tests: webhook dup
+  race, approve/reject race, retry+fail, sweep-under-load; REAL PG
+  concurrency tests (pgserver) — PG claims based on PG tests only.
+- M25 P0: first real cross-agent execution still NONE (UNVERIFIED) — Backup
+  Agent 4 (PR #7 @6bf5f7f) adopted canonical AgentDTO in code
+  (AGENT-REPORTED); controlled live-run evidence requested on PR #4 with the
+  7 required evidence items.
+- M25 P2: adoption table updated (2/3/6 PENDING; Agent 4 + Backup Agent 4
+  code-level, execution UNVERIFIED).
+- M25 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
 
 ## Next (backlog, priority order)
 
@@ -774,6 +804,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
 
+## Done — Milestone 25 (PR #4 update)
+
+- M25 P1: approval race fixed (guarded CAS); threaded tests: webhook dup
+  race, approve/reject race, retry+fail, sweep-under-load; REAL PG
+  concurrency tests (pgserver) — PG claims based on PG tests only.
+- M25 P0: first real cross-agent execution still NONE (UNVERIFIED) — Backup
+  Agent 4 (PR #7 @6bf5f7f) adopted canonical AgentDTO in code
+  (AGENT-REPORTED); controlled live-run evidence requested on PR #4 with the
+  7 required evidence items.
+- M25 P2: adoption table updated (2/3/6 PENDING; Agent 4 + Backup Agent 4
+  code-level, execution UNVERIFIED).
+- M25 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -1007,6 +1052,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
 
+## Done — Milestone 25 (PR #4 update)
+
+- M25 P1: approval race fixed (guarded CAS); threaded tests: webhook dup
+  race, approve/reject race, retry+fail, sweep-under-load; REAL PG
+  concurrency tests (pgserver) — PG claims based on PG tests only.
+- M25 P0: first real cross-agent execution still NONE (UNVERIFIED) — Backup
+  Agent 4 (PR #7 @6bf5f7f) adopted canonical AgentDTO in code
+  (AGENT-REPORTED); controlled live-run evidence requested on PR #4 with the
+  7 required evidence items.
+- M25 P2: adoption table updated (2/3/6 PENDING; Agent 4 + Backup Agent 4
+  code-level, execution UNVERIFIED).
+- M25 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -1237,6 +1297,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M24 P8: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
+
+## Done — Milestone 25 (PR #4 update)
+
+- M25 P1: approval race fixed (guarded CAS); threaded tests: webhook dup
+  race, approve/reject race, retry+fail, sweep-under-load; REAL PG
+  concurrency tests (pgserver) — PG claims based on PG tests only.
+- M25 P0: first real cross-agent execution still NONE (UNVERIFIED) — Backup
+  Agent 4 (PR #7 @6bf5f7f) adopted canonical AgentDTO in code
+  (AGENT-REPORTED); controlled live-run evidence requested on PR #4 with the
+  7 required evidence items.
+- M25 P2: adoption table updated (2/3/6 PENDING; Agent 4 + Backup Agent 4
+  code-level, execution UNVERIFIED).
+- M25 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
 
 ## Next (backlog, priority order)
 

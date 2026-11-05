@@ -188,6 +188,19 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
 - API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
 
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

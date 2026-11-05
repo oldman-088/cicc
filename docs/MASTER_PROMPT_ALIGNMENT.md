@@ -102,3 +102,10 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   real threaded concurrency; crash/restart recovery; TTL/timeout interplay;
   health model documented + surfaced in reference dashboard). Whole product
   ~30-40%; no real cross-agent execution; DoD §17 unmet -> not production-ready.
+
+## M25 re-confirmation (2026-11-05 ~12:16 UTC)
+- `main` still `ca8f82c`; `README.md` (v1.0) unchanged/unmodified. Agent 1
+  ~90% (M25: approval race fix, expanded threaded concurrency + real-PG
+  concurrency tests). Whole product ~30-40%; first real cross-agent execution
+  still NOT achieved (Backup Agent 4 adopted the DTO in code — AGENT-REPORTED —
+  but execution UNVERIFIED). DoD §17 unmet -> not production-ready.

@@ -190,3 +190,26 @@ miscount, **no key was removed or lost**; parity en==ar holds at every commit.
   Agent 4 (frontend, PR #2 744ccd3): PARTIALLY COMPATIBLE — proxy code calls
   the coordination reads; surface VERIFIED compatible live (M22); real
   persisted execution: UNVERIFIED (no live-run evidence yet).
+
+## M25 update (2026-11-05 ~12:16 UTC)
+
+- **PR #7 opened: Backup Agent 4 takeover @ `6bf5f7f`** (branch
+  arena/6a028355-cicc; baseline = merge of PR #2 @744ccd3 + takeover commits).
+  PR #7's code **adopts the canonical AgentDTO** (agent, specialization,
+  capabilities, status, stale, health, version, meta, last_heartbeat,
+  registered_at, active_tasks, completed, failed, retries, by_state) and
+  rejects the obsolete aliases — AGENT-REPORTED contract adoption of v1.0 by
+  the active frontend owner. Its proxy calls coordination reads via
+  /api/integrations/coordination/*. Its VISUAL_QA.md states NOT YET EXECUTED —
+  so real execution remains UNVERIFIED; a controlled live-run evidence request
+  was posted on PR #4 (M25 comment).
+- PR heads: #1 84fca76 (Agent 3), #2 744ccd3 (Agent 4, untouched),
+  #3 1a46f70 (Agent 2 primary), #6 a221003 (Agent 6 backup TI),
+  #7 6bf5f7f (Backup Agent 4). No new comments besides Agent 1's.
+- Adoption table: Agent 2 PENDING; Agent 6 PENDING; Agent 3 PENDING;
+  Agent 4 (PR #2) code-level reads + verified-compatible surface;
+  Backup Agent 4 (PR #7) canonical-DTO adoption in code (AGENT-REPORTED),
+  execution UNVERIFIED.
+- M25 concurrency: approval decide race fixed (guarded compare-and-set);
+  threaded tests for webhook duplicate race, approve/reject race,
+  retry+fail race, sweep-under-load; real-PG concurrency tests (pgserver).

@@ -16,7 +16,7 @@ Never silently executes: WAITING_FOR_APPROVAL tasks are not deliverable.
 import os
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app import models
 from . import registry
@@ -78,7 +78,20 @@ def decide(s, task_id: str, decision: str, decided_by: str) -> dict | None:
         ap.status = "expired"
         registry.record_event(s, task_id, "approval_expired", "")
         return {"ok": False, "code": 410, "reason": "approval expired"}
-    ap.status = "approved" if decision == "approve" else "rejected"
+    # M25: guarded compare-and-set on the pending approval — concurrent
+    # approve/reject races: exactly one decision wins, the loser gets 409
+    new_status = "approved" if decision == "approve" else "rejected"
+    res = s.execute(
+        update(models.CoordinationApproval)
+        .where(models.CoordinationApproval.task_id == task_id)
+        .where(models.CoordinationApproval.status == "pending")
+        .values(status=new_status, decided_by=decided_by, decided_at=now),
+        execution_options={"synchronize_session": False},
+    )
+    if res.rowcount != 1:
+        s.rollback()
+        return {"ok": False, "code": 409, "reason": "no pending approval for task (concurrent decision)"}
+    ap.status = new_status
     ap.decided_by = decided_by
     ap.decided_at = now
     if decision == "approve":
