@@ -117,28 +117,61 @@ _PEP440 = re.compile(
 
 _PRE_ORDER = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "c": 2, "rc": 2, "pre": 2, "preview": 2}
 
-#: Maven qualifier ranks on the same scale as "2 x numeric value", so that a
-#: missing component (rank 0) compares equal to numeric zero and to the release
-#: qualifier, above every pre-release qualifier and below ``sp``.  This mirrors
-#: Maven's ComparableVersion, where ``1.0-alpha < 1.0 == 1.0.0 < 1.0.1 < 1.0-sp1``.
-_MAVEN_QUALIFIERS = {
-    "alpha": -8,
-    "a": -8,
-    "beta": -6,
-    "b": -6,
-    "milestone": -4,
-    "m": -4,
-    "cr": -3,
-    "rc": -3,
-    "snapshot": -1,
-    "": 0,
-    "ga": 0,
-    "final": 0,
-    "release": 0,
-    "sp": 1,
-}
+#: Maven's qualifier order, from ``ComparableVersion.StringItem.QUALIFIERS``.
+#: The index *is* the rank, and ``""`` (the release qualifier) sits between ``rc``
+#: and ``sp`` — which is what makes ``1-rc < 1 < 1-sp`` true.
+_MAVEN_QUALIFIERS: tuple[str, ...] = (
+    "snapshot", "alpha", "beta", "milestone", "rc", "", "sp"
+)
+#: Qualifier aliases, from ``StringItem.ALIASES``.
+_MAVEN_ALIASES = {"ga": "", "final": "", "cr": "rc"}
 
-#: Unknown qualifiers rank below everything except alpha, as in Maven.
+_M_INT = "i"
+_M_STR = "s"
+_M_LIST = "l"
+
+
+def _maven_qualifier_key(qualifier: str) -> str:
+    """``ComparableVersion.comparableQualifier``: rank by name, else after all known.
+
+    A known qualifier maps to its index as a decimal *string*; anything unknown maps
+    to ``"7-<text>"``, which sorts after every known rank and then compares by text.
+    Kept as a string because Java compares the string form, and because ``"10"`` must
+    not sort before ``"9"``.
+    """
+    try:
+        return str(_MAVEN_QUALIFIERS.index(qualifier))
+    except ValueError:
+        return f"{len(_MAVEN_QUALIFIERS)}-{qualifier}"
+
+
+_RELEASE_QUALIFIER_INDEX = str(_MAVEN_QUALIFIERS.index(""))
+
+
+def _maven_is_null(item: tuple[object, ...]) -> bool:
+    """``Item.isNull``: zero integer, the release qualifier, or an empty list."""
+    kind = item[0]
+    if kind == _M_INT:
+        return item[1] == 0
+    if kind == _M_STR:
+        return _maven_qualifier_key(str(item[1])) == _RELEASE_QUALIFIER_INDEX
+    return not item[1]
+
+
+def _maven_normalize(items: list[tuple[object, ...]]) -> None:
+    """``ListItem.normalize``: drop *trailing* null items, so ``1.0-* == 1-*``."""
+    while items and _maven_is_null(items[-1]):
+        items.pop()
+
+
+def _maven_string_item(text: str, followed_by_digit: bool) -> tuple[object, ...]:
+    """``new StringItem(value, followedByDigit)``."""
+    if followed_by_digit and len(text) == 1:
+        # a1 = alpha-1, b1 = beta-1, m1 = milestone-1
+        text = {"a": "alpha", "b": "beta", "m": "milestone"}.get(text, text)
+    return (_M_STR, _MAVEN_ALIASES.get(text, text))
+
+
 _MAVEN_UNKNOWN_QUALIFIER = -9
 
 
@@ -519,22 +552,140 @@ def _debian_parts(parsed: ParsedVersion) -> tuple[int, str, str]:
 
 
 def _parse_maven(raw: str) -> ParsedVersion | None:
-    text = raw.strip().lower()
+    """Parse a Maven version into ``ComparableVersion``'s nested item structure.
+
+    A flat ranked token list cannot express Maven's ordering: a ``-`` followed by a
+    digit opens a *sublist* (``1-1``), which is a different shape from a dotted
+    number (``1.1``), and the qualifier comparison is against ordered list contents
+    rather than a single scalar.  Ranking instead produced 96 wrong comparisons
+    against Apache's own ``ComparableVersionTest``, including ``2.0.1 == 2.0.1-xyz``
+    where Maven says ``2.0.1 < 2.0.1-xyz``.
+    """
+    text = raw.strip()
     if not text:
         return None
-    tokens = [t for t in re.split(r"[._\-+]", text) if t]
-    out: list[int] = []
-    for token in tokens:
-        for sub in re.findall(r"\d+|[a-z]+", token):
-            if sub.isdigit():
-                out.append(int(sub) * 2)
+    key = _maven_parse_version(text)
+    prerelease = any(character.isalpha() for character in text)
+    return ParsedVersion(raw, VersionScheme.MAVEN, key, prerelease)
+
+
+def _maven_parse_version(version: str) -> tuple[object, ...]:
+    """Transcription of ``ComparableVersion.parseVersion``."""
+    root: list[tuple[object, ...]] = []
+    current = root
+    lists: list[list[tuple[object, ...]]] = [root]
+    stack: list[list[tuple[object, ...]]] = []
+    text = version.lower()
+
+    def parse_item(is_digit: bool, buf: str) -> tuple[object, ...]:
+        if is_digit:
+            return (_M_INT, int(buf))
+        return _maven_string_item(buf, False)
+
+    is_digit = False
+    start = 0
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char in ".-":
+            if index == start:
+                current.append((_M_INT, 0))
             else:
-                out.append(_MAVEN_QUALIFIERS.get(sub, _MAVEN_UNKNOWN_QUALIFIER))
-    if not out:
-        return None
-    return ParsedVersion(
-        raw, VersionScheme.MAVEN, tuple(out), any(q == "snapshot" for q in tokens)
-    )
+                current.append(parse_item(is_digit, text[start:index]))
+            start = index + 1
+            if char == "-" and is_digit:
+                _maven_normalize(current)  # 1.0-* = 1-*
+                if index + 1 < len(text) and text[index + 1].isdigit():
+                    # A new sublist only when the previous token was numeric *and*
+                    # a digit follows: that is what separates 1.1 from 1-1.
+                    sublist: list[tuple[object, ...]] = []
+                    lists.append(sublist)
+                    current.append((_M_LIST, sublist))
+                    stack.append(current)
+                    current = sublist
+        elif char.isdigit():
+            if not is_digit and index > start:
+                current.append(_maven_string_item(text[start:index], True))
+                start = index
+            is_digit = True
+        else:
+            if is_digit and index > start:
+                current.append(parse_item(True, text[start:index]))
+                start = index
+            is_digit = False
+        index += 1
+
+    if len(text) > start:
+        current.append(parse_item(is_digit, text[start:]))
+
+    # Normalise every list bottom-up, then freeze the live sublists into tuples.
+    for sublist in reversed(lists):
+        _maven_normalize(sublist)
+    return _M_LIST, tuple(_maven_freeze(root))
+
+
+def _maven_freeze(items: list[tuple[object, ...]]) -> list[tuple[object, ...]]:
+    """Replace live sublist references with immutable tuples, recursively."""
+    frozen: list[tuple[object, ...]] = []
+    for item in items:
+        if item[0] == _M_LIST:
+            frozen.append((_M_LIST, tuple(_maven_freeze(item[1]))))  # type: ignore[arg-type]
+        else:
+            frozen.append(item)
+    return frozen
+
+
+def _maven_item_compare(
+    item: tuple[object, ...], other: tuple[object, ...] | None
+) -> int:
+    """``Item.compareTo``; ``other=None`` is Java's "end of list" comparison."""
+    kind = item[0]
+    if other is None:
+        if kind == _M_INT:
+            return 0 if item[1] == 0 else 1  # 1.0 == 1, 1.1 > 1
+        if kind == _M_STR:
+            rank = _maven_qualifier_key(str(item[1]))
+            return (rank > _RELEASE_QUALIFIER_INDEX) - (rank < _RELEASE_QUALIFIER_INDEX)
+        contents = item[1]
+        if not contents:
+            return 0  # 1-0 = 1- (normalize) = 1
+        return _maven_item_compare(contents[0], None)  # type: ignore[index]
+
+    other_kind = other[0]
+    if kind == _M_INT:
+        if other_kind == _M_INT:
+            left_number, right_number = item[1], other[1]
+            return (left_number > right_number) - (left_number < right_number)  # type: ignore[operator]
+        return 1  # 1.1 > 1-sp, 1.1 > 1-1
+    if kind == _M_STR:
+        if other_kind == _M_INT:
+            return -1  # 1.any < 1.1
+        if other_kind == _M_STR:
+            left_rank = _maven_qualifier_key(str(item[1]))
+            right_rank = _maven_qualifier_key(str(other[1]))
+            return (left_rank > right_rank) - (left_rank < right_rank)
+        return -1  # 1.any < 1-1
+    if other_kind == _M_INT:
+        return -1  # 1-1 < 1.0.x
+    if other_kind == _M_STR:
+        return 1  # 1-1 > 1-sp
+
+    # Both sides are LIST items here, so their payloads are segment tuples. Names are
+    # distinct from the scalar branches above so the types never collide.
+    list_left: tuple[tuple[object, ...], ...] = item[1]  # type: ignore[assignment]
+    list_right: tuple[tuple[object, ...], ...] = other[1]  # type: ignore[assignment]
+    left_len, right_len = len(list_left), len(list_right)
+    for position in range(max(left_len, right_len)):
+        left_item = list_left[position] if position < left_len else None
+        right_item = list_right[position] if position < right_len else None
+        if left_item is None:
+            assert right_item is not None
+            result = -_maven_item_compare(right_item, None)
+        else:
+            result = _maven_item_compare(left_item, right_item)
+        if result:
+            return result
+    return 0
 
 
 _GO_PSEUDO = re.compile(r"^\d{14}-[0-9a-f]{12}$")
@@ -586,68 +737,73 @@ _RUBYGEMS_PATTERN = re.compile(
 _RUBYGEMS_STRING = 0
 _RUBYGEMS_NUMERIC = 1
 
-#: Segment separators in a canonicalised gem version.
-_RUBYGEMS_SEGMENT = re.compile(r"[.\-]|(?<=[0-9])(?=[a-zA-Z])|(?<=[a-zA-Z])(?=[0-9])")
+#: Canonicalisation patterns, transcribed from ``Gem::Version#canonical_segments``.
+#: 1. remove a trailing run of dots/zeros anchored on a letter or dot;
+#: 2. remove a leading run of dots/zeros immediately before the first letter.
+_RUBYGEMS_TRAILING_ZEROS = re.compile(r"(?<=[a-zA-Z.])[.0]+\Z")
+_RUBYGEMS_LEADING_ZEROS = re.compile(r"(?:^|(?<=\.))[.0]+(?=[a-zA-Z])")
+_RUBYGEMS_LETTER = re.compile(r"[a-zA-Z]")
+#: Maximal digit and letter runs, exactly as Ruby's ``ver.scan(/\d+|[a-z]+/i)``.
+_RUBYGEMS_SEGMENT = re.compile(r"\d+|[a-zA-Z]+")
 
 
 def _parse_rubygems(raw: str) -> ParsedVersion | None:
     """Parse a gem version into canonical segments, per RubyGems' ``Gem::Version``.
 
-    The algorithm, taken from RubyGems' own documentation and ``canonical_segments``:
+    This is a transcription of ``Gem::Version#canonical_segments`` and
+    ``Gem::Version#<=>`` from ``lib/rubygems/version.rb``, not an approximation of
+    them.  The algorithm, in RubyGems' own order:
 
-    * a ``-`` is read as ``.pre.``, so SemVer-style ``1.0.0-rc1`` becomes
-      ``1.0.0.pre.rc1``;
-    * segments are split at dots *and* at digit/letter boundaries, so ``beta10``
-      becomes ``"beta"``, ``10``;
-    * trailing zero segments are dropped, so ``1.0`` and ``1.0.0`` are the same
-      version;
-    * the version is a prerelease if it contains any letter.
+    1. ``-`` is rewritten to ``.pre.``, so ``1.0.0-rc1`` becomes ``1.0.0.pre.rc1``;
+    2. a trailing run of dots/zeros is removed (``1.0.0`` -> ``1``);
+    3. **for a prerelease only**, a leading run of dots/zeros is removed from before
+       the first letter (``0.beta.1`` and ``0.0.beta.1`` both canonicalise to
+       ``["beta", 1]``);
+    4. the remainder is split into maximal digit and letter runs, digits becoming
+       integers and letters becoming **case-preserved** strings;
+    5. comparison is segment by segment, where a **string sorts below a numeric**
+       segment, and an exhausted side is padded with numeric zero.
 
-    Comparison then uses canonical segments where **a string segment always sorts
-    before a numeric one**, and missing segments read as ``0``.  That single rule is
-    what makes every prerelease sort below the release it leads up to::
+    Steps 3 and the case-preservation in step 4 were both missing.  With only step 2,
+    ``0.beta.1`` and ``0.0.beta.1`` compared **unequal**, where RubyGems reports them
+    equal; and lowercasing made ``1.A`` compare equal to ``1.a``, where RubyGems
+    reports ``1.A < 1.a`` — which, against a fix at ``1.a``, reported the vulnerable
+    ``1.A`` as clean.
 
-        1.0.0.alpha < 1.0.0.beta2 < 1.0.0.rc1 < 1.0.0 < 1.0.1 < 1.1.0.beta < 2.0.0
-
-    Keys are self-delimiting and tagged *string=0, numeric=1*, because RubyGems
-    orders ``String < Numeric`` at each position.  The tag alone therefore encodes
-    that rule, and a numeric segment still compares numerically inside its tag, so
+    Keys are tagged *string=0, numeric=1* because RubyGems orders ``String < Numeric``
+    at each position, and right-padded with numeric zero to reproduce
+    ``lhs[i] || 0``.  A numeric segment still compares numerically inside its tag, so
     ``1.0.10`` (``(1,10)``) correctly exceeds ``1.0.9`` (``(1,9)``).
-    :func:`_cmp_keys` then pads a missing tail with ``0`` to reproduce RubyGems'
-    ``lhs[i] || 0`` rule.
     """
     text = raw.strip()
     if not text or _RUBYGEMS_PATTERN.match(text) is None:
         return None
     if text.endswith("-") or text.startswith("-"):
         return None
+
     normalised = text.replace("-", ".pre.")
-    # Drop trailing zero segments, as canonical_segments does.  Anchored at the end
-    # so an internal "0" (as in 1.0.5) is never touched.
-    while True:
-        trimmed = re.sub(r"\.0+$", "", normalised)
-        if trimmed == normalised or "." not in trimmed:
-            normalised = trimmed
-            break
-        normalised = trimmed
-    parts = [part for part in _RUBYGEMS_SEGMENT.split(normalised) if part]
+    # Step 2: drop a trailing run of dots and zeros.
+    normalised = _RUBYGEMS_TRAILING_ZEROS.sub("", normalised)
+    # Step 3: a prerelease has its leading dot/zero run removed before the first
+    # letter, so that 0.beta.1 == 0.0.beta.1.
+    prerelease = _RUBYGEMS_LETTER.search(normalised) is not None
+    if prerelease:
+        normalised = _RUBYGEMS_LEADING_ZEROS.sub("", normalised, count=1)
+
+    parts = _RUBYGEMS_SEGMENT.findall(normalised)
     if not parts:
         return None
+
     segments: list[tuple[int, object]] = []
     for part in parts:
         if part.isdigit():
             segments.append((_RUBYGEMS_NUMERIC, int(part)))
         else:
-            segments.append((_RUBYGEMS_STRING, part.lower()))
-    while segments and segments[-1] == (_RUBYGEMS_NUMERIC, 0):
-        # Trailing zeros never affect ordering, and removing them makes "1.0" and
-        # "1.0.0" produce the same key rather than relying on the zero padding.
-        segments.pop()
-    prerelease = any(tag == _RUBYGEMS_STRING for tag, _ in segments)
-    # The key is right-padded with numeric zeros to a fixed width so that a missing
-    # segment always compares *below* a present one.  This is what makes a
-    # prerelease sort under its release: RubyGems compares `lhs[i] || 0`, and 0 is
-    # numeric while a prerelease segment is a string, so the string loses.
+            # Case is preserved: Ruby's /[a-z]+/i matches regardless of case but
+            # yields the original characters, so "A" < "a".
+            segments.append((_RUBYGEMS_STRING, part))
+    # Padding width: a missing segment reads as numeric zero.  ``segments`` is never
+    # truncated, so a version with more than eight segments simply has no padding.
     padded = tuple(segments) + ((_RUBYGEMS_NUMERIC, 0),) * (8 - len(segments))
     return ParsedVersion(raw, VersionScheme.RUBYGEMS, padded, prerelease)
 
@@ -683,20 +839,9 @@ def parse(raw: str | None, scheme: VersionScheme) -> ParsedVersion | None:
     return None
 
 
-#: What a missing Maven component compares as: numeric zero / the release qualifier.
-_MAVEN_PAD = 0
-
-
-def _maven_compare(a: tuple[object, ...], b: tuple[object, ...]) -> int:
-    """Maven's ComparableVersion rule: pad the shorter token list with zero."""
-    width = max(len(a), len(b))
-    for index in range(width):
-        left = a[index] if index < len(a) else _MAVEN_PAD
-        right = b[index] if index < len(b) else _MAVEN_PAD
-        result = (left > right) - (left < right)  # type: ignore[operator]
-        if result:
-            return result
-    return 0
+def _maven_compare(a: ParsedVersion, b: ParsedVersion) -> int:
+    """Compare two parsed Maven versions using Maven's own list comparison."""
+    return _maven_item_compare(a.key, b.key)
 
 
 def compare(left: str | None, right: str | None, scheme: VersionScheme) -> int | None:
@@ -712,7 +857,7 @@ def compare(left: str | None, right: str | None, scheme: VersionScheme) -> int |
     if scheme in (VersionScheme.DEBIAN, VersionScheme.RPM):
         return _debian_compare(a, b, scheme=scheme)
     if scheme is VersionScheme.MAVEN:
-        return _maven_compare(a.key, b.key)
+        return _maven_compare(a, b)
     return _cmp_keys(a.key, b.key)
 
 

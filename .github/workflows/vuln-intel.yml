@@ -83,3 +83,78 @@ jobs:
         # getaddrinfo for every test; tests/test_network_denial.py proves the guard
         # is active. This replaced a fragile grep for "HttpxTransport()".
         run: python -m pytest tests/test_network_denial.py -q
+
+  # ---------------------------------------------------------------------------
+  # Differential ("oracle") job
+  #
+  # Separate from `test` on purpose. The unit job deliberately installs only the
+  # test tooling, so the differential checks against external reference
+  # implementations SKIP there. A skipped cross-check is not evidence of
+  # correctness, and a green unit job must not be readable as one. This job
+  # installs every oracle it can and then FAILS if any of them is still missing,
+  # so a cross-check cannot disappear quietly.
+  #
+  # Licences of the reference tools:
+  #   packaging        Apache-2.0 OR BSD-2-Clause   (pip, already a pytest dep)
+  #   semantic_version BSD-3-Clause                 (pip)
+  #   rpm-vercmp       Apache-2.0                   (pip)
+  #   dpkg             GPL-2.0+                     (apt, preinstalled on ubuntu)
+  #   rpm              GPL-2.0-or-later             (apt, installed below)
+  # All are permissively licensed or GPL tools invoked as external binaries; none
+  # is vendored, and none is imported by the shipped package.
+  # ---------------------------------------------------------------------------
+  oracle:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/vuln_intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install reference tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8,<10"
+          # Pinned: the documented cross-check results are tied to these versions.
+          # A bump is a signal to re-run the audit, not an invisible behaviour change.
+          python -m pip install "packaging==26.3" "semantic_version==2.10.0" "rpm-vercmp==0.1.2"
+
+      - name: Install the real rpm binary (provides rpmvercmp incl. '^')
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends rpm
+
+      - name: Record oracle versions
+        # Written to the job summary so the evidence travels with the run.
+        run: |
+          {
+            echo "### Oracle versions"
+            echo ""
+            echo "| tool | version |"
+            echo "| --- | --- |"
+            echo "| python | $(python -V 2>&1) |"
+            echo "| dpkg | $(dpkg --version | head -1) |"
+            echo "| rpm | $(rpm --version) |"
+            echo "| packaging | $(python -m pip show packaging | awk '/^Version/{print $2}') |"
+            echo "| semantic_version | $(python -m pip show semantic_version | awk '/^Version/{print $2}') |"
+            echo "| rpm-vercmp | $(python -m pip show rpm-vercmp | awk '/^Version/{print $2}') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if any oracle is unavailable
+        # The whole point of this job. Without this step a missing oracle would show
+        # up as a skip, and the job would still be green.
+        run: |
+          python -m tests.oracle_tools || {
+            echo "::error::An oracle is unavailable, so its cross-check did NOT run. See the table above."
+            exit 1
+          }
+
+      - name: Differential checks only (oracle-marked)
+        run: python -m pytest -m oracle -q
+
+      - name: Full suite with every oracle present
+        # Also proves the non-oracle suite passes in the richer environment.
+        run: python -m pytest -q

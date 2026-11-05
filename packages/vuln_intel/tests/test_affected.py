@@ -105,8 +105,20 @@ class TestVersionOrdering:
         assert scheme_for_ecosystem("cocoapods") is VersionScheme.RUBYGEMS
 
     def test_parse_does_not_raise_on_garbage(self):
+        """Garbage must never raise; whether it is orderable is per-scheme.
+
+        Maven is the surprise: ``ComparableVersion.parseVersion`` turns ``"!!!"`` into
+        a single unknown qualifier, which is a *valid* Maven version that sorts above
+        the release (unknown qualifiers rank after ``sp``). Java really does accept
+        it, so refusing it here would be a divergence from Maven rather than a
+        safety measure. dpkg rejects the same string because ``!`` is not in its
+        accepted character set.
+        """
         for scheme in VersionScheme:
-            assert parse("!!!", scheme) is None or scheme is VersionScheme.DEBIAN
+            parse("!!!", scheme)  # must not raise, whatever the answer
+        assert parse("!!!", VersionScheme.DEBIAN) is None
+        assert parse("!!!", VersionScheme.MAVEN) is not None
+        assert parse("", VersionScheme.MAVEN) is None
 
     def test_every_mapped_scheme_is_a_real_scheme(self):
         assert all(isinstance(s, VersionScheme) for s in SCHEME_BY_ECOSYSTEM.values())

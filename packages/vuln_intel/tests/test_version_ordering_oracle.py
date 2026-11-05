@@ -32,31 +32,69 @@ import subprocess
 
 import pytest
 
+from tests import oracle_tools
 from vuln_intel.versions import VersionScheme, compare
 
 
 def _pep440_reference():
-    try:
-        from packaging.version import InvalidVersion, Version
-    except ImportError:  # pragma: no cover - environment without the oracle
+    if not oracle_tools.available("packaging"):
         return None
+    from packaging.version import InvalidVersion, Version
+
     return Version, InvalidVersion
 
 
 def _semver_reference():
-    try:
-        import semantic_version
-    except ImportError:  # pragma: no cover
+    if not oracle_tools.available("semantic_version"):
         return None
+    import semantic_version
+
     return semantic_version.Version
 
 
 def _rpm_reference():
-    try:
-        import rpm_vercmp
-    except ImportError:  # pragma: no cover
+    if not oracle_tools.available("rpm-vercmp"):
         return None
+    import rpm_vercmp
+
     return rpm_vercmp
+
+
+def _rpm_binary_compare(left: str, right: str) -> int | None:
+    """Compare with the real ``rpm`` binary, using rpm's own documented entry point.
+
+    ``rpmvercmp.at`` — rpm's own test suite — invokes exactly::
+
+        rpm --eval '%{lua: print(rpm.vercmp("$1", "$2"))}'
+
+    so that is what this uses. It compares a single version *string*, i.e. the part
+    without epoch or release; epoch and release are handled by
+    :func:`_rpm_compare` above, which is the function under test.
+
+    Preferred over the ``rpm-vercmp`` Python port when available, because the port
+    predates RPM 4.14 and treats ``^`` as punctuation, so it cannot check caret
+    ordering at all.
+    """
+    rpm = shutil.which("rpm")
+    if rpm is None:
+        return None
+    if "'" in left or "'" in right or "\\" in left or "\\" in right:
+        return None  # never interpolate a string that could break the Lua literal
+    script = f"%{{lua: print(rpm.vercmp('{left}', '{right}'))}}"
+    try:
+        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            [rpm, "--eval", script],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):  # pragma: no cover - env dependent
+        return None
+    text = (completed.stdout or "").strip()
+    if not text.lstrip("-").isdigit():
+        return None
+    return _signed(int(text))
 
 
 def _signed(value: int) -> int:
@@ -180,6 +218,9 @@ RPM_OFFICIAL_VECTORS = [
 ]
 
 
+pytestmark = pytest.mark.oracle
+
+
 class TestPep440AgainstPackaging:
     def test_no_disagreement_with_packaging(self):
         reference_module = _pep440_reference()
@@ -270,6 +311,22 @@ class TestRpmAgainstRpmvercmp:
         actual = compare(left, right, scheme=VersionScheme.RPM)
         assert actual is not None
         assert _signed(actual) == expected, f"{left} vs {right}"
+
+
+class TestRpmAgainstRpmBinary:
+    """Differential check against ``rpm --eval rpm.vercmp`` when rpm is installed."""
+
+    def test_no_disagreement_with_the_rpm_binary(self):
+        oracle_tools.require("rpm")
+
+        def reference(left: str, right: str) -> int | None:
+            return _rpm_binary_compare(left, right)
+
+        # Compare plain version strings: epoch/release splitting is ours, not rpm's.
+        corpus = [v.split("-")[0].split(":")[-1] for v in RPM_CORPUS]
+        corpus = [v for v in dict.fromkeys(corpus) if v]
+        mismatches = _audit(corpus, reference, VersionScheme.RPM)
+        assert not mismatches, f"{len(mismatches)} disagreement(s): {mismatches[:10]}"
 
 
 class TestOracleAvailabilityIsVisible:

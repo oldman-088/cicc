@@ -143,3 +143,15 @@ def _deny_network(monkeypatch: _pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_socket.socket, "connect_ex", _blocked, raising=True)
     monkeypatch.setattr(_socket, "create_connection", _blocked, raising=True)
     monkeypatch.setattr(_socket, "getaddrinfo", _blocked, raising=True)
+
+
+# --- Oracle cross-check reporting ------------------------------------------------
+# The differential tests compare this package's comparators against external
+# reference implementations. A skipped oracle check is NOT evidence of correctness,
+# and pytest's default output makes the two hard to tell apart, so the status of
+# every oracle is printed at the end of each session. See tests/oracle_tools.py.
+def pytest_terminal_summary(terminalreporter) -> None:
+    """Name the oracles that ran and the ones that did not."""
+    from tests import oracle_tools
+
+    terminalreporter.write_line(oracle_tools.report())

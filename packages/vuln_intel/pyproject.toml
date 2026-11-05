@@ -23,8 +23,17 @@ include = ["vuln_intel*"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
+# `-rs` is deliberate: without it a skipped oracle check is nearly invisible in the
+# log, and a skipped differential test is NOT a passing cross-check.
+addopts = "-q --strict-markers -rs"
 filterwarnings = ["error::DeprecationWarning:vuln_intel.*"]
+markers = [
+    "oracle: differential check against an independent reference implementation (skipped, loudly, when that implementation is unavailable)",
+]
+# `tests/` must be importable so test modules can share helpers. The oracle status
+# banner prints on EVERY run via conftest's terminal summary, including a run that
+# selects no oracle test at all.
+pythonpath = ["."]
 
 [tool.mypy]
 python_version = "3.11"
