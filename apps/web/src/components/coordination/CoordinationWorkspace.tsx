@@ -9,7 +9,6 @@ import {
   parseCoordinationEvents,
   parseCoordinationMetrics,
   parseCoordinationTaskEvents,
-  parseCoordinationHealth,
   parseCoordinationTaskTrace,
   parseProviderTimestamp,
   coordinationTaskEventsEndpoint,
@@ -21,11 +20,11 @@ import {
   type CoordinationTaskEvent,
   type CoordinationMetrics,
   type CoordinationTask,
-  type CoordinationHealth,
   type CoordinationTaskTrace,
 } from "../../lib/integration-api";
 import { ResourcePanel } from "../integrations/ResourcePanel";
 import { TaskSubmissionPanel } from "./TaskSubmissionPanel";
+import { CoordinationHealthPanel } from "./CoordinationHealthPanel";
 import { useIntegrationResource } from "../integrations/useIntegrationResource";
 import styles from "./CoordinationWorkspace.module.css";
 
@@ -587,55 +586,6 @@ function TaskContent({
   );
 }
 
-function HealthContent({ data, locale, messages }: { data: CoordinationHealth; locale: Locale; messages: Messages }) {
-  const degraded = data.overall !== "healthy";
-  return (
-    <div>
-      <p>
-        <strong>{messages.healthOverall}:</strong>{" "}
-        <span className={degraded ? `${styles.statusTag} ${styles.warningTag}` : styles.statusTag}>
-          <bdi dir="ltr">{data.overall}</bdi>
-        </span>
-        {data.at && <> · {messages.healthCheckedAt}: {formatTimestamp(data.at, locale, messages.noTimestamp)}</>}
-      </p>
-      <ul className={styles.agentList}>
-        {data.components.map((component) => (
-          <li key={component.key} className={styles.recordCard}>
-            <div className={styles.cardHeading}>
-              <h3><bdi dir="ltr">{component.key}</bdi></h3>
-              <span className={component.status !== "healthy" ? `${styles.statusTag} ${styles.warningTag}` : styles.statusTag}>
-                <bdi dir="ltr">{component.status}</bdi>
-              </span>
-            </div>
-            {component.detail && <p dir="auto">{component.detail}</p>}
-            {component.reasons.length > 0 && (
-              <ul>{component.reasons.map((reason) => <li key={reason}><bdi dir="auto">{reason}</bdi></li>)}</ul>
-            )}
-          </li>
-        ))}
-      </ul>
-      {data.last_operations && (
-        <>
-          <h3>{messages.lastOperations}</h3>
-          <dl className={styles.smallMeta}>
-            <div><dt>{messages.lastWebhook}</dt><dd>{formatTimestamp(data.last_operations.last_webhook_received, locale, messages.noValue)}</dd></div>
-            <div><dt>{messages.lastSyncSuccess}</dt><dd>{formatTimestamp(data.last_operations.last_github_sync_success, locale, messages.noValue)}</dd></div>
-            <div><dt>{messages.lastSyncAttempt}</dt><dd>{formatTimestamp(data.last_operations.last_github_sync_attempt, locale, messages.noValue)}</dd></div>
-            <div><dt>{messages.lastTaskEvent}</dt><dd>{formatTimestamp(data.last_operations.last_task_event, locale, messages.noValue)}</dd></div>
-          </dl>
-          {data.last_operations.note && <p className={styles.scopeNote}><bdi dir="auto">{data.last_operations.note}</bdi></p>}
-        </>
-      )}
-      {data.reasons.length > 0 && (
-        <>
-          <h3>{messages.healthReasons}</h3>
-          <ul>{data.reasons.map((reason) => <li key={reason}><bdi dir="auto">{reason}</bdi></li>)}</ul>
-        </>
-      )}
-    </div>
-  );
-}
-
 function TaskTrace({ taskId, locale, messages }: { taskId: string; locale: Locale; messages: Messages }) {
   const [state, setState] = useState<{ phase: "idle" | "loading" | "ready" | "error"; trace?: CoordinationTaskTrace }>({ phase: "idle" });
   const load = () => {
@@ -757,7 +707,6 @@ export function CoordinationWorkspace() {
   const agents = useIntegrationResource(integrationEndpoints.coordinationAgents, parseCoordinationAgents);
   const tasks = useIntegrationResource(integrationEndpoints.coordinationTasks, parseCoordinationTasks);
   const events = useIntegrationResource(integrationEndpoints.coordinationEvents, parseCoordinationEvents);
-  const health = useIntegrationResource(integrationEndpoints.coordinationHealth, parseCoordinationHealth);
 
   return (
     <div className={styles.page} lang={locale} dir={locale === "en" ? "ltr" : "rtl"}>
@@ -780,12 +729,7 @@ export function CoordinationWorkspace() {
           {(data) => <MetricContent data={data} locale={locale} messages={text} />}
         </ResourcePanel>
 
-        <div>
-          <ResourcePanel title={text.coordHealth} state={health.state} onRefresh={health.refresh}>
-            {(data) => <HealthContent data={data} locale={locale} messages={text} />}
-          </ResourcePanel>
-          <p className={styles.scopeNote}>{text.healthOnDemandNote}</p>
-        </div>
+        <CoordinationHealthPanel locale={locale} />
 
         <ResourcePanel
           title={text.agents}

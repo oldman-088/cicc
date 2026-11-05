@@ -60,6 +60,7 @@ export function InvestigationsWorkspace() {
   const [summary, setSummary] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | InvestigationStatus>("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "status">("newest");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [importStatus, setImportStatus] = useState<{ kind: "error" | "success"; text: string } | null>(null);
@@ -71,8 +72,9 @@ export function InvestigationsWorkspace() {
     const q = query.trim().toLocaleLowerCase(locale);
     return items.filter((item) =>
       (statusFilter === "all" || item.status === statusFilter) &&
-      (!q || [item.title, item.summary, item.linkedTaskId ?? "", ...item.entities, ...item.notes.map((n) => n.text)].join(" ").toLocaleLowerCase(locale).includes(q)));
-  }, [items, query, statusFilter, locale]);
+      (!q || [item.title, item.summary, item.linkedTaskId ?? "", ...item.entities, ...item.notes.map((n) => n.text)].join(" ").toLocaleLowerCase(locale).includes(q)))
+      .sort((a, b) => sortBy === "oldest" ? a.createdAt.localeCompare(b.createdAt) : sortBy === "status" ? a.status.localeCompare(b.status) || b.createdAt.localeCompare(a.createdAt) : b.createdAt.localeCompare(a.createdAt));
+  }, [items, query, statusFilter, locale, sortBy]);
 
   const selected = items.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
   const statusLabel = (s: InvestigationStatus) => s === "open" ? m.open : s === "in-progress" ? m.inProgress : m.closed;
@@ -137,6 +139,13 @@ export function InvestigationsWorkspace() {
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
             <option value="all">{m.all}</option><option value="open">{m.open}</option>
             <option value="in-progress">{m.inProgress}</option><option value="closed">{m.closed}</option>
+          </select>
+        </label>
+        <label>{locale === "ar" ? "الترتيب" : locale === "fa" ? "مرتب‌سازی" : "Sort"}
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+            <option value="newest">{locale === "ar" ? "الأحدث أولاً" : locale === "fa" ? "تازه‌ترین اول" : "Newest first"}</option>
+            <option value="oldest">{locale === "ar" ? "الأقدم أولاً" : locale === "fa" ? "قدیمی‌ترین اول" : "Oldest first"}</option>
+            <option value="status">{locale === "ar" ? "الحالة" : locale === "fa" ? "وضعیت" : "Status"}</option>
           </select>
         </label>
       </div>

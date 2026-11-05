@@ -15,6 +15,7 @@ import {
   type OpsWorkers,
 } from "../../lib/integration-api";
 import { ResourcePanel } from "../integrations/ResourcePanel";
+import { CoordinationHealthPanel } from "../coordination/CoordinationHealthPanel";
 import { useIntegrationResource } from "../integrations/useIntegrationResource";
 import styles from "./SystemHealthWorkspace.module.css";
 
@@ -447,6 +448,8 @@ export function SystemHealthWorkspace() {
         >
           {(data) => <AlertsContent alerts={data.alerts} locale={locale} messages={text} />}
         </ResourcePanel>
+
+        <CoordinationHealthPanel locale={locale} />
 
         <ResourcePanel
           title={text.workers}

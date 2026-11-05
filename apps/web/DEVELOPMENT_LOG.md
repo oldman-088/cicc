@@ -169,3 +169,11 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - **Local cross-data search:** home page gains `LocalDataSearch` over browser-local investigations + reminders with an explicit boundary note (server-side global search unavailable; nothing leaves the device). Malformed local data is ignored, never fabricated.
 - **NotificationCenter:** unread count (`role=status`), category filter, mark-all-read; still local-only with the service-unavailable notice intact.
 - Tests: 114 unit tests (25 files) incl. timestamp/vuln-guard-matrix/notification/search suites; Playwright 36 listed (+local-search journey).
+
+
+## 2026-11-05 — Shared health panel, decoder hardening, readiness checklists, investigation sorting
+
+- **CoordinationHealthPanel extracted** (`components/coordination/CoordinationHealthPanel.tsx`) and reused in both Coordination and System Health workspaces; M28 backward compatibility preserved (M29 `last_operations` optional). System Health now shows on-demand coordination health next to ops overview/alerts/workers.
+- **Decoder hardening tests:** partial health components default reasons to `[]` (never invented), missing structural fields fail closed, trace DTO keeps naive timestamps verbatim (UTC interpretation only at display via `parseProviderTimestamp`), malformed dates → null → honest fallback.
+- **Threat/Vulnerability workspaces:** integration-readiness checklist with precise states (contract / host mounting / real verification / UI binding) in EN/AR/FA — still not connected, adapters unbound.
+- **Investigations:** sort control (newest/oldest/status). Playwright +Arabic RTL investigation journey (38 listed).

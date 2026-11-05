@@ -46,6 +46,7 @@ function stubProvider(dataSource = "live-ops-database") {
     if (url.endsWith("/ops/overview")) return jsonResponse(overview(dataSource));
     if (url.endsWith("/ops/alerts")) return jsonResponse({ alerts: [] });
     if (url.endsWith("/ops/workers")) return jsonResponse({ stall_threshold_s: 300, workers: [] });
+    if (url.endsWith("/coordination/health")) return jsonResponse({ overall: "healthy", components: [{ key: "agents", status: "healthy", detail: "1 active", reasons: [] }], reasons: [], at: "2026-11-05T10:00:00Z", last_operations: { last_webhook_received: null, last_github_sync_success: null, last_github_sync_attempt: null, last_task_event: "2026-11-05T09:00:00Z", checked_at: "2026-11-05T10:00:00Z", note: "on-demand check; NOT continuous monitoring (no scheduler running)" } });
     return jsonResponse({ error: { code: "not_found" } }, 404);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -69,9 +70,11 @@ describe("System Health workspace", () => {
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText(/This is not, by itself, a guarantee/)).toBeInTheDocument();
     expect(screen.getByText("Recorded provider activity")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(await screen.findByText("Coordination health")).toBeInTheDocument();
+    expect(screen.getByText(/not continuous monitoring/)).toBeInTheDocument();
     for (const [url, options] of fetchMock.mock.calls) {
-      expect(String(url)).toMatch(/^\/api\/integrations\/ops\//);
+      expect(String(url)).toMatch(/^\/api\/integrations\/(ops|coordination)\//);
       expect(options?.method).toBe("GET");
       expect(options?.headers).not.toHaveProperty("Authorization");
     }
@@ -112,7 +115,7 @@ describe("System Health workspace", () => {
     ))));
     render(<SystemHealthWorkspace />);
 
-    expect(await screen.findAllByText("The server-side provider is not configured in this deployment.")).toHaveLength(3);
+    expect(await screen.findAllByText("The server-side provider is not configured in this deployment.")).toHaveLength(4);
     expect(screen.queryByText("No active alert records")).not.toBeInTheDocument();
   });
 

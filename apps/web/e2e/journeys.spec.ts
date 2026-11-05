@@ -93,3 +93,14 @@ test("local search journey: home search finds browser-local investigations only"
   await expect(page.getByRole("link", { name: /Searchable beacon/ })).toBeVisible();
   await expect(page.getByText(/Server-side global search across providers is not available yet/)).toBeVisible();
 });
+
+test("arabic RTL journey: investigations workspace is fully RTL and usable", async ({ page }) => {
+  await page.goto("/investigations", { waitUntil: "networkidle" });
+  await page.getByRole("combobox", { name: "Interface language" }).selectOption("ar");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await page.getByLabel("العنوان").fill("قضية اختبار");
+  await page.getByRole("button", { name: "إنشاء تحقيق" }).click();
+  await expect(page.getByRole("heading", { name: "قضية اختبار", level: 3 })).toBeVisible();
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "قضية اختبار", level: 3 })).toBeVisible();
+});

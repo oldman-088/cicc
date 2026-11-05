@@ -250,6 +250,24 @@ describe("same-origin integration client", () => {
     expect(parseCoordinationHealth({ overall: "healthy", components: [], reasons: [], at: null }).last_operations).toBeNull();
   });
 
+  it("health/trace hardening: partial fields default honestly, missing structure fails closed", () => {
+    // Component without reasons -> empty list, not an invented reason.
+    const partial = parseCoordinationHealth({ overall: "unknown", components: [{ key: "broker", status: "unknown", detail: "" }], at: null });
+    expect(partial.components[0].reasons).toEqual([]);
+    expect(partial.reasons).toEqual([]);
+    // Missing structural fields fail closed rather than rendering partial data as fact.
+    expect(() => parseCoordinationHealth({ overall: "healthy" })).toThrow();
+    expect(() => parseCoordinationHealth({ overall: "healthy", components: "agents", reasons: [], at: null })).toThrow();
+    expect(() => parseCoordinationTaskTrace({ task_id: "t", correlation: { idempotency_key: null, event_id: null }, state: "QUEUED", agent: null, attempts: 0, dead_letter: false, events: [] })).toThrow();
+    expect(() => parseCoordinationTaskTrace({ task_id: "t", state: "QUEUED", agent: null, attempts: 0, dead_letter: false, events: [], deliveries: [], approvals: [] })).toThrow(/correlation/);
+    // Naive trace timestamps stay verbatim in the DTO; UTC interpretation happens only at display (parseProviderTimestamp).
+    const trace = parseCoordinationTaskTrace({ task_id: "t", correlation: { idempotency_key: null, event_id: null }, state: "QUEUED", agent: null, attempts: 0, dead_letter: false, events: [{ id: 1, at: "2026-11-05T09:00:00", kind: "created", detail: null }], deliveries: [], approvals: [] });
+    expect(trace.events[0].at).toBe("2026-11-05T09:00:00");
+    expect(parseProviderTimestamp(trace.events[0].at)?.toISOString()).toBe("2026-11-05T09:00:00.000Z");
+    expect(parseProviderTimestamp("2026-13-45T99:99:99Z")).toBeNull();
+    expect(parseProviderTimestamp("")).toBeNull();
+  });
+
   it("decodes per-task lifecycle events and the M27 idempotency correlation key", () => {
     expect(parseCoordinationTaskEvents({ task_id: "api-1", events: [{ at: "2026-11-05T12:00:00Z", kind: "created", detail: "kind=frontend_e2e" }] }))
       .toEqual({ task_id: "api-1", events: [{ at: "2026-11-05T12:00:00Z", kind: "created", detail: "kind=frontend_e2e" }] });
