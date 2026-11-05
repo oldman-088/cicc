@@ -485,11 +485,18 @@ def to_source_state(
     run cannot feed the health report, and readiness would silently ignore the
     source that actually collects the data.
     """
+    # ``completed_at`` records the last *successful* sync and is only ever set by a
+    # success, so it is reported whether or not this particular run advanced. Gating
+    # it on ``advanced`` discarded the fact on every failed run, which meant health
+    # could not distinguish "failed after a week of good data" (degraded, serving
+    # previous data) from "has never succeeded" (unavailable) — the exact distinction
+    # a failure needs to be actionable. A source with no success yet still reports
+    # ``None``, because ``completed_at`` is then ``None``.
     return SourceState(
         kind=kind,
         status=outcome.status,
         checked_at=now or utcnow(),
-        last_success=outcome.checkpoint.completed_at if outcome.advanced else None,
+        last_success=outcome.checkpoint.completed_at,
         error="; ".join(outcome.warnings[:3]) or None,
         records=len(outcome.records),
     )
