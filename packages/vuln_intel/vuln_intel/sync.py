@@ -149,6 +149,14 @@ class Checkpoint:
     origin: str = "live"
     consecutive_failures: int = 0
     last_error: str | None = None
+    #: When the source was last *attempted*, success or failure. Master Prompt §7
+    #: lists "last successful synchronization" and "last attempted synchronization"
+    #: as separate requirements, and ``completed_at`` cannot serve both: a failure
+    #: used to overwrite it, which destroyed the record of the last success. That
+    #: mattered because ``to_source_state`` reports ``completed_at`` as
+    #: ``last_success``, so a source that had been failing for a week still looked
+    #: freshly synchronised.
+    attempted_at: datetime | None = None
     #: Set when a full re-sync is required (schema change, corrupted state).
     invalidated_reason: str | None = None
 
@@ -157,6 +165,8 @@ class Checkpoint:
             _aware(self.watermark, field_name="watermark")
         if self.completed_at is not None:
             _aware(self.completed_at, field_name="completed_at")
+        if self.attempted_at is not None:
+            _aware(self.attempted_at, field_name="attempted_at")
         if self.records < 0:
             raise ValidationError("records must be >= 0", field="records")
 
@@ -170,6 +180,7 @@ class Checkpoint:
             "origin": self.origin,
             "consecutive_failures": self.consecutive_failures,
             "last_error": self.last_error,
+            "attempted_at": self.attempted_at.isoformat() if self.attempted_at else None,
             "invalidated_reason": self.invalidated_reason,
         }
 
@@ -196,6 +207,11 @@ class Checkpoint:
                 payload.get("consecutive_failures"), "consecutive_failures"
             ),
             last_error=(str(payload["last_error"]) if payload.get("last_error") else None),
+            # Absent in checkpoints written before this field existed; those fall back
+            # to ``completed_at``, which for an old checkpoint is the honest answer.
+            attempted_at=(
+                moment("attempted_at") if payload.get("attempted_at") else moment("completed_at")
+            ),
             invalidated_reason=(
                 str(payload["invalidated_reason"]) if payload.get("invalidated_reason") else None
             ),
@@ -436,21 +452,25 @@ class IncrementalSync:
                 if failed
                 else checkpoint.last_error
             )
+            # A failed attempt must not overwrite ``completed_at``: that field records
+            # the last *successful* sync and downstream reports it as ``last_success``.
             return replace(
                 checkpoint,
                 consecutive_failures=checkpoint.consecutive_failures + 1,
                 last_error=detail,
-                completed_at=self._now(),
+                attempted_at=self._now(),
             )
         watermark = completed[-1].end
         if failed is not None and failed.start < watermark:
             # Defensive: a failed window can never lie before the watermark.
             watermark = failed.start
+        now = self._now()
         return replace(
             checkpoint,
             watermark=watermark,
             records=checkpoint.records + count,
-            completed_at=self._now(),
+            completed_at=now,
+            attempted_at=now,
             consecutive_failures=0,
             last_error=None,
         )
