@@ -166,9 +166,10 @@ def coordination_metrics(_gate: None = Depends(read_token_dependency)):
 @router.get("/tasks")
 def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None = Query(None),
                agent: str | None = Query(None), kind: str | None = Query(None),
+               dead_letter: bool | None = Query(None),
                limit: int = Query(100, ge=1, le=500)):
     with ops.SessionLocal() as s:
-        return {"tasks": registry.list_tasks(s, state, agent, kind, limit)}
+        return {"tasks": registry.list_tasks(s, state, agent, kind, limit, dead_letter)}
 
 
 @router.get("/tasks/dag")

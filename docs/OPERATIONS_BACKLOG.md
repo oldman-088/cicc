@@ -129,6 +129,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M11-06: dashboard broker chip (connected/unavailable) + delivery channel
   split (broker-confirmed vs human-assisted); unavailable data shown as such.
 
+## Done — Milestone 12 (PR #4 update)
+
+- M12-01 adoption record (docs/CONTRACT_ADOPTION.md) with per-agent evidence;
+  contract v1.0 unchanged; PR #4 comments to Agents 2/3/4.
+- M12-02 E2E tests (7): threat-intel full flow w/ audit, vuln depends_on threat
+  (409 gate), Agent-4 dashboard payload shapes (+live GitHub). Simulated agents
+  labeled as fixtures — no Arena session claims.
+- M12-03 reliability: stale sweep, approval expiry 410/409, dead_letter filter
+  (`GET /tasks?dead_letter=true`), restart recovery on file DB, timeout,
+  duplicates. API 142/142.
+- M12-05: dashboard live-verified via :3000 proxy (page 200, LIVE github ok,
+  metrics ok); visual verification requested from Agent 4 on PR #4.
+- M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -197,6 +211,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   tenant [recommended] / C RLS / D separate DB; migration + trade-offs).
 - M11-06: dashboard broker chip (connected/unavailable) + delivery channel
   split (broker-confirmed vs human-assisted); unavailable data shown as such.
+
+## Done — Milestone 12 (PR #4 update)
+
+- M12-01 adoption record (docs/CONTRACT_ADOPTION.md) with per-agent evidence;
+  contract v1.0 unchanged; PR #4 comments to Agents 2/3/4.
+- M12-02 E2E tests (7): threat-intel full flow w/ audit, vuln depends_on threat
+  (409 gate), Agent-4 dashboard payload shapes (+live GitHub). Simulated agents
+  labeled as fixtures — no Arena session claims.
+- M12-03 reliability: stale sweep, approval expiry 410/409, dead_letter filter
+  (`GET /tasks?dead_letter=true`), restart recovery on file DB, timeout,
+  duplicates. API 142/142.
+- M12-05: dashboard live-verified via :3000 proxy (page 200, LIVE github ok,
+  metrics ok); visual verification requested from Agent 4 on PR #4.
+- M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
 
 ## Next (backlog, priority order)
 
@@ -270,6 +298,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M11-06: dashboard broker chip (connected/unavailable) + delivery channel
   split (broker-confirmed vs human-assisted); unavailable data shown as such.
 
+## Done — Milestone 12 (PR #4 update)
+
+- M12-01 adoption record (docs/CONTRACT_ADOPTION.md) with per-agent evidence;
+  contract v1.0 unchanged; PR #4 comments to Agents 2/3/4.
+- M12-02 E2E tests (7): threat-intel full flow w/ audit, vuln depends_on threat
+  (409 gate), Agent-4 dashboard payload shapes (+live GitHub). Simulated agents
+  labeled as fixtures — no Arena session claims.
+- M12-03 reliability: stale sweep, approval expiry 410/409, dead_letter filter
+  (`GET /tasks?dead_letter=true`), restart recovery on file DB, timeout,
+  duplicates. API 142/142.
+- M12-05: dashboard live-verified via :3000 proxy (page 200, LIVE github ok,
+  metrics ok); visual verification requested from Agent 4 on PR #4.
+- M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -335,6 +377,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M11-06: dashboard broker chip (connected/unavailable) + delivery channel
   split (broker-confirmed vs human-assisted); unavailable data shown as such.
 
+## Done — Milestone 12 (PR #4 update)
+
+- M12-01 adoption record (docs/CONTRACT_ADOPTION.md) with per-agent evidence;
+  contract v1.0 unchanged; PR #4 comments to Agents 2/3/4.
+- M12-02 E2E tests (7): threat-intel full flow w/ audit, vuln depends_on threat
+  (409 gate), Agent-4 dashboard payload shapes (+live GitHub). Simulated agents
+  labeled as fixtures — no Arena session claims.
+- M12-03 reliability: stale sweep, approval expiry 410/409, dead_letter filter
+  (`GET /tasks?dead_letter=true`), restart recovery on file DB, timeout,
+  duplicates. API 142/142.
+- M12-05: dashboard live-verified via :3000 proxy (page 200, LIVE github ok,
+  metrics ok); visual verification requested from Agent 4 on PR #4.
+- M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -397,6 +453,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   tenant [recommended] / C RLS / D separate DB; migration + trade-offs).
 - M11-06: dashboard broker chip (connected/unavailable) + delivery channel
   split (broker-confirmed vs human-assisted); unavailable data shown as such.
+
+## Done — Milestone 12 (PR #4 update)
+
+- M12-01 adoption record (docs/CONTRACT_ADOPTION.md) with per-agent evidence;
+  contract v1.0 unchanged; PR #4 comments to Agents 2/3/4.
+- M12-02 E2E tests (7): threat-intel full flow w/ audit, vuln depends_on threat
+  (409 gate), Agent-4 dashboard payload shapes (+live GitHub). Simulated agents
+  labeled as fixtures — no Arena session claims.
+- M12-03 reliability: stale sweep, approval expiry 410/409, dead_letter filter
+  (`GET /tasks?dead_letter=true`), restart recovery on file DB, timeout,
+  duplicates. API 142/142.
+- M12-05: dashboard live-verified via :3000 proxy (page 200, LIVE github ok,
+  metrics ok); visual verification requested from Agent 4 on PR #4.
+- M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
 
 ## Next (backlog, priority order)
 

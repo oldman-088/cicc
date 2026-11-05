@@ -38,6 +38,24 @@ Scope: `apps/api/app/coordination/*`, `apps/api/app/{ratelimit,platform_auth,not
   (options A–D, recommendation B schema-per-tenant with additive tenant_id
   columns; **awaiting owner decision — not claimed production-ready**).
 
+## M12-06 review (2026-11-05)
+Re-checked: authn (read/write tokens, write⊇read, platform adapter inert+fail-closed),
+authz (approver gate 403, per-endpoint gates), rate limits (global 429 + per-principal
+write 429 on ALL coordination writes), audit (every transition incl. rejected),
+secret redaction (webhook payloads, GH token header-only, `check_no_secrets.sh`),
+body caps (16 KiB API / 256 KiB webhook), replay (delivery-id dedup + dual-secret
+rotation). Cross-tenant access boundary: **single-tenant token mode only** — tenant
+isolation is a documented decision pending owner approval
+(`docs/TENANT_ISOLATION_DECISION.md`); NOT claimed production-ready. Outbound
+notifications remain DISABLED (no network path in adapters).
+
+### Unresolved security decisions (owner)
+1. Tenant isolation model (A/B/C/D in the decision doc; recommendation B).
+2. Shared DB vs read-replica for platform auth (`CICC_PLATFORM_DB_URL`).
+3. Webhook delivery timestamp freshness (GitHub sends no signed timestamp — evaluate).
+4. Ops audit adapter into platform `security_audit_events`.
+5. Outbound notification channels (require explicit authorization).
+
 ## Open security work (backlog)
 - Tenant-scoped ops data + per-tenant rate buckets (awaiting DB-model decision).
 - Webhook secret rotation procedure.

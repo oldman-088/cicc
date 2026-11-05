@@ -24,6 +24,18 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - M11-06 dashboard: broker chip + delivery channel split + honest unavailable states.
 - API 135/135 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
 
+## Done — M12 (cross-agent integration & readiness)
+- Contract adoption record w/ per-agent evidence (docs/CONTRACT_ADOPTION.md);
+  v1.0 unchanged; PR #4 comments to Agents 2/3/4 (incl. Agent 4 visual verification).
+- E2E integration tests: threat-intel flow (submit→route→handoff→ack→progress→
+  complete→audit), vuln task depends_on threat (409 until done), dashboard payload
+  shapes. Simulated agents explicitly labeled; no Arena-session claims.
+- Reliability tests: stale agents, approval expiry (410/409), dead-letter filter +
+  audit, restart recovery, timeout, duplicates. API 142/142 (7 real-PG + 1 live-GitHub).
+- Live smoke: E2E on :8000, dashboard :3000 page 200, LIVE github via proxy ok.
+- Security review M12 section w/ unresolved owner decisions; tenant isolation still
+  pending; notifications disabled.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

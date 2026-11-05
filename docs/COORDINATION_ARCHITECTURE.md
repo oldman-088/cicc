@@ -182,3 +182,21 @@ Still environment-blocked: real-broker delivery/confirm (no Docker/broker here).
 - **M11-06**: dashboard shows broker connected/unavailable chip and
   broker-confirmed vs human-assisted delivery split; failed fetches render
   as unavailable.
+
+
+## v5 (Milestone 12 — cross-agent integration & operational readiness)
+
+- **M12-01 adoption record** (`docs/CONTRACT_ADOPTION.md`): Agent 2 doc-level only,
+  Agent 3 proposed-not-wired, Agent 4 awaiting path/DTO alignment (their PR #2 quotes
+  our contract as unconfigured at c610917). Contract v1.0 unchanged; confirmations
+  requested on PR #4.
+- **M12-02 E2E** (`tests/test_m12_integration.py`): simulated Agent 2 (threat_intel)
+  submits → central routes by capability → honest handoff payload → ack/progress/
+  complete + full audit; simulated Agent 3 vuln task blocked (409) on depends_on
+  until threat completes; Agent-4 dashboard payload shapes verified (agents/tasks/
+  metrics/github-status; github part LIVE). Actors are labeled test fixtures —
+  no Arena session execution claimed.
+- **M12-03 reliability**: stale-agent sweep, approval expiry (410 pre-sweep /
+  409 post-sweep), dead-letter visibility (`GET /tasks?dead_letter=true` + audit
+  event), restart recovery (file DB, new app instance, state persists, sweep works),
+  task timeout, duplicates — all covered by tests, every transition audited.

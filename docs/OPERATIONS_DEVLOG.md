@@ -123,3 +123,15 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - M11-02 contract v1.0 + PR comment; M11-05 tenant decision doc; M11-06 web
   broker chip + channel split (EN/AR 188).
 - API 135/135 (7 real-PG + 1 live-GitHub live again after fix); web 17/17+tsc+build.
+
+## 2026-11-05 — Milestone 12 (branch arena/961971ed-cicc, PR #4)
+
+- M12-02 test_m12_integration.py (7 tests): E2E threat/vuln flows at HTTP
+  boundary; dashboard contract shapes; LIVE github in view test. Fixes during
+  authoring: handoff field is `event` (not `payload`); approval expiry = 410
+  pre-sweep / 409 post-sweep (split into two cases).
+- dead_letter query filter added (GET /tasks?dead_letter=...) for DL visibility.
+- Adoption record from PR #1/#2/#3 branches (read-only): Agent 4 explicitly
+  awaits path/DTO alignment; Agents 2/3 doc-level only. PR #4 comment with the
+  dashboard endpoint list + visual verification request.
+- API 142/142 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.

@@ -194,7 +194,7 @@ def requeue_ready(s, now: datetime | None = None) -> list[str]:
 
 
 def list_tasks(s, state: str | None = None, agent: str | None = None, kind: str | None = None,
-               limit: int = 100) -> list[dict]:
+               limit: int = 100, dead_letter: bool | None = None) -> list[dict]:
     q = select(models.CoordinationTask).order_by(models.CoordinationTask.updated_at.desc()).limit(limit)
     if state:
         q = q.where(models.CoordinationTask.state == normalize_state(state))
@@ -202,6 +202,8 @@ def list_tasks(s, state: str | None = None, agent: str | None = None, kind: str 
         q = q.where(models.CoordinationTask.agent == agent)
     if kind:
         q = q.where(models.CoordinationTask.kind == kind)
+    if dead_letter is not None:
+        q = q.where(models.CoordinationTask.dead_letter == dead_letter)
     out = []
     for t in s.execute(q).scalars().all():
         out.append({

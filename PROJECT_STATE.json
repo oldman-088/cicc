@@ -19,7 +19,7 @@
         "DAG",
         "sweep"
       ],
-      "tests": "API 135/135 (7 real-PG + 1 live-GitHub); lifecycle integration 9/9"
+      "tests": "API 142/142 (7 real-PG + 1 live-GitHub); M12 E2E 7/7"
     },
     "ops": {
       "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,12 +43,13 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M11"
+    "M1..M12"
   ],
   "contracts": {
     "version": "v1.0",
     "doc": "docs/INTEGRATION_CONTRACTS.md",
-    "confirmation": "requested on PR #4, pending Agents 2/3/4"
+    "confirmation": "requested on PR #4, pending Agents 2/3/4",
+    "adoption": "docs/CONTRACT_ADOPTION.md \u2014 Agent2 doc-level, Agent3 proposed, Agent4 awaiting alignment; confirmation requested on PR #4"
   },
   "tenant_isolation": "decision doc only (docs/TENANT_ISOLATION_DECISION.md); awaiting owner; not production-ready"
 }
