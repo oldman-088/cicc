@@ -33,9 +33,10 @@ test("keyboard navigation reaches interactive controls with visible focus", asyn
   expect(outline).not.toBe("none");
 });
 
-test("command theater WebGL canvas mounts or falls back accessibly", async ({ page }) => {
+test("command theater graph visualization mounts (SVG, WebGL canvas, or accessible fallback)", async ({ page }) => {
   await page.goto("/command-theater", { waitUntil: "networkidle" });
-  // Either a canvas renders or an accessible fallback is announced; both are valid,
+  // The default 2D graph is an accessible SVG; the optional 3D view uses a
+  // WebGL canvas with a status/alert fallback. Any of these is a valid mount;
   // a blank/broken region is not.
-  await expect(page.locator("canvas, [role=img], [data-testid=graph-fallback]").first()).toBeVisible();
+  await expect(page.locator("svg, canvas, [role=img], [data-testid=graph-fallback]").first()).toBeVisible();
 });
