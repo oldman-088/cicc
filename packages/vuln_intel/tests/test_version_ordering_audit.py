@@ -5,17 +5,25 @@ written against the *specification*, not against our implementation's output, be
 the failure mode in this area is silent: a wrong ordering does not raise, it just
 makes :func:`assess_affected` report a vulnerable version as ``not_affected``.
 
-The four defect classes that were found and fixed:
+The defect classes that were found and fixed:
 
 1. PEP 440 dropped components on pre-releases (``dev`` and ``post``).
 2. PEP 440 never read the local label (``1.0+local`` compared equal to ``1.0``) and
    ordered its segments backwards (strings must sort *below* integers).
 3. PEP 440 refused the implicit ``-N`` post-release spelling (``1.0-1``).
 4. Go discarded every non-pseudo pre-release suffix (``v1.2.3-pre`` == ``v1.2.3``).
-5. Debian/RPM used a pre-split chunk key, which cannot express ``verrevcmp``/
+5. RubyGems applied only one of its two canonicalisations (the leading dot/zero strip
+   was missing) and lowercased segments that RubyGems preserves.
+6. Maven had a flat ranked token model, which cannot express ``ComparableVersion``:
+   ``-`` followed by a digit opens a sublist, so ``1-1`` and ``1.1`` differ in shape.
+7. Debian/RPM used a pre-split chunk key, which cannot express ``verrevcmp``/
    ``rpmvercmp`` because digit-run boundaries realign between the two strings.
 
-Oracle-backed cross-checks live in ``tests/test_version_ordering_oracle.py``.
+Oracle-backed cross-checks live in ``tests/test_version_ordering_oracle.py``, and
+upstream-vector checks in ``tests/test_version_ordering_maven_oracle.py`` and
+``tests/test_version_ordering_rubygems_oracle.py``.  See
+``docs/vulnerability-intelligence/ORACLE_VALIDATION.md`` for what is cross-checked
+against a running implementation and what is only vector-tested.
 """
 
 from __future__ import annotations
@@ -298,6 +306,92 @@ class TestOrderingIsTotal:
     def test_reflexive(self, scheme):
         for value in self.CORPUS[scheme]:
             assert _cmp(value, value, scheme) == 0
+
+
+class TestMavenComparableVersionSemantics:
+    """Maven's ``ComparableVersion``: sublists, aliases, and the release qualifier.
+
+    The old model was a flat ranked token list with Maven's qualifier order baked in.
+    It produced plausible answers and 102 wrong ones, because ``ComparableVersion`` is
+    structural: a ``-`` followed by a digit opens a sublist.  These pin the shapes that
+    a flat ranking cannot represent.
+    """
+
+    @pytest.mark.parametrize(
+        ("version", "expected"),
+        [
+            # A trailing qualifier sorts BELOW the release, however it is spelled.
+            ("1-alpha", -1),
+            ("1-beta", -1),
+            ("1-rc", -1),
+            ("1-snapshot", -1),
+            # ``sp`` is the one that sorts above.
+            ("1-sp", 1),
+        ],
+    )
+    def test_qualifier_against_release(self, version, expected):
+        assert _cmp(version, "1", VersionScheme.MAVEN) == expected
+
+    @pytest.mark.parametrize("version", ["1-ga", "1-final", "1.0.0"])
+    def test_aliases_are_the_release(self, version):
+        # ga and final are aliases of the empty qualifier, so they ARE the release.
+        assert _cmp(version, "1", VersionScheme.MAVEN) == 0
+
+    @pytest.mark.parametrize(
+        ("alias", "canonical"),
+        [("1-cr1", "1-rc1"), ("1-a1", "1-alpha1"), ("1-b2", "1-beta2"), ("1-m3", "1-milestone3")],
+    )
+    def test_single_letter_qualifiers_expand_before_a_digit(self, alias, canonical):
+        assert _cmp(alias, canonical, VersionScheme.MAVEN) == 0
+
+    def test_trailing_digit_group_is_not_the_release(self):
+        """The false equality that mattered most.
+
+        ``2.0.1`` and ``2.0.1-xyz`` were previously reported EQUAL.  Maven orders
+        ``2.0.1 < 2.0.1-xyz``, so an equality across a fixed version of ``2.0.1`` read
+        as "not affected" for ``2.0.1-xyz``.
+        """
+        assert _cmp("2.0.1", "2.0.1-xyz", VersionScheme.MAVEN) == -1
+
+    def test_hyphen_digit_opens_a_sublist_and_is_not_a_dot(self):
+        """``1-1`` and ``1.1`` are different versions in Maven, and ``1-1`` is lower."""
+        assert _cmp("1-1", "1.1", VersionScheme.MAVEN) == -1
+
+    def test_hyphen_digit_sorts_below_a_bare_release(self):
+        assert _cmp("2.0.1", "2.0.1-1", VersionScheme.MAVEN) == -1
+
+
+class TestRubyGemsCanonicalisation:
+    """RubyGems applies two normalisations and preserves segment case."""
+
+    def test_leading_zeros_before_a_prerelease_are_stripped(self):
+        """``0.beta.1`` and ``0.0.beta.1`` are the same version to RubyGems.
+
+        We implemented only the *trailing* normalisation, so these compared unequal.
+        """
+        assert _cmp("0.beta.1", "0.0.beta.1", VersionScheme.RUBYGEMS) == 0
+
+    def test_trailing_zeros_and_dots_are_stripped(self):
+        assert _cmp("1.0.0", "1", VersionScheme.RUBYGEMS) == 0
+
+    def test_uppercase_sorts_below_lowercase(self):
+        """RubyGems scans with ``/[a-z]+/i`` and keeps case; ASCII puts ``A`` < ``a``.
+
+        The old implementation lowercased, so ``1.A`` compared EQUAL to ``1.a``.  A
+        fix stated as ``1.a`` therefore left the vulnerable ``1.A`` reported clean.
+        """
+        assert _cmp("1.A", "1.a", VersionScheme.RUBYGEMS) == -1
+
+    def test_a_letter_segment_sorts_above_a_number_segment(self):
+        """The high-severity one: ``5.x`` is greater than any ``5.0.0.*`` release.
+
+        With ``5.x`` (a prerelease, so vulnerable) and a fix at ``5.0.0.rc2``, the old
+        ordering said ``5.x < 5.0.0.rc2`` and reported it ``not_affected``.
+        """
+        assert _cmp("5.x", "5.0.0.rc2", VersionScheme.RUBYGEMS) == 1
+
+    def test_a_prerelease_sorts_below_its_release(self):
+        assert _cmp("1.0.0.a", "1.0.0", VersionScheme.RUBYGEMS) == -1
 
 
 class TestVerdictImpact:
