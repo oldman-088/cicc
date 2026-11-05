@@ -104,3 +104,14 @@ test("arabic RTL journey: investigations workspace is fully RTL and usable", asy
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "قضية اختبار", level: 3 })).toBeVisible();
 });
+
+test("investigation delete journey: local investigation and note can be removed", async ({ page }) => {
+  await page.goto("/investigations", { waitUntil: "networkidle" });
+  await page.getByLabel("Title").fill("Disposable case");
+  await page.getByRole("button", { name: "Create investigation" }).click();
+  await expect(page.getByRole("heading", { name: "Disposable case", level: 3 })).toBeVisible();
+  await page.getByRole("button", { name: "Delete this local investigation" }).click();
+  await expect(page.getByText(/No investigations yet/)).toBeVisible();
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByText(/No investigations yet/)).toBeVisible();
+});

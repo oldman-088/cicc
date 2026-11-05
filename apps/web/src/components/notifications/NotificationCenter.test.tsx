@@ -21,4 +21,17 @@ describe("NotificationCenter local reminders", () => {
     const stored = JSON.parse(window.localStorage.getItem("cicc.local-reminders.v1") ?? "[]") as Array<{ read: boolean }>;
     expect(stored.every((r) => r.read)).toBe(true);
   });
+
+  it("deletes a local reminder and persists the deletion", () => {
+    window.localStorage.setItem("cicc.local-reminders.v1", JSON.stringify([
+      { id: "r1", text: "Delete me", category: "operations", read: false, at: "t" },
+      { id: "r2", text: "Keep me", category: "operations", read: false, at: "t" },
+    ]));
+    render(<NotificationCenter />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    expect(screen.queryByText("Delete me")).not.toBeInTheDocument();
+    expect(screen.getByText("Keep me")).toBeInTheDocument();
+    const stored = JSON.parse(window.localStorage.getItem("cicc.local-reminders.v1") ?? "[]") as Array<{ text: string }>;
+    expect(stored.map((r) => r.text)).toEqual(["Keep me"]);
+  });
 });

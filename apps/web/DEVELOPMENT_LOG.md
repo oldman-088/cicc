@@ -177,3 +177,9 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - **Decoder hardening tests:** partial health components default reasons to `[]` (never invented), missing structural fields fail closed, trace DTO keeps naive timestamps verbatim (UTC interpretation only at display via `parseProviderTimestamp`), malformed dates → null → honest fallback.
 - **Threat/Vulnerability workspaces:** integration-readiness checklist with precise states (contract / host mounting / real verification / UI binding) in EN/AR/FA — still not connected, adapters unbound.
 - **Investigations:** sort control (newest/oldest/status). Playwright +Arabic RTL investigation journey (38 listed).
+
+
+## 2026-11-05 — System Health diagnostics, delete actions
+
+- **System Health diagnostics:** Overview gains a "Diagnostics from this on-demand check" section derived strictly from the provider response: cached-response stale warning with refresh guidance, unverified-source metric hiding explanation, and each non-healthy component with its provider status/detail verbatim. The empty-diagnostics text explicitly says this is not a guarantee all services are healthy. Stalled workers show the provider age against the stall threshold. EN/AR/FA.
+- **Delete actions (browser-local, persisted):** investigations can be deleted from the detail panel; individual notes can be deleted; local reminders can be deleted. All deletions persist to localStorage and are covered by unit tests + a Playwright delete journey (40 listed).

@@ -60,7 +60,8 @@ export function NotificationCenter() {
           {visibleReminders.map((r) => (
             <li key={r.id}>
               <bdi dir="auto">{r.text}</bdi> · <span>{r.category}</span> · <span>{r.read ? (locale === "ar" ? "مقروء" : locale === "fa" ? "خوانده‌شده" : "read") : (locale === "ar" ? "غير مقروء" : locale === "fa" ? "خوانده‌نشده" : "unread")}</span>{" "}
-              <button type="button" onClick={() => saveReminders(reminders.map((x) => x.id === r.id ? { ...x, read: !x.read } : x))}>{r.read ? (locale === "ar" ? "وضع علامة غير مقروء" : locale === "fa" ? "علامت خوانده‌نشده" : "Mark unread") : (locale === "ar" ? "وضع علامة مقروء" : locale === "fa" ? "علامت خوانده‌شده" : "Mark read")}</button>
+              <button type="button" onClick={() => saveReminders(reminders.map((x) => x.id === r.id ? { ...x, read: !x.read } : x))}>{r.read ? (locale === "ar" ? "وضع علامة غير مقروء" : locale === "fa" ? "علامت خوانده‌نشده" : "Mark unread") : (locale === "ar" ? "وضع علامة مقروء" : locale === "fa" ? "علامت خوانده‌شده" : "Mark read")}</button>{" "}
+              <button type="button" onClick={() => saveReminders(reminders.filter((x) => x.id !== r.id))}>{locale === "ar" ? "حذف" : locale === "fa" ? "حذف" : "Delete"}</button>
             </li>))}
         </ul>
       </div>

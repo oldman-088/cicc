@@ -52,6 +52,12 @@ type Messages = {
   metricUpdates: string;
   metricSync: string;
   metricsUnverified: string;
+  diagnostics: string;
+  diagDegraded: string;
+  diagCached: string;
+  diagUnverifiedSource: string;
+  diagNone: string;
+  diagStalled: string;
   detail: string;
   lastCheck: string;
   severity: string;
@@ -102,6 +108,12 @@ const copy: Record<Locale, Messages> = {
     metricUpdates: "Updates in 24 hours",
     metricSync: "Last successful sync",
     metricsUnverified: "Metrics are hidden because the provider did not return the currently documented source label (live-ops-database).",
+    diagnostics: "Diagnostics from this on-demand check",
+    diagDegraded: "Reported not healthy by the provider",
+    diagCached: "This response is cached; values may be stale. Use Refresh for a new on-demand check.",
+    diagUnverifiedSource: "Metrics are hidden because this data source is not the verified live operations database.",
+    diagNone: "No degraded items were derived from this response. This is not a guarantee that all services are healthy.",
+    diagStalled: "Stalled per provider (age exceeds the stall threshold)",
     detail: "Provider detail",
     lastCheck: "Last check reported by provider",
     severity: "Severity",
@@ -150,6 +162,12 @@ const copy: Record<Locale, Messages> = {
     metricUpdates: "التحديثات خلال 24 ساعة",
     metricSync: "آخر مزامنة ناجحة",
     metricsUnverified: "أُخفيت المقاييس لأن المزوّد لم يُرجع تسمية المصدر الموثّقة حالياً (live-ops-database).",
+    diagnostics: "التشخيص من هذا الفحص عند الطلب",
+    diagDegraded: "أبلغ المزوّد أنه غير سليم",
+    diagCached: "هذه الاستجابة مخزّنة مؤقتاً؛ قد تكون القيم قديمة. استخدم التحديث لفحص جديد عند الطلب.",
+    diagUnverifiedSource: "المقاييس مخفية لأن مصدر البيانات هذا ليس قاعدة بيانات العمليات الحية الموثّقة.",
+    diagNone: "لم تُستنتج عناصر متدهورة من هذه الاستجابة. هذا ليس ضماناً بأن كل الخدمات سليمة.",
+    diagStalled: "متوقف بحسب المزوّد (العمر يتجاوز عتبة التوقف)",
     detail: "تفصيل المزوّد",
     lastCheck: "آخر فحص بحسب المزوّد",
     severity: "الشدة",
@@ -198,6 +216,12 @@ const copy: Record<Locale, Messages> = {
     metricUpdates: "به‌روزرسانی در ۲۴ ساعت",
     metricSync: "آخرین همگام‌سازی موفق",
     metricsUnverified: "معیارها پنهان‌اند، چون منبع برچسب مستند فعلی (live-ops-database) را برنگرداند.",
+    diagnostics: "تشخیص از این بررسی بر اساس درخواست",
+    diagDegraded: "منبع آن را ناسالم گزارش کرده است",
+    diagCached: "این پاسخ کش‌شده است؛ مقادیر ممکن است قدیمی باشند. برای بررسی تازه بر اساس درخواست از بازخوانی استفاده کنید.",
+    diagUnverifiedSource: "معیارها پنهان‌اند چون این منبع داده پایگاه دادهٔ زندهٔ عملیاتِ راستی‌آزمایی‌شده نیست.",
+    diagNone: "از این پاسخ مورد تخریب‌شده‌ای استخراج نشد. این تضمین نمی‌کند همهٔ سرویس‌ها سالم‌اند.",
+    diagStalled: "طبق منبع متوقف است (سن از آستانهٔ توقف بیشتر است)",
     detail: "جزئیات ارائه‌دهنده",
     lastCheck: "آخرین بررسی گزارش‌شده از منبع",
     severity: "شدت",
@@ -307,6 +331,27 @@ function OverviewContent({ data, locale, messages }: { data: OpsOverview; locale
         <ComponentList title={messages.modules} items={data.modules} emptyMessage={messages.moduleEmpty} locale={locale} messages={messages} />
       </div>
 
+      <section className={styles.subsection} aria-labelledby={`${id}-diagnostics`}>
+        <h3 id={`${id}-diagnostics`}>{messages.diagnostics}</h3>
+        {(() => {
+          const degraded = [...data.services, ...data.modules].filter((c) => statusTone(c.status) !== styles.toneSuccess);
+          const items: string[] = [];
+          if (data.cached === true) items.push(messages.diagCached);
+          if (!verifiedMetricSource) items.push(messages.diagUnverifiedSource);
+          return degraded.length === 0 && items.length === 0 ? <p className={styles.emptyInline}>{messages.diagNone}</p> : (
+            <ul>
+              {items.map((item) => <li key={item}>{item}</li>)}
+              {degraded.map((c) => (
+                <li key={`${c.kind}:${c.key}`}>
+                  <bdi dir="auto">{c.name}</bdi> — {messages.diagDegraded}: <bdi dir="auto">{c.status}</bdi>
+                  {c.detail && <> · <bdi dir="auto">{c.detail}</bdi></>}
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
+      </section>
+
       <section className={styles.subsection} aria-labelledby={`${id}-metrics`}>
         <h3 id={`${id}-metrics`}>{messages.metrics}</h3>
         {verifiedMetricSource ? (
@@ -392,6 +437,7 @@ function WorkersContent({ data, locale, messages }: { data: OpsWorkers; locale: 
               </span>
             </div>
             {worker.details && <p className={styles.detail} dir="auto">{worker.details}</p>}
+            {worker.stalled && <p className={styles.detail}>{messages.diagStalled}{worker.age_s !== null ? ` · ${formatNumber(worker.age_s, locale)}s` : ""}</p>}
             <dl className={styles.smallMeta}>
               <div><dt>{messages.tasks24h}</dt><dd>{formatNumber(worker.tasks_24h, locale)}</dd></div>
               <div><dt>{messages.failed24h}</dt><dd>{formatNumber(worker.failed_24h, locale)}</dd></div>

@@ -63,8 +63,8 @@ describe("System Health workspace", () => {
     const fetchMock = stubProvider();
     render(<SystemHealthWorkspace />);
 
-    expect(await screen.findByText("Operations API")).toBeInTheDocument();
-    expect(screen.getAllByText("degraded")).toHaveLength(2);
+    expect((await screen.findAllByText("Operations API")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("degraded")).toHaveLength(3); // overall + component + diagnostics entry
     expect(screen.getByText("live-ops-database")).toBeInTheDocument();
     expect(screen.getByText("Cached response · Cache age: 1.25s")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
@@ -122,7 +122,7 @@ describe("System Health workspace", () => {
   it("passes automated structural axe checks for populated panels (contrast excluded)", async () => {
     stubProvider();
     const { container } = render(<SystemHealthWorkspace />);
-    expect(await screen.findByText("Operations API")).toBeInTheDocument();
+    expect((await screen.findAllByText("Operations API")).length).toBeGreaterThan(0);
     const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
       .mockImplementation(() => null as never);
     const results = await axe.run(container, {

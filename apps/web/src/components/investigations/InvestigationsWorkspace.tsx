@@ -167,6 +167,7 @@ export function InvestigationsWorkspace() {
           {!selected ? <p>{m.selectHint}</p> : (
             <>
               <h3><bdi dir="auto">{selected.title}</bdi></h3>
+              <button type="button" onClick={() => { setItems((cur) => cur.filter((i) => i.id !== selected.id)); setSelectedId(null); }}>{locale === "ar" ? "حذف هذا التحقيق المحلي" : locale === "fa" ? "حذف این بررسی محلی" : "Delete this local investigation"}</button>
               {selected.summary && <p dir="auto">{selected.summary}</p>}
               <p>{m.created}: {selected.createdAt}</p>
               <label>{m.status}
@@ -192,7 +193,8 @@ export function InvestigationsWorkspace() {
                 </ol>
               </div>
               <h4>{m.notes}</h4>
-              <ul>{selected.notes.map((n, i) => <li key={i} dir="auto">{n.text} <small>({n.at})</small></li>)}</ul>
+              <ul>{selected.notes.map((n, i) => <li key={i} dir="auto">{n.text} <small>({n.at})</small>{" "}
+                <button type="button" aria-label={`${locale === "ar" ? "حذف الملاحظة" : locale === "fa" ? "حذف یادداشت" : "Delete note"}: ${n.text}`} onClick={() => setItems((cur) => cur.map((it) => it.id === selected.id ? { ...it, notes: it.notes.filter((_, ni) => ni !== i) } : it))}>{locale === "ar" ? "حذف" : locale === "fa" ? "حذف" : "Delete"}</button></li>)}</ul>
               <form onSubmit={(e) => { e.preventDefault(); if (!note.trim()) return;
                 setItems((cur) => cur.map((i) => i.id === selected.id ? { ...i, notes: [...i.notes, { text: note.trim(), at: new Date().toISOString() }] } : i)); setNote(""); }}>
                 <label>{m.noteLabel}<input value={note} onChange={(e) => setNote(e.target.value)} /></label>
