@@ -31,6 +31,10 @@ stdlib-only.
 from __future__ import annotations
 
 import uuid
+
+#: Stable namespace so the serialNumber is deterministic for a given
+#: generation time (uuid5) — golden fixtures must not flap per run.
+_CICC_NAMESPACE = uuid.NAMESPACE_URL
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -271,7 +275,7 @@ def to_vex(
     document: dict[str, Any] = {
         "bomFormat": "CycloneDX",
         "specVersion": VEX_SPEC_VERSION,
-        "serialNumber": f"urn:uuid:{uuid.uuid4()}",
+        "serialNumber": f"urn:uuid:{uuid.uuid5(_CICC_NAMESPACE, moment.isoformat())}",
         "version": 1,
         "metadata": {
             "timestamp": moment.astimezone(timezone.utc).isoformat(),

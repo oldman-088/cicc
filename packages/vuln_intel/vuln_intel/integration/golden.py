@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..assessment import AssessmentWorkflow
+from ..interop.vex import to_vex
 from ..schema import (
     AffectedPackage,
     CveId,
@@ -251,8 +252,11 @@ def build() -> dict[str, Any]:
     )
     report = workflow.run(today=GOLDEN_NOW.date())
 
+    vex = to_vex(report, generated_at=GOLDEN_NOW)
+
     return {
         "assessment_report.json": report.as_dict(),
+        "vex_export.json": vex.document,
         "api_get.json": detail,
         "api_list.json": listing,
         "api_error_not_found.json": _not_found(tenant),

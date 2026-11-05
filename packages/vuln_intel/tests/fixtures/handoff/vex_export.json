@@ -1,0 +1,204 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "cicc-pkg:npm/acme-router@2.3.0",
+      "name": "acme-router",
+      "properties": [
+        {
+          "name": "cicc:ecosystem",
+          "value": "npm"
+        },
+        {
+          "name": "cicc:asset",
+          "value": "web-frontend"
+        }
+      ],
+      "purl": null,
+      "type": "library",
+      "version": "2.3.0"
+    },
+    {
+      "bom-ref": "cicc-pkg:npm/acme-ui@3.0.5",
+      "name": "acme-ui",
+      "properties": [
+        {
+          "name": "cicc:ecosystem",
+          "value": "npm"
+        },
+        {
+          "name": "cicc:asset",
+          "value": "web-frontend"
+        }
+      ],
+      "purl": null,
+      "type": "library",
+      "version": "3.0.5"
+    },
+    {
+      "bom-ref": "cicc-pkg:pypi/acme-auth@1.4.2",
+      "name": "acme-auth",
+      "properties": [
+        {
+          "name": "cicc:ecosystem",
+          "value": "pypi"
+        },
+        {
+          "name": "cicc:asset",
+          "value": "auth-service"
+        }
+      ],
+      "purl": null,
+      "type": "library",
+      "version": "1.4.2"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "cicc:origin",
+        "value": "fixture"
+      },
+      {
+        "name": "cicc:live_verified",
+        "value": "false"
+      },
+      {
+        "name": "cicc:notice",
+        "value": "Assessment derived from the sources listed in this report. Ranking and remediation are computed, not approved policy; exploitation status is unknown wherever KEV was not consulted."
+      }
+    ],
+    "timestamp": "2026-11-04T09:00:00+00:00",
+    "tools": [
+      {
+        "name": "cicc-vuln-intel",
+        "vendor": "cicc",
+        "version": "0.1.0"
+      }
+    ]
+  },
+  "serialNumber": "urn:uuid:5862f0d1-b867-5dda-8e0f-27666b1fa77b",
+  "specVersion": "1.6",
+  "version": 1,
+  "vulnerabilities": [
+    {
+      "affects": [
+        {
+          "ref": "cicc-pkg:npm/acme-router@2.3.0"
+        }
+      ],
+      "analysis": {
+        "bom-ref": "analysis:CVE-2026-1001:npm/acme-router",
+        "detail": "verdict: affected. 2.3.0 falls in any version < 2.4.1. first fixed version: 2.4.1. cisa_kev: listed",
+        "state": "exploitable"
+      },
+      "bom-ref": "CVE-2026-1001|cicc-pkg:npm/acme-router@2.3.0",
+      "description": "Remote code execution in acme-router before 2.4.1",
+      "id": "CVE-2026-1001",
+      "ratings": [
+        {
+          "method": "CVSSv31",
+          "score": 9.8,
+          "severity": "critical",
+          "source": {
+            "name": "ghsa"
+          },
+          "vector": "AV:N/AC:L/PR:N/UI:N"
+        },
+        {
+          "method": "CVSSv40",
+          "score": 9.3,
+          "severity": "critical",
+          "source": {
+            "name": "nvd"
+          },
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N"
+        }
+      ],
+      "references": [
+        {
+          "id": "https://example.invalid/advisory/1001",
+          "source": {
+            "name": "nvd"
+          }
+        }
+      ],
+      "source": {
+        "name": "nvd"
+      }
+    },
+    {
+      "affects": [
+        {
+          "ref": "cicc-pkg:npm/acme-ui@3.0.5"
+        }
+      ],
+      "analysis": {
+        "bom-ref": "analysis:CVE-2026-1005:npm/acme-ui",
+        "detail": "verdict: affected. 3.0.5 falls in >= 3.0.0 < 3.2.0. first fixed version: 3.2.0. cisa_kev: not listed",
+        "state": "affected"
+      },
+      "bom-ref": "CVE-2026-1005|cicc-pkg:npm/acme-ui@3.0.5",
+      "description": "Prototype pollution in acme-ui",
+      "id": "CVE-2026-1005",
+      "ratings": [
+        {
+          "method": "CVSSv31",
+          "score": 8.1,
+          "severity": "high",
+          "source": {
+            "name": "nvd"
+          },
+          "vector": "AV:N/AC:L/PR:L/UI:N"
+        }
+      ],
+      "source": {
+        "name": "nvd"
+      }
+    },
+    {
+      "affects": [
+        {
+          "ref": "cicc-pkg:pypi/acme-auth@1.4.2"
+        }
+      ],
+      "analysis": {
+        "bom-ref": "analysis:CVE-2026-1002:pypi/acme-auth",
+        "detail": "verdict: not_affected. outside every published affected range. first fixed version: 1.4.2. cisa_kev: not listed",
+        "state": "not_affected"
+      },
+      "bom-ref": "CVE-2026-1002|cicc-pkg:pypi/acme-auth@1.4.2",
+      "description": "Authentication bypass in acme-auth",
+      "id": "CVE-2026-1002",
+      "ratings": [
+        {
+          "method": "CVSSv31",
+          "score": 7.5,
+          "severity": "high",
+          "source": {
+            "name": "nvd"
+          },
+          "vector": "AV:N/AC:L/PR:N/UI:N"
+        }
+      ],
+      "source": {
+        "name": "nvd"
+      }
+    },
+    {
+      "bom-ref": "CVE-2026-1003",
+      "description": "Withdrawn: alleged denial of service in acme-utils",
+      "id": "CVE-2026-1003",
+      "source": {
+        "name": "osv"
+      }
+    },
+    {
+      "bom-ref": "CVE-2026-1004",
+      "id": "CVE-2026-1004",
+      "source": {
+        "name": "nvd"
+      }
+    }
+  ]
+}
