@@ -72,6 +72,15 @@ function stubProvider() {
         dead_letter: false,
       },
     ] },
+    health: {
+      overall: "degraded",
+      components: [
+        { key: "agents", status: "degraded", detail: "0 active, 1 stale of 1 registered", reasons: ["agent 'agent_a' has no fresh heartbeat (stale/unavailable)"] },
+        { key: "broker", status: "not_configured", detail: "RABBITMQ_AMQP_URL not set", reasons: ["no broker configured: deliveries are prepared (human-assisted), NOT broker-delivered"] },
+      ],
+      reasons: ["agents: agent 'agent_a' has no fresh heartbeat (stale/unavailable)"],
+      at: "2026-11-05T10:00:00Z",
+    },
     events: { events: [{
       delivery_id: "delivery-1",
       event: "pull_request",
@@ -119,12 +128,53 @@ describe("Agent Coordination workspace", () => {
     });
     expect(screen.getByText("No returned task records match the selected filters.")).toBeInTheDocument();
 
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     for (const [url, options] of fetchMock.mock.calls) {
       expect(String(url)).toMatch(/^\/api\/integrations\/coordination\//);
       expect(options?.method).toBe("GET");
       expect(options?.headers).not.toHaveProperty("Authorization");
     }
+  });
+
+  it("renders M28 coordination health with explicit statuses, reasons, and the on-demand (not continuous) note", async () => {
+    stubProvider();
+    render(<CoordinationWorkspace />);
+    expect(await screen.findByText("Coordination health")).toBeInTheDocument();
+    expect(screen.getByText(/not continuous monitoring/)).toBeInTheDocument();
+    expect(screen.getAllByText("degraded").length).toBeGreaterThan(0);
+    expect(screen.getByText("not_configured")).toBeInTheDocument();
+    expect(screen.getByText(/no broker configured/)).toBeInTheDocument();
+  });
+
+  it("loads the M28 task trace on demand: correlation, deliveries, approvals", async () => {
+    const fetchMock = stubProvider();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/coordination/tasks/task-running/trace")) {
+        return jsonResponse({
+          task_id: "task-running",
+          correlation: { idempotency_key: "bff-trace-key", event_id: "evt-9" },
+          state: "RUNNING",
+          agent: "agent_a",
+          attempts: 2,
+          dead_letter: false,
+          events: [{ id: 1, at: "2026-11-05T09:00:00Z", kind: "created", detail: null }],
+          deliveries: [{ id: 3, channel: "human", queue: null, message_id: "m-3", status: "confirmed", attempt: 1, at: "2026-11-05T09:05:00Z" }],
+          approvals: [],
+        });
+      }
+      const key = ["metrics", "agents", "tasks", "events", "health"].find((candidate) => url.endsWith(`/coordination/${candidate}`));
+      return key ? jsonResponse({ metrics: { tasks_total: 0, by_state: {}, by_kind: {}, active_by_agent: {}, avg_progress_active: 0, dead_lettered: 0, deliveries_total: 0, deliveries_by_outcome: {}, approvals_pending: 0, agents_registered: 0, agents_online: 0 }, agents: { agents: [] }, tasks: { tasks: [{ task_id: "task-running", kind: "ci_failed", state: "RUNNING", priority: 5, agent: "agent_a", title: "Current build check", repo: null, branch_ref: null, created_at: null, updated_at: null, dead_letter: false }] }, events: { events: [] }, health: { overall: "healthy", components: [], reasons: [], at: null } }[key]) : new Response("", { status: 404 });
+    });
+
+    render(<CoordinationWorkspace />);
+    const traceButton = await screen.findByRole("button", { name: "View task trace" });
+    fireEvent.click(traceButton);
+    expect(await screen.findByText("bff-trace-key")).toBeInTheDocument();
+    expect(screen.getByText("evt-9")).toBeInTheDocument();
+    expect(screen.getByText("confirmed")).toBeInTheDocument();
+    expect(screen.getByText("The provider recorded no approvals for this task.")).toBeInTheDocument();
+    expect(traceButton).toHaveAttribute("aria-expanded", "true");
   });
 
   it("preserves Arabic/Persian RTL while isolating agent identifiers in LTR", async () => {

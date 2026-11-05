@@ -4,6 +4,9 @@ import {
   parseCoordinationAgents,
   parseCoordinationMetrics,
   parseCoordinationTaskEvents,
+  parseCoordinationHealth,
+  parseCoordinationTaskTrace,
+  coordinationTaskTraceEndpoint,
   parseCoordinationTasks,
   parseOpsOverview,
   readIntegrationResource,
@@ -188,6 +191,45 @@ describe("same-origin integration client", () => {
       parseOpsOverview,
       new AbortController().signal,
     )).rejects.toMatchObject<Partial<IntegrationApiError>>({ kind: "invalid_response" });
+  });
+
+  it("decodes M28 coordination health with explicit component statuses and reasons", () => {
+    const health = parseCoordinationHealth({
+      overall: "degraded",
+      components: [
+        { key: "agents", status: "degraded", detail: "0 active, 1 stale of 1 registered", reasons: ["agent 'h1' has no fresh heartbeat (stale/unavailable)"] },
+        { key: "broker", status: "not_configured", detail: "RABBITMQ_AMQP_URL not set", reasons: ["no broker configured"] },
+      ],
+      reasons: ["agents: agent 'h1' has no fresh heartbeat (stale/unavailable)"],
+      at: "2026-11-05T13:00:00Z",
+    });
+    expect(health.overall).toBe("degraded");
+    expect(health.components[1].status).toBe("not_configured");
+    // Unknown statuses fail closed rather than rendering as a generic indicator.
+    expect(() => parseCoordinationHealth({ overall: "fine", components: [], reasons: [], at: null })).toThrow(/overall/);
+    expect(() => parseCoordinationHealth({ overall: "healthy", components: [{ key: "x", status: "ok", detail: "", reasons: [] }], reasons: [], at: null })).toThrow(/status/);
+  });
+
+  it("decodes the M28 task trace: correlation, events, deliveries, approvals", () => {
+    const trace = parseCoordinationTaskTrace({
+      task_id: "api-1",
+      correlation: { idempotency_key: "bff-key-1", event_id: null },
+      state: "RUNNING",
+      agent: "a1",
+      attempts: 1,
+      dead_letter: false,
+      events: [{ id: 1, at: "2026-11-05T13:00:00Z", kind: "created", detail: null }],
+      deliveries: [{ id: 2, channel: "human", queue: null, message_id: "m-1", status: "confirmed", attempt: 1, at: "2026-11-05T13:01:00Z" }],
+      approvals: [],
+    });
+    expect(trace.correlation.idempotency_key).toBe("bff-key-1");
+    expect(trace.deliveries[0].status).toBe("confirmed");
+    expect(coordinationTaskTraceEndpoint("api 1")).toBe("/api/integrations/coordination/tasks/api%201/trace");
+    expect(() => parseCoordinationTaskTrace({ task_id: "api-1" })).toThrow();
+    expect(() => parseCoordinationTaskTrace({
+      task_id: "api-1", correlation: { idempotency_key: null, event_id: null }, state: "RUNNING",
+      agent: null, attempts: -1, dead_letter: false, events: [], deliveries: [], approvals: [],
+    })).toThrow(/attempts/);
   });
 
   it("decodes per-task lifecycle events and the M27 idempotency correlation key", () => {

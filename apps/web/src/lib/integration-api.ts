@@ -140,6 +140,59 @@ export type CoordinationTask = {
 };
 
 export type CoordinationTaskEvent = { at: string | null; kind: string; detail: string | null };
+
+/** Coordination health (Agent 1 PR #4 M28, contract-registered): explicit per-component status + reasons. */
+export const COORDINATION_HEALTH_STATUSES = [
+  "healthy",
+  "degraded",
+  "stale",
+  "failed",
+  "unavailable",
+  "not_configured",
+  "unknown",
+] as const;
+export type CoordinationHealthStatus = (typeof COORDINATION_HEALTH_STATUSES)[number];
+
+export type CoordinationHealthComponent = {
+  key: string;
+  status: CoordinationHealthStatus;
+  detail: string;
+  reasons: string[];
+};
+
+export type CoordinationHealth = {
+  overall: CoordinationHealthStatus;
+  components: CoordinationHealthComponent[];
+  reasons: string[];
+  at: string | null;
+};
+
+/** Full per-task correlation trace (Agent 1 PR #4 M28, contract-registered, read-only). */
+export type CoordinationTaskTrace = {
+  task_id: string;
+  correlation: { idempotency_key: string | null; event_id: string | null };
+  state: string;
+  agent: string | null;
+  attempts: number;
+  dead_letter: boolean;
+  events: Array<{ id: number; at: string | null; kind: string; detail: string | null }>;
+  deliveries: Array<{
+    id: number;
+    channel: string | null;
+    queue: string | null;
+    message_id: string | null;
+    status: string;
+    attempt: number;
+    at: string | null;
+  }>;
+  approvals: Array<{
+    id: number;
+    status: string;
+    requested_by: string | null;
+    decided_by: string | null;
+    at: string | null;
+  }>;
+};
 export type CoordinationTaskEvents = { task_id: string; events: CoordinationTaskEvent[] };
 
 export type CoordinationMetrics = {
@@ -179,7 +232,12 @@ export const integrationEndpoints = {
   coordinationTasks: "/api/integrations/coordination/tasks",
   coordinationMetrics: "/api/integrations/coordination/metrics",
   coordinationEvents: "/api/integrations/coordination/events",
+  coordinationHealth: "/api/integrations/coordination/health",
 } as const;
+
+export function coordinationTaskTraceEndpoint(taskId: string): string {
+  return `/api/integrations/coordination/tasks/${encodeURIComponent(taskId)}/trace`;
+}
 
 export function coordinationTaskEventsEndpoint(taskId: string): string {
   return `/api/integrations/coordination/tasks/${encodeURIComponent(taskId)}/events`;
@@ -425,6 +483,79 @@ export function parseCoordinationTaskEvents(value: unknown): CoordinationTaskEve
         at: nullableString(item.at, `events[${index}].at`),
         kind: string(item.kind, `events[${index}].kind`),
         detail: nullableString(item.detail, `events[${index}].detail`),
+      };
+    }),
+  };
+}
+
+function coordinationHealthStatus(value: unknown, label: string): CoordinationHealthStatus {
+  const result = string(value, label);
+  if (!(COORDINATION_HEALTH_STATUSES as readonly string[]).includes(result)) {
+    return fail(`${label} must be one of ${COORDINATION_HEALTH_STATUSES.join(", ")}`);
+  }
+  return result as CoordinationHealthStatus;
+}
+
+export function parseCoordinationHealth(value: unknown): CoordinationHealth {
+  const root = object(value, "coordination health");
+  return {
+    overall: coordinationHealthStatus(root.overall, "health.overall"),
+    components: array(root.components, "health.components", (item, index) => {
+      const component = object(item, `health.components[${index}]`);
+      return {
+        key: nonEmptyString(component.key, `health.components[${index}].key`),
+        status: coordinationHealthStatus(component.status, `health.components[${index}].status`),
+        detail: string(component.detail, `health.components[${index}].detail`),
+        reasons: component.reasons === undefined ? [] : stringArray(component.reasons, `health.components[${index}].reasons`),
+      };
+    }),
+    reasons: root.reasons === undefined ? [] : stringArray(root.reasons, "health.reasons"),
+    at: nullableString(root.at, "health.at"),
+  };
+}
+
+export function parseCoordinationTaskTrace(value: unknown): CoordinationTaskTrace {
+  const root = object(value, "task trace response");
+  const correlation = object(root.correlation, "trace.correlation");
+  return {
+    task_id: nonEmptyString(root.task_id, "trace.task_id"),
+    correlation: {
+      idempotency_key: nullableString(correlation.idempotency_key, "trace.correlation.idempotency_key"),
+      event_id: nullableString(correlation.event_id, "trace.correlation.event_id"),
+    },
+    state: string(root.state, "trace.state"),
+    agent: nullableString(root.agent, "trace.agent"),
+    attempts: nonNegativeInteger(root.attempts, "trace.attempts"),
+    dead_letter: boolean(root.dead_letter, "trace.dead_letter"),
+    events: array(root.events, "trace.events", (item, index) => {
+      const event = object(item, `trace.events[${index}]`);
+      return {
+        id: nonNegativeInteger(event.id, `trace.events[${index}].id`),
+        at: nullableString(event.at, `trace.events[${index}].at`),
+        kind: string(event.kind, `trace.events[${index}].kind`),
+        detail: nullableString(event.detail, `trace.events[${index}].detail`),
+      };
+    }),
+    deliveries: array(root.deliveries, "trace.deliveries", (item, index) => {
+      const delivery = object(item, `trace.deliveries[${index}]`);
+      return {
+        id: nonNegativeInteger(delivery.id, `trace.deliveries[${index}].id`),
+        channel: nullableString(delivery.channel, `trace.deliveries[${index}].channel`),
+        queue: nullableString(delivery.queue, `trace.deliveries[${index}].queue`),
+        message_id: nullableString(delivery.message_id, `trace.deliveries[${index}].message_id`),
+        status: string(delivery.status, `trace.deliveries[${index}].status`),
+        attempt: nonNegativeInteger(delivery.attempt, `trace.deliveries[${index}].attempt`),
+        at: nullableString(delivery.at, `trace.deliveries[${index}].at`),
+      };
+    }),
+    approvals: array(root.approvals, "trace.approvals", (item, index) => {
+      const approval = object(item, `trace.approvals[${index}]`);
+      return {
+        id: nonNegativeInteger(approval.id, `trace.approvals[${index}].id`),
+        status: string(approval.status, `trace.approvals[${index}].status`),
+        requested_by: nullableString(approval.requested_by, `trace.approvals[${index}].requested_by`),
+        decided_by: nullableString(approval.decided_by, `trace.approvals[${index}].decided_by`),
+        at: nullableString(approval.at, `trace.approvals[${index}].at`),
       };
     }),
   };

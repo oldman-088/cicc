@@ -9,7 +9,10 @@ import {
   parseCoordinationEvents,
   parseCoordinationMetrics,
   parseCoordinationTaskEvents,
+  parseCoordinationHealth,
+  parseCoordinationTaskTrace,
   coordinationTaskEventsEndpoint,
+  coordinationTaskTraceEndpoint,
   readIntegrationResource,
   parseCoordinationTasks,
   type CoordinationAgent,
@@ -17,6 +20,8 @@ import {
   type CoordinationTaskEvent,
   type CoordinationMetrics,
   type CoordinationTask,
+  type CoordinationHealth,
+  type CoordinationTaskTrace,
 } from "../../lib/integration-api";
 import { ResourcePanel } from "../integrations/ResourcePanel";
 import { TaskSubmissionPanel } from "./TaskSubmissionPanel";
@@ -86,6 +91,26 @@ type Messages = {
   failedTasks: string;
   lastSeen: string;
   noTimestamp: string;
+  coordHealth: string;
+  healthOverall: string;
+  healthCheckedAt: string;
+  healthOnDemandNote: string;
+  healthReasons: string;
+  viewTrace: string;
+  hideTrace: string;
+  loadingTrace: string;
+  traceError: string;
+  traceDeliveries: string;
+  traceApprovals: string;
+  traceAttempts: string;
+  traceEventId: string;
+  noDeliveries: string;
+  noApprovals: string;
+  deliveryStatus: string;
+  deliveryChannel: string;
+  approvalStatus: string;
+  requestedBy: string;
+  decidedBy: string;
   eventName: string;
   action: string;
   sender: string;
@@ -140,6 +165,26 @@ const copy: Record<Locale, Messages> = {
     noEvents: "The provider returned no lifecycle events for this task.",
     eventsError: "Task events could not be loaded from the provider.",
     correlationKey: "Correlation (idempotency) key",
+    coordHealth: "Coordination health",
+    healthOverall: "Overall",
+    healthCheckedAt: "Checked at",
+    healthOnDemandNote: "Checked on demand when this page loads or is refreshed — this is not continuous monitoring.",
+    healthReasons: "Reasons reported by the provider",
+    viewTrace: "View task trace",
+    hideTrace: "Hide task trace",
+    loadingTrace: "Loading task trace…",
+    traceError: "Task trace could not be loaded from the provider.",
+    traceDeliveries: "Delivery attempts",
+    traceApprovals: "Approvals",
+    traceAttempts: "Attempts",
+    traceEventId: "Event ID",
+    noDeliveries: "The provider recorded no delivery attempts for this task.",
+    noApprovals: "The provider recorded no approvals for this task.",
+    deliveryStatus: "Delivery status",
+    deliveryChannel: "Channel",
+    approvalStatus: "Approval status",
+    requestedBy: "Requested by",
+    decidedBy: "Decided by",
     sortBy: "Sort tasks", sortNewest: "Newest first", sortPriority: "Highest priority", sortState: "State (A–Z)", previousPage: "Previous page", nextPage: "Next page", pageLabel: "Page", copyLink: "Copy task link", linkCopied: "Link copied",
     stale: "Stale per provider",
     health: "Provider health",
@@ -203,6 +248,26 @@ const copy: Record<Locale, Messages> = {
     noEvents: "لم يُرجع المزوّد أحداثاً لدورة حياة هذه المهمة.",
     eventsError: "تعذّر تحميل أحداث المهمة من المزوّد.",
     correlationKey: "مفتاح الارتباط (عدم التكرار)",
+    coordHealth: "صحة التنسيق",
+    healthOverall: "الإجمالي",
+    healthCheckedAt: "وقت الفحص",
+    healthOnDemandNote: "يُفحص عند الطلب عند تحميل هذه الصفحة أو تحديثها — وليس مراقبة مستمرة.",
+    healthReasons: "الأسباب التي أبلغ عنها المزوّد",
+    viewTrace: "عرض تتبّع المهمة",
+    hideTrace: "إخفاء تتبّع المهمة",
+    loadingTrace: "جارٍ تحميل تتبّع المهمة…",
+    traceError: "تعذّر تحميل تتبّع المهمة من المزوّد.",
+    traceDeliveries: "محاولات التسليم",
+    traceApprovals: "الموافقات",
+    traceAttempts: "المحاولات",
+    traceEventId: "معرّف الحدث",
+    noDeliveries: "لم يسجّل المزوّد محاولات تسليم لهذه المهمة.",
+    noApprovals: "لم يسجّل المزوّد موافقات لهذه المهمة.",
+    deliveryStatus: "حالة التسليم",
+    deliveryChannel: "القناة",
+    approvalStatus: "حالة الموافقة",
+    requestedBy: "طلبها",
+    decidedBy: "بتّ فيها",
     sortBy: "ترتيب المهام", sortNewest: "الأحدث أولاً", sortPriority: "الأولوية الأعلى", sortState: "الحالة (أ–ي)", previousPage: "الصفحة السابقة", nextPage: "الصفحة التالية", pageLabel: "صفحة", copyLink: "نسخ رابط المهمة", linkCopied: "نُسخ الرابط",
     stale: "قديم بحسب المزوّد",
     health: "صحة الوكيل بحسب المزوّد",
@@ -266,6 +331,26 @@ const copy: Record<Locale, Messages> = {
     noEvents: "منبع برای این وظیفه رویداد چرخهٔ حیاتی برنگرداند.",
     eventsError: "بارگذاری رویدادهای وظیفه از منبع ممکن نشد.",
     correlationKey: "کلید هم‌بستگی (یکتایی)",
+    coordHealth: "سلامت هماهنگی",
+    healthOverall: "کلی",
+    healthCheckedAt: "زمان بررسی",
+    healthOnDemandNote: "هنگام بارگذاری یا بازخوانی این صفحه و بر اساس درخواست بررسی می‌شود — این پایش پیوسته نیست.",
+    healthReasons: "دلایل گزارش‌شده از سوی منبع",
+    viewTrace: "مشاهدهٔ ردیابی وظیفه",
+    hideTrace: "پنهان‌کردن ردیابی وظیفه",
+    loadingTrace: "در حال بارگذاری ردیابی وظیفه…",
+    traceError: "بارگذاری ردیابی وظیفه از منبع ممکن نشد.",
+    traceDeliveries: "تلاش‌های تحویل",
+    traceApprovals: "تأییدها",
+    traceAttempts: "تلاش‌ها",
+    traceEventId: "شناسهٔ رویداد",
+    noDeliveries: "منبع برای این وظیفه هیچ تلاش تحویلی ثبت نکرده است.",
+    noApprovals: "منبع برای این وظیفه هیچ تأییدی ثبت نکرده است.",
+    deliveryStatus: "وضعیت تحویل",
+    deliveryChannel: "کانال",
+    approvalStatus: "وضعیت تأیید",
+    requestedBy: "درخواست‌کننده",
+    decidedBy: "تصمیم‌گیرنده",
     sortBy: "مرتب‌سازی وظایف", sortNewest: "تازه‌ترین اول", sortPriority: "بالاترین اولویت", sortState: "وضعیت (الفبا)", previousPage: "صفحهٔ قبل", nextPage: "صفحهٔ بعد", pageLabel: "صفحه", copyLink: "کپی پیوند وظیفه", linkCopied: "پیوند کپی شد",
     stale: "طبق منبع قدیمی است",
     health: "سلامت عامل طبق منبع",
@@ -465,6 +550,7 @@ function TaskContent({
                 <button type="button" onClick={() => { const link = `${window.location.pathname}?task=${encodeURIComponent(task.task_id)}`; void navigator.clipboard?.writeText(`${window.location.origin}${link}`).then(() => setCopied(true)).catch(() => undefined); }}>{messages.copyLink}</button>
                 {copied && <span role="status"> {messages.linkCopied}</span>}
                 <TaskEvents taskId={task.task_id} locale={locale} messages={messages} />
+                <TaskTrace taskId={task.task_id} locale={locale} messages={messages} />
               </details>
             </li>
           ))}
@@ -477,6 +563,107 @@ function TaskContent({
           <button type="button" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>{messages.nextPage}</button>
         </nav>
       )}
+    </div>
+  );
+}
+
+function HealthContent({ data, locale, messages }: { data: CoordinationHealth; locale: Locale; messages: Messages }) {
+  const degraded = data.overall !== "healthy";
+  return (
+    <div>
+      <p>
+        <strong>{messages.healthOverall}:</strong>{" "}
+        <span className={degraded ? `${styles.statusTag} ${styles.warningTag}` : styles.statusTag}>
+          <bdi dir="ltr">{data.overall}</bdi>
+        </span>
+        {data.at && <> · {messages.healthCheckedAt}: {formatTimestamp(data.at, locale, messages.noTimestamp)}</>}
+      </p>
+      <p className={styles.scopeNote}>{messages.healthOnDemandNote}</p>
+      <ul className={styles.agentList}>
+        {data.components.map((component) => (
+          <li key={component.key} className={styles.recordCard}>
+            <div className={styles.cardHeading}>
+              <h3><bdi dir="ltr">{component.key}</bdi></h3>
+              <span className={component.status !== "healthy" ? `${styles.statusTag} ${styles.warningTag}` : styles.statusTag}>
+                <bdi dir="ltr">{component.status}</bdi>
+              </span>
+            </div>
+            {component.detail && <p dir="auto">{component.detail}</p>}
+            {component.reasons.length > 0 && (
+              <ul>{component.reasons.map((reason) => <li key={reason}><bdi dir="auto">{reason}</bdi></li>)}</ul>
+            )}
+          </li>
+        ))}
+      </ul>
+      {data.reasons.length > 0 && (
+        <>
+          <h3>{messages.healthReasons}</h3>
+          <ul>{data.reasons.map((reason) => <li key={reason}><bdi dir="auto">{reason}</bdi></li>)}</ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TaskTrace({ taskId, locale, messages }: { taskId: string; locale: Locale; messages: Messages }) {
+  const [state, setState] = useState<{ phase: "idle" | "loading" | "ready" | "error"; trace?: CoordinationTaskTrace }>({ phase: "idle" });
+  const load = () => {
+    if (state.phase === "loading") return;
+    if (state.phase === "ready") { setState({ phase: "idle" }); return; }
+    setState({ phase: "loading" });
+    void readIntegrationResource(coordinationTaskTraceEndpoint(taskId), parseCoordinationTaskTrace, new AbortController().signal)
+      .then((trace) => setState({ phase: "ready", trace }))
+      .catch(() => setState({ phase: "error" }));
+  };
+  const trace = state.trace;
+  return (
+    <div>
+      <button type="button" onClick={load} aria-expanded={state.phase === "ready"}>
+        {state.phase === "ready" ? messages.hideTrace : messages.viewTrace}
+      </button>
+      <div aria-live="polite">
+        {state.phase === "loading" && <p>{messages.loadingTrace}</p>}
+        {state.phase === "error" && <p role="alert">{messages.traceError}</p>}
+        {state.phase === "ready" && trace && (
+          <div>
+            <dl className={styles.smallMeta}>
+              <div><dt>{messages.state}</dt><dd><bdi dir="ltr">{trace.state}</bdi></dd></div>
+              <div><dt>{messages.assignedAgent}</dt><dd>{trace.agent ? <bdi dir="auto">{trace.agent}</bdi> : messages.noAgent}</dd></div>
+              <div><dt>{messages.traceAttempts}</dt><dd>{formatNumber(trace.attempts, locale)}</dd></div>
+              <div><dt>{messages.deadLetter}</dt><dd>{trace.dead_letter ? "true" : "false"}</dd></div>
+              <div><dt>{messages.correlationKey}</dt><dd>{trace.correlation.idempotency_key ? <code><bdi dir="ltr">{trace.correlation.idempotency_key}</bdi></code> : messages.noValue}</dd></div>
+              <div><dt>{messages.traceEventId}</dt><dd>{trace.correlation.event_id ? <code><bdi dir="ltr">{trace.correlation.event_id}</bdi></code> : messages.noValue}</dd></div>
+            </dl>
+            {trace.events.length > 0 ? (
+              <ol>{trace.events.map((event) => (
+                <li key={event.id}><bdi dir="ltr">{event.kind}</bdi>{event.at && <> · {formatTimestamp(event.at, locale, messages.noTimestamp)}</>}{event.detail && <><br /><bdi dir="auto">{event.detail}</bdi></>}</li>
+              ))}</ol>
+            ) : <p>{messages.noEvents}</p>}
+            <h4>{messages.traceDeliveries}</h4>
+            {trace.deliveries.length > 0 ? (
+              <ul>{trace.deliveries.map((delivery) => (
+                <li key={delivery.id}>
+                  <bdi dir="ltr">{delivery.status}</bdi>
+                  {delivery.channel && <> · {messages.deliveryChannel}: <bdi dir="auto">{delivery.channel}</bdi></>}
+                  {" · "}{messages.traceAttempts}: {formatNumber(delivery.attempt, locale)}
+                  {delivery.at && <> · {formatTimestamp(delivery.at, locale, messages.noTimestamp)}</>}
+                </li>
+              ))}</ul>
+            ) : <p>{messages.noDeliveries}</p>}
+            <h4>{messages.traceApprovals}</h4>
+            {trace.approvals.length > 0 ? (
+              <ul>{trace.approvals.map((approval) => (
+                <li key={approval.id}>
+                  <bdi dir="ltr">{approval.status}</bdi>
+                  {approval.requested_by && <> · {messages.requestedBy}: <bdi dir="auto">{approval.requested_by}</bdi></>}
+                  {approval.decided_by && <> · {messages.decidedBy}: <bdi dir="auto">{approval.decided_by}</bdi></>}
+                  {approval.at && <> · {formatTimestamp(approval.at, locale, messages.noTimestamp)}</>}
+                </li>
+              ))}</ul>
+            ) : <p>{messages.noApprovals}</p>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -539,6 +726,7 @@ export function CoordinationWorkspace() {
   const agents = useIntegrationResource(integrationEndpoints.coordinationAgents, parseCoordinationAgents);
   const tasks = useIntegrationResource(integrationEndpoints.coordinationTasks, parseCoordinationTasks);
   const events = useIntegrationResource(integrationEndpoints.coordinationEvents, parseCoordinationEvents);
+  const health = useIntegrationResource(integrationEndpoints.coordinationHealth, parseCoordinationHealth);
 
   return (
     <div className={styles.page} lang={locale} dir={locale === "en" ? "ltr" : "rtl"}>
@@ -559,6 +747,10 @@ export function CoordinationWorkspace() {
       <div className={styles.dashboardGrid}>
         <ResourcePanel title={text.metrics} state={metrics.state} onRefresh={metrics.refresh}>
           {(data) => <MetricContent data={data} locale={locale} messages={text} />}
+        </ResourcePanel>
+
+        <ResourcePanel title={text.coordHealth} state={health.state} onRefresh={health.refresh}>
+          {(data) => <HealthContent data={data} locale={locale} messages={text} />}
         </ResourcePanel>
 
         <ResourcePanel

@@ -60,3 +60,25 @@ test("cross-workspace journey: shell navigation reaches investigations and setti
   await settingsLink.click();
   await expect(page).toHaveURL(/\/settings$/);
 });
+
+test("coordination health journey: health panel is honestly unavailable without a provider", async ({ page }) => {
+  await page.goto("/coordination", { waitUntil: "networkidle" });
+  await expect(page.getByText("Coordination health").first()).toBeVisible();
+  await expect(page.getByText(/not continuous monitoring/)).toBeVisible();
+});
+
+test("malformed import journey: invalid file is rejected visibly and local state is unchanged", async ({ page }) => {
+  await page.goto("/investigations", { waitUntil: "networkidle" });
+  await page.getByLabel("Title").fill("Import guard case");
+  await page.getByRole("button", { name: "Create investigation" }).click();
+  await expect(page.getByRole("heading", { name: "Import guard case", level: 3 })).toBeVisible();
+  await page.getByLabel(/Import JSON/).setInputFiles({
+    name: "bad.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("{not json"),
+  });
+  await expect(page.getByRole("alert")).toContainText(/Import failed/);
+  await expect(page.getByRole("heading", { name: "Import guard case", level: 3 })).toBeVisible();
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Import guard case", level: 3 })).toBeVisible();
+});

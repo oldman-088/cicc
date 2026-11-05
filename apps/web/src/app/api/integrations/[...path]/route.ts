@@ -56,6 +56,8 @@ const routes: Record<string, UpstreamRoute> = {
     },
   },
   "coordination/metrics": { path: "api/v1/coordination/metrics" },
+  // Agent 1 PR #4 M28, contract-registered: explicit per-component status + reasons.
+  "coordination/health": { path: "api/v1/coordination/health" },
   "coordination/events": {
     path: "api/v1/coordination/events",
     query: { limit: { defaultValue: "100", validate: integerInRange(1, 500) } },
@@ -185,11 +187,12 @@ export async function GET(
 ): Promise<Response> {
   const { path } = await context.params;
   // Canonical per-task reads confirmed by Agent 1 (PR #4 M26):
-  // GET /api/v1/coordination/tasks/{id} and /tasks/{id}/events.
+  // GET /api/v1/coordination/tasks/{id}, /tasks/{id}/events, and
+  // /tasks/{id}/trace (M28: ids, lifecycle events, deliveries, approvals).
   let spec = routes[path.join("/")];
-  if (!spec && path[0] === "coordination" && path[1] === "tasks" && (path.length === 3 || (path.length === 4 && path[3] === "events"))) {
+  if (!spec && path[0] === "coordination" && path[1] === "tasks" && (path.length === 3 || (path.length === 4 && (path[3] === "events" || path[3] === "trace")))) {
     if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(path[2])) return problem("invalid_request", 400);
-    spec = { path: `api/v1/coordination/tasks/${encodeURIComponent(path[2])}${path.length === 4 ? "/events" : ""}` };
+    spec = { path: `api/v1/coordination/tasks/${encodeURIComponent(path[2])}${path.length === 4 ? `/${path[3]}` : ""}` };
   }
   if (!spec) return problem("not_found", 404);
   if (!sameOriginAllowed(request)) return problem("cross_site_forbidden", 403);

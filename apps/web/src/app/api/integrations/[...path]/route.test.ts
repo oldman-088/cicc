@@ -95,6 +95,14 @@ describe("server-side integration adapter", () => {
     expect(taskById.status).toBe(200);
     const taskEvents = await get(["coordination", "tasks", "api-123", "events"]);
     expect(taskEvents.status).toBe(200);
+    const taskTrace = await get(["coordination", "tasks", "api-123", "trace"]);
+    expect(taskTrace.status).toBe(200);
+    const health = await get(["coordination", "health"]);
+    expect(health.status).toBe(200);
+    const badTraceId = await get(["coordination", "tasks", "bad id!", "trace"]);
+    expect(badTraceId.status).toBe(400);
+    const unknownSuffix = await get(["coordination", "tasks", "api-123", "deliver"]);
+    expect(unknownSuffix.status).toBe(404);
   });
 
   it("sanitizes upstream rate-limit errors and preserves a safe Retry-After", async () => {

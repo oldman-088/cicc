@@ -62,6 +62,7 @@ export function InvestigationsWorkspace() {
   const [statusFilter, setStatusFilter] = useState<"all" | InvestigationStatus>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [importStatus, setImportStatus] = useState<{ kind: "error" | "success"; text: string } | null>(null);
 
   useEffect(() => { setItems(load()); setLoaded(true); }, []);
   useEffect(() => { if (loaded) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }, [items, loaded]);
@@ -95,16 +96,23 @@ export function InvestigationsWorkspace() {
               const file = event.target.files?.[0];
               if (!file) return;
               void file.text().then((text) => {
+                const rejected = () => setImportStatus({ kind: "error", text: locale === "ar" ? "تعذّر استيراد الملف: ليس JSON صالحاً لقائمة تحقيقات. لم يتغيّر شيء." : locale === "fa" ? "واردکردن فایل ممکن نشد: JSON معتبرِ فهرست تحقیقات نیست. چیزی تغییر نکرد." : "Import failed: the file is not a valid investigations JSON list. Nothing was changed." });
                 try {
                   const parsed: unknown = JSON.parse(text);
-                  if (!Array.isArray(parsed)) return;
+                  if (!Array.isArray(parsed)) { rejected(); return; }
                   const valid = parsed.filter((item) => typeof item === "object" && item !== null && typeof (item as { id?: unknown }).id === "string" && typeof (item as { title?: unknown }).title === "string" && Array.isArray((item as { notes?: unknown }).notes)) as Investigation[];
+                  if (valid.length === 0) { rejected(); return; }
                   const migrated = valid.map((item) => ({ ...item, notes: item.notes.map((n) => typeof n === "string" ? { text: n as unknown as string, at: item.createdAt } : n), entities: Array.isArray(item.entities) ? item.entities : [], linkedTaskId: typeof item.linkedTaskId === "string" ? item.linkedTaskId : null }));
-                  setItems((current) => [...migrated.filter((item) => !current.some((c) => c.id === item.id)), ...current]);
-                } catch { /* malformed import files are rejected silently to the unchanged local state */ }
-              });
+                  setItems((current) => {
+                    const added = migrated.filter((item) => !current.some((c) => c.id === item.id));
+                    setImportStatus({ kind: "success", text: locale === "ar" ? `تم استيراد ${added.length} تحقيقاً محلياً.` : locale === "fa" ? `${added.length} تحقیق به‌صورت محلی وارد شد.` : `Imported ${added.length} investigation(s) locally.` });
+                    return [...added, ...current];
+                  });
+                } catch { rejected(); }
+              }).catch(() => setImportStatus({ kind: "error", text: locale === "ar" ? "تعذّرت قراءة الملف. لم يتغيّر شيء." : locale === "fa" ? "خواندن فایل ممکن نشد. چیزی تغییر نکرد." : "Import failed: the file could not be read. Nothing was changed." }));
             }} />
           </label>
+          {importStatus && <span role={importStatus.kind === "error" ? "alert" : "status"}> {importStatus.text}</span>}
           <span role="note"> {locale === "ar" ? "يبقى الاستيراد محلياً؛ لا يُرفع شيء." : locale === "fa" ? "ورودی محلی می‌ماند؛ چیزی بارگذاری نمی‌شود." : "Import stays local; nothing is uploaded."}</span>
         </div>
       </header>

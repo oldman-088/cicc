@@ -86,3 +86,7 @@ The reviewed PR #3 diff contains ingestion/service and architecture work but no 
 - Keep configured provider failures distinct from unconfigured, empty-success, malformed, cached, and test-fixture states. Preserve prior data only with an explicit stale warning.
 - Never infer entity confidence, provenance, status, health, delivery confirmation, freshness, or tenant access beyond returned contract fields.
 - Add integration tests only against an approved service environment; label all local test fixtures as synthetic and never substitute them after failure.
+
+## Coordination health & task trace (Agent 1 M28) — IMPLEMENTED, LOCAL FIXTURE VERIFIED
+
+`GET /api/v1/coordination/health` and `GET /api/v1/coordination/tasks/{id}/trace` consumed via the BFF fixed/parameterized GET routes. Health statuses are a closed enum; unknown values fail closed. Trace correlation uses `correlation.idempotency_key` / `correlation.event_id`. Health is checked on demand (page load/refresh) — never presented as continuous monitoring. Verified locally against PR #4 @ `185150f` (see DEVELOPMENT_LOG 2026-11-05 M28 entry); not production. Known upstream inconsistency (reported to Agent 1): trace event/delivery timestamps are naive ISO, health `at` is tz-aware.
