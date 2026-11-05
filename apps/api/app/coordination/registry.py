@@ -416,6 +416,18 @@ def health(s) -> dict:
          f"{len(pending)} pending of {len(appr)} total",
          [f"approval pending past expiry on: {', '.join(overdue_appr[:10])}" for _ in [0] if overdue_appr])
 
+    # --- contract governance health (M30: adoption visibility in health) ---
+    from app.coordination import amendments as _amd
+    amds = _amd.list_amendments(s)
+    by_status = {}
+    for a in amds:
+        by_status[a["status"]] = by_status.get(a["status"], 0) + 1
+    pending_ids = [a["amendment_id"] for a in amds if a["status"] == "pending"]
+    comp("contract_governance",
+         "degraded" if pending_ids else "healthy",
+         f"{len(amds)} amendments; by status: {by_status}; effective version {_amd.effective_version(s)}",
+         [f"amendment(s) awaiting owner decision: {', '.join(pending_ids[:10])}" for _ in [0] if pending_ids])
+
     # --- last attempted / successful operations (M29: evidence-backed recency) ---
     from sqlalchemy import func as _f
     last_webhook = s.execute(select(_f.max(models.GitHubEvent.received_at))).scalar()

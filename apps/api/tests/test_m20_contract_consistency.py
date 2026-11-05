@@ -344,3 +344,13 @@ def test_m30_amendment_lifecycle_hardening(client):
     # contract summary lists all statuses
     c = client.get("/api/v1/coordination/contract", headers=R).json()["amendments"]
     assert set(c["statuses"]) == {"pending", "accepted", "rejected", "withdrawn", "superseded", "stale"}
+
+
+def test_m30_health_includes_contract_governance(client):
+    """M30: health surfaces pending amendments as actionable reasons."""
+    client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-200"), headers=W)
+    h = client.get("/api/v1/coordination/health", headers=R).json()
+    keys = {c["key"]: c for c in h["components"]}
+    assert "contract_governance" in keys
+    assert keys["contract_governance"]["status"] == "degraded"
+    assert any("AMD-200" in r for r in h["reasons"])

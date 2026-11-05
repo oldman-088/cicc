@@ -164,3 +164,41 @@ test("M27: read token is injected for GETs; write token is separate and never mi
   assert.equal(coordWriteToken({ WEB_BFF_API_TOKEN: "read-tok", WEB_BFF_WRITE_TOKEN: "write-tok" }), "write-tok");
   assert.equal(coordWriteToken({ WEB_BFF_API_TOKEN: "read-tok" }), ""); // no write token configured -> write path disabled
 });
+
+// ---- M30: BFF boundary regressions ----
+
+test("M30: x-cicc-* client headers are stripped; client auth never reaches upstream", () => {
+  const h = new Headers({
+    "x-cicc-token": "leaked-client-token",
+    "x-cicc-idempotency-key": "client-forged",
+    "authorization": "Bearer client-token",
+    "content-type": "application/json",
+  });
+  const out = buildUpstreamHeaders(h, { WEB_BFF_API_TOKEN: "server-read" });
+  assert.equal(out.get("x-cicc-token"), null);
+  assert.equal(out.get("x-cicc-idempotency-key"), null);
+  assert.equal(out.get("Authorization"), "Bearer server-read"); // client auth replaced, never forwarded
+});
+
+test("M30: same-origin enforcement (Sec-Fetch-Site) rejects cross-site when enabled", () => {
+  const env = { WEB_BFF_ENFORCE_SAME_ORIGIN: "1" };
+  assert.equal(sameOriginOk(new Headers(), env), true); // non-browser: no header -> allow
+  assert.equal(sameOriginOk(new Headers({ "sec-fetch-site": "same-origin" }), env), true);
+  assert.equal(sameOriginOk(new Headers({ "sec-fetch-site": "same-site" }), env), true);
+  assert.equal(sameOriginOk(new Headers({ "sec-fetch-site": "none" }), env), true);
+  assert.equal(sameOriginOk(new Headers({ "sec-fetch-site": "cross-site" }), env), false);
+  assert.equal(sameOriginOk(new Headers({ "sec-fetch-site": "cross-site" }), {}), true); // disabled -> allow
+});
+
+test("M30: concurrent duplicate submissions get distinct server keys (no cross-request dedup at BFF)", async () => {
+  // BFF generates a fresh bff-<uuid> per request; API-level dedup applies only
+  // when the same idempotency_key is presented — client keys are rejected (422)
+  // so two identical POSTs create two distinct tasks with distinct keys.
+  const env = { WEB_BFF_ALLOW_COORD_WRITE: "1", WEB_BFF_WRITE_TOKEN: "w" };
+  let n = 0; const gen = () => `bff-test-${++n}`;
+  const a = validateCoordTaskBody({ kind: "k", payload: {} }, gen);
+  const b = validateCoordTaskBody({ kind: "k", payload: {} }, gen);
+  assert.equal(a.ok && b.ok, true);
+  assert.notEqual(a.value.idempotency_key, b.value.idempotency_key);
+  assert.equal(isCoordWriteAllowed("POST", ["v1", "coordination", "tasks"], env), true);
+});
