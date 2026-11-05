@@ -99,6 +99,19 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
 - API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
 
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

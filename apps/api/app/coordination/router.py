@@ -26,7 +26,7 @@ from sqlalchemy import select
 from app import models, ops
 from app.ratelimit import read_token_dependency, require_write_token, write_rate_limit_dependency
 from . import agents as agent_registry
-from . import approvals, github_sync, handoff, registry, routing, webhook
+from . import approvals, contract, github_sync, handoff, registry, routing, webhook
 
 router = APIRouter(prefix="/api/v1/coordination", tags=["coordination"])
 
@@ -114,6 +114,12 @@ async def github_webhook(
 
 
 # ---------------- events ----------------
+
+@router.get("/contract")
+def contract_descriptor(_gate: None = Depends(read_token_dependency)):
+    """Machine-readable contract v1.0 self-description (M18, additive, read-only)."""
+    return contract.contract_v1()
+
 
 @router.get("/events")
 def list_events(_gate: None = Depends(read_token_dependency), limit: int = Query(100, ge=1, le=500)):
@@ -323,7 +329,13 @@ def retry_task(task_id: str, request: Request, _gate: None = Depends(read_token_
     write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         t = _get_task(s, task_id)
-        ok = registry.transition(s, t, "RETRYING", "manual retry") and registry.transition(s, t, "QUEUED", "re-queued")
+        cur = registry.normalize_state(t.state)
+        if cur in ("RETRYING", "BLOCKED"):
+            # auto dead-letter policy may already have moved FAILED -> RETRYING/BLOCKED;
+            # both allow a direct transition back to QUEUED
+            ok = registry.transition(s, t, "QUEUED", "re-queued")
+        else:
+            ok = registry.transition(s, t, "RETRYING", "manual retry") and registry.transition(s, t, "QUEUED", "re-queued")
         s.commit()
         if not ok:
             raise HTTPException(status_code=409, detail=f"cannot retry from state {t.state}")

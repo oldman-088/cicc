@@ -92,3 +92,16 @@ PR #4 / issue #5 since the M16 follow-up.
 i18n note: en/ar key count is 187 at every commit since b1b2f1b (175@M9 →
 182@M10 → 187@M11, +5 broker keys); the "188" in the M14 report was a
 miscount, **no key was removed or lost**; parity en==ar holds at every commit.
+
+## M18 update (2026-11-05 ~10:48 UTC)
+
+- PR heads re-verified: PR #1 = **`64e3c00`** (updated 2026-11-05T10:37:26Z —
+  Agent 3 pushed again since M17's d913cfa), PR #2 = `3462a8b`, PR #3 =
+  `1a46f70`. Full file scan of PR #1 @ 64e3c00 (100 files): still **no
+  `/api/v1/coordination` references**. No new PR #4/issue #5 comments.
+- Status unchanged: Agent 2 PENDING, Agent 3 PENDING, Agent 4 PARTIALLY
+  COMPATIBLE (discussion-level). Executable integration path provided instead
+  of waiting: `GET /api/v1/coordination/contract` (machine-readable v1.0),
+  `scripts/contract_check.py` (16/16 PASS live @2026-11-05T10:48:05Z, fixture-
+  labeled), `docs/INTEGRATION_EXAMPLES.md` (paths/methods/DTOs/auth/lifecycle/
+  idempotency/errors/audit/tenant-pending).

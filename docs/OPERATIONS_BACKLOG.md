@@ -217,6 +217,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live mode-labeled.
 
+## Done — Milestone 18 (PR #4 update)
+
+- M18-1/2 actionable integration path (not waiting on replies):
+  /coordination/contract descriptor + scripts/contract_check.py (16/16 live,
+  fixture-labeled) + docs/INTEGRATION_EXAMPLES.md; contract v1.0 unchanged.
+- M18-3 recovery defect: retry from RETRYING/BLOCKED fixed; stale sweep,
+  approval reject/audit, illegal-transition audit covered by
+  tests/test_m18_recovery.py (4). BFF + replay detection untouched.
+- M18-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T10:48:17Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -373,6 +385,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   unchanged); alignment doc updated; Agent 1 ~90% / product ~25-35%.
 - Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live mode-labeled.
+
+## Done — Milestone 18 (PR #4 update)
+
+- M18-1/2 actionable integration path (not waiting on replies):
+  /coordination/contract descriptor + scripts/contract_check.py (16/16 live,
+  fixture-labeled) + docs/INTEGRATION_EXAMPLES.md; contract v1.0 unchanged.
+- M18-3 recovery defect: retry from RETRYING/BLOCKED fixed; stale sweep,
+  approval reject/audit, illegal-transition audit covered by
+  tests/test_m18_recovery.py (4). BFF + replay detection untouched.
+- M18-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T10:48:17Z.
 
 ## Next (backlog, priority order)
 
@@ -534,6 +558,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live mode-labeled.
 
+## Done — Milestone 18 (PR #4 update)
+
+- M18-1/2 actionable integration path (not waiting on replies):
+  /coordination/contract descriptor + scripts/contract_check.py (16/16 live,
+  fixture-labeled) + docs/INTEGRATION_EXAMPLES.md; contract v1.0 unchanged.
+- M18-3 recovery defect: retry from RETRYING/BLOCKED fixed; stale sweep,
+  approval reject/audit, illegal-transition audit covered by
+  tests/test_m18_recovery.py (4). BFF + replay detection untouched.
+- M18-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T10:48:17Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -687,6 +723,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live mode-labeled.
 
+## Done — Milestone 18 (PR #4 update)
+
+- M18-1/2 actionable integration path (not waiting on replies):
+  /coordination/contract descriptor + scripts/contract_check.py (16/16 live,
+  fixture-labeled) + docs/INTEGRATION_EXAMPLES.md; contract v1.0 unchanged.
+- M18-3 recovery defect: retry from RETRYING/BLOCKED fixed; stale sweep,
+  approval reject/audit, illegal-transition audit covered by
+  tests/test_m18_recovery.py (4). BFF + replay detection untouched.
+- M18-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T10:48:17Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -837,6 +885,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   unchanged); alignment doc updated; Agent 1 ~90% / product ~25-35%.
 - Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live mode-labeled.
+
+## Done — Milestone 18 (PR #4 update)
+
+- M18-1/2 actionable integration path (not waiting on replies):
+  /coordination/contract descriptor + scripts/contract_check.py (16/16 live,
+  fixture-labeled) + docs/INTEGRATION_EXAMPLES.md; contract v1.0 unchanged.
+- M18-3 recovery defect: retry from RETRYING/BLOCKED fixed; stale sweep,
+  approval reject/audit, illegal-transition audit covered by
+  tests/test_m18_recovery.py (4). BFF + replay detection untouched.
+- M18-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T10:48:17Z.
 
 ## Next (backlog, priority order)
 

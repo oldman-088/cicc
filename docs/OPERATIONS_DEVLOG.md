@@ -192,3 +192,17 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   duplicate within window -> no alert.
 - main still ca8f82c; README.md (master prompt v1.0) unchanged — re-confirmed.
 - API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## 2026-11-05 — Milestone 18 (branch arena/961971ed-cicc, PR #4)
+
+- GET /api/v1/coordination/contract — machine-readable v1.0 (additive, read-
+  gated). scripts/contract_check.py: full fixture lifecycle vs live API,
+  16/16 PASS @10:48:05Z. docs/INTEGRATION_EXAMPLES.md (curl examples, auth,
+  lifecycle, idempotency, errors, audit, tenant=pending).
+- Defect fixed: /tasks/{id}/retry 409'd when the auto dead-letter policy had
+  already moved the task FAILED -> RETRYING/BLOCKED; now requeues to QUEUED.
+  tests/test_m18_recovery.py (4): contract descriptor, stale sweep persistence,
+  retry+audit, approval reject (terminal failed + approval.status=rejected,
+  403 for non-approver) with audit events.
+- PR heads: #1 64e3c00 (still no coordination refs), #2 3462a8b, #3 1a46f70.
+- API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E 22/22 @10:48:17Z.

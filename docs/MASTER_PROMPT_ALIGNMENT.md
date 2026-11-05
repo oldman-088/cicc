@@ -50,3 +50,13 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   RabbitMQ live, notifications, Agent 4 QA — all owner/env-blocked).
   Whole-product estimate unchanged (~25–35%, 4 open PRs, no confirmed
   cross-agent integration).
+
+## M18 re-confirmation (2026-11-05 ~10:48 UTC)
+- `main` still `ca8f82c`; `README.md` unchanged — original Master Prompt remains
+  **README.md @ main @ ca8f82c, v1.0** (verified again, not modified; no newer
+  version in any branch). Alignment baseline unchanged.
+- M18 additions within Agent 1 scope: machine-readable contract endpoint,
+  executable contract check, recovery fixes (retry from RETRYING/BLOCKED),
+  recovery/stale/approval-audit tests. Agent 1 estimate still ~90%; whole
+  product ~25–35% (PR #1 advanced to 64e3c00 but still no coordination-API
+  integration evidence).
