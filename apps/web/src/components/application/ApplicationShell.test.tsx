@@ -46,7 +46,7 @@ describe("CICC application shell", () => {
     const navigation = screen.getByRole("navigation", { name: "پیمایش اصلی" });
     const moduleLink = within(navigation).getByRole("link", { name: "تالار فرماندهی" });
     expect(moduleLink).toHaveAttribute("aria-current", "page");
-    expect(within(navigation).getAllByRole("link")).toHaveLength(7);
+    expect(within(navigation).getAllByRole("link")).toHaveLength(8);
     expect(within(navigation).getByRole("link", { name: "اطلاعات تهدید" }))
       .toHaveAttribute("href", "/threat-intelligence");
     expect(within(navigation).getByRole("link", { name: "تنظیمات" }))

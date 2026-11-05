@@ -23,6 +23,7 @@ type ShellMessages = {
   commandTheater: string;
   systemHealth: string;
   coordination: string;
+  investigations: string;
   settings: string;
   unknownPage: string;
   navigation: string;
@@ -51,6 +52,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     commandTheater: "Command Theater",
     systemHealth: "System Health",
     coordination: "Agent Coordination",
+    investigations: "Investigations",
     settings: "Settings",
     unknownPage: "Page not found",
     navigation: "Primary navigation",
@@ -77,6 +79,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     commandTheater: "مسرح القيادة",
     systemHealth: "سلامة النظام",
     coordination: "تنسيق الوكلاء",
+    investigations: "التحقيقات",
     settings: "الإعدادات",
     unknownPage: "الصفحة غير موجودة",
     navigation: "التنقل الرئيسي",
@@ -103,6 +106,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     commandTheater: "تالار فرماندهی",
     systemHealth: "سلامت سامانه",
     coordination: "هماهنگی عامل‌ها",
+    investigations: "بررسی‌ها",
     settings: "تنظیمات",
     unknownPage: "صفحه پیدا نشد",
     navigation: "پیمایش اصلی",
@@ -121,7 +125,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
 };
 
 type NavigationItem = {
-  id: "overview" | "threat-intelligence" | "vulnerability-intelligence" | "command-theater" | "system-health" | "coordination" | "settings";
+  id: "overview" | "threat-intelligence" | "vulnerability-intelligence" | "command-theater" | "system-health" | "coordination" | "investigations" | "settings";
   href: string;
   label: string;
 };
@@ -214,6 +218,7 @@ export function ApplicationShell({ locale, onLocaleChange, children }: Applicati
     { id: "command-theater", href: "/command-theater", label: messages.commandTheater },
     { id: "system-health", href: "/system-health", label: messages.systemHealth },
     { id: "coordination", href: "/coordination", label: messages.coordination },
+    { id: "investigations", href: "/investigations", label: messages.investigations },
   ];
   const settingsItem: NavigationItem = { id: "settings", href: "/settings", label: messages.settings };
   const allItems = [...workspaceItems, settingsItem];

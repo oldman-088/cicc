@@ -4,6 +4,7 @@ import { useId } from "react";
 import { isLocale, type Locale } from "./localization";
 import { useCiccPreferences } from "./CiccApplication";
 import styles from "./SettingsPage.module.css";
+import { NotificationCenter } from "../notifications/NotificationCenter";
 
 type SettingsMessages = {
   eyebrow: string;
@@ -122,6 +123,8 @@ export function SettingsPage() {
           </label>
         </fieldset>
       </section>
+
+      <NotificationCenter />
 
       <aside className={styles.unavailableNote} aria-labelledby={`${id}-account-settings`}>
         <h2 id={`${id}-account-settings`}>{messages.integrationTitle}</h2>

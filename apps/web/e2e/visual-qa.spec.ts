@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const routes = ["/", "/command-theater", "/threat-intelligence", "/vulnerability-intelligence", "/system-health", "/coordination", "/settings"] as const;
+const routes = ["/", "/command-theater", "/threat-intelligence", "/vulnerability-intelligence", "/system-health", "/coordination", "/investigations", "/settings"] as const;
 
 for (const route of routes) {
   test(`route ${route} renders, has no horizontal overflow, and is screenshot-captured`, async ({ page }, testInfo) => {

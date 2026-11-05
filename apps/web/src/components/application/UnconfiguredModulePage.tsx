@@ -200,6 +200,12 @@ const moduleMessages: Record<Locale, Record<UnconfiguredModuleId, ModuleCopy>> =
   },
 };
 
+const previewCopy: Record<Locale, readonly [string, string, string, string]> = {
+  en: ["Workspace structure — disabled until a provider is connected", "Search (disabled)", "Filter (disabled)", "No records to display. Detail panels will show evidence, provenance, and confidence once a verified provider is connected."],
+  ar: ["بنية مساحة العمل — معطلة حتى اتصال مزوّد", "بحث (معطّل)", "تصفية (معطّلة)", "لا توجد سجلات لعرضها. ستعرض لوحات التفاصيل الأدلة والمنشأ والثقة بمجرد اتصال مزوّد موثّق."],
+  fa: ["ساختار فضای کاری — تا اتصال منبع غیرفعال است", "جست‌وجو (غیرفعال)", "پالایش (غیرفعال)", "سابقه‌ای برای نمایش نیست. پس از اتصال منبع تأییدشده، جزئیات شامل شواهد، منشأ و اطمینان خواهد بود."],
+};
+
 export function UnconfiguredModulePage({ moduleId }: { moduleId: UnconfiguredModuleId }) {
   const workspaceLocale = useCiccLocale();
   const locale = workspaceLocale?.locale ?? "en";
@@ -233,6 +239,17 @@ export function UnconfiguredModulePage({ moduleId }: { moduleId: UnconfiguredMod
           {messages.plannedAreas.map((area) => <li key={area}>{area}</li>)}
         </ul>
       </section>
+
+      {(moduleId === "threat-intelligence" || moduleId === "vulnerability-intelligence") && (
+        <section aria-label={previewCopy[locale][0]} className={styles.plannedScope}>
+          <h2>{previewCopy[locale][0]}</h2>
+          <div role="group" aria-label={previewCopy[locale][0]}>
+            <label>{previewCopy[locale][1]}<input type="search" disabled aria-disabled="true" aria-label={previewCopy[locale][1]} /></label>{" "}
+            <label>{previewCopy[locale][2]}<select disabled aria-disabled="true" aria-label={previewCopy[locale][2]}><option>{previewCopy[locale][2]}</option></select></label>
+          </div>
+          <p>{previewCopy[locale][3]}</p>
+        </section>
+      )}
 
       <Link className={styles.backLink} href="/">
         <span className={styles.backArrow} aria-hidden="true">←</span>
