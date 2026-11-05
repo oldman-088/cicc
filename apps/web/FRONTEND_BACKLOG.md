@@ -20,7 +20,7 @@ A route does not imply a working data integration. Threat/Vulnerability and prod
 
 ## Trust and contract boundary
 
-- PR #4 is open at reviewed head `f0589f3935f8918e54b7fa54b983d646e87775b2`. Its M13 Ops/Coordination reads and M14 BFF behavior are documented in `API_INTEGRATION_CONTRACTS.md`; PR #4 is not merged or running in this checkout.
+- PR #4 is open at reviewed head `43c90259b3868340d4e1b929a9fb2b74250b6c29`. Its M13 Ops/Coordination reads and M14 BFF behavior are documented in `API_INTEGRATION_CONTRACTS.md`; PR #4 is not merged or running in this checkout.
 - The Coordination agent DTO is unresolved: the reference documentation uses `last_seen`, `completed_tasks`, and `failed_tasks`; the current source returns `last_heartbeat`, `completed`, and `failed`. The frontend decoder accepts exactly those two observed spellings, rejects conflicting aliases, and labels the timestamp field actually received. Agent 1 was asked to align docs/source in [PR #4 follow-up](https://github.com/oldman-088/cicc/pull/4#issuecomment-6656004782). Do not describe this as a resolved canonical contract or promote it to live without owner confirmation.
 - The frontend BFF uses server-only `WEB_BFF_API_TOKEN`; if the backend `CICC_OPS_READ_TOKEN` gate is enabled, those values must match. `API_INTERNAL_URL` and the frontend's explicit `CICC_OPS_TRUSTED_SINGLE_TENANT=true` acknowledgement are required. This does not authenticate users or provide tenant isolation; Ops/Coordination must remain behind trusted deployment/network controls.
 - Agents 2/3 have not confirmed Coordination adoption. No authenticated request to a deployed PR #4 service has been verified.

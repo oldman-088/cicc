@@ -4,7 +4,7 @@
 
 ## Product and trust boundary
 
-`apps/web` is a Next.js App Router frontend. The current checkout does not contain the API server or deployment credentials. System Health and Agent Coordination now consume Agent 1's read-side contract documented on open PR #4, current reviewed head `f0589f3935f8918e54b7fa54b983d646e87775b2`; that server is not merged or running in this checkout. Threat Intelligence, Vulnerability Intelligence, Command Theater production data, global search, identity, and tenant preferences remain unconnected.
+`apps/web` is a Next.js App Router frontend. The current checkout does not contain the API server or deployment credentials. System Health and Agent Coordination now consume Agent 1's read-side contract documented on open PR #4, current reviewed head `43c90259b3868340d4e1b929a9fb2b74250b6c29`; that server is not merged or running in this checkout. Threat Intelligence, Vulnerability Intelligence, Command Theater production data, global search, identity, and tenant preferences remain unconnected.
 
 The Ops/Coordination contract is explicitly **trusted single-tenant only**: its tables have no `tenant_id`, the frontend does not authenticate users, and a shared API read token does not create user or tenant authorization. The deployment must provide network/access controls and must not expose this UI to untrusted or multiple tenants. The visible page warning is not an access-control mechanism.
 

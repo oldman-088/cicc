@@ -18,7 +18,7 @@ Status legend: **Done** = implemented and checked to the stated level; **In prog
 
 ## Current blockers and owner follow-up
 
-- [ ] **PR #4 Agent DTO mismatch:** at current reviewed head `f0589f3935f8918e54b7fa54b983d646e87775b2` (compared with the previously reviewed `2f647f18577278c83cb4b1c1927e889c060058e8`), `docs/API_REFERENCE.md` documents `last_seen` / `completed_tasks` / `failed_tasks`, while `apps/api/app/coordination/agents.py` plus `registry.task_stats_by_agent()` returns `last_heartbeat` / `completed` / `failed`. M16–M19 added a read-only `/contract` descriptor and coordination lifecycle fixes, but did not change `docs/API_REFERENCE.md`, `agents.py`, `registry.py`, or the `GET /agents` DTO; mismatch persists. Clarification/alignment request posted at [PR #4 comment #6656004782](https://github.com/oldman-088/cicc/pull/4#issuecomment-6656004782). Do not edit backend files or other agents' branches.
+- [ ] **PR #4 Agent DTO mismatch:** at current reviewed head `43c90259b3868340d4e1b929a9fb2b74250b6c29` (compared with the previously reviewed `f0589f3935f8918e54b7fa54b983d646e87775b2`), `docs/API_REFERENCE.md` documents `last_seen` / `completed_tasks` / `failed_tasks`, while `apps/api/app/coordination/agents.py` plus `registry.task_stats_by_agent()` returns `last_heartbeat` / `completed` / `failed`. M20 updated the `/contract` descriptor and added consistency tests for request Pydantic DTOs, but did not change `docs/API_REFERENCE.md`, `agents.py`, `registry.py`, or the `GET /agents` response DTO; mismatch persists. Clarification/alignment request posted at [PR #4 comment #6656004782](https://github.com/oldman-088/cicc/pull/4#issuecomment-6656004782). Do not edit backend files or other agents' branches.
 - [ ] Agents 2/3 have not confirmed Coordination v1.0 adoption. Do not claim their approval or bind their workflows.
 - [ ] No `API_INTERNAL_URL`, BFF credential/trust acknowledgement, or approved integration environment is configured for this preview. The local BFF correctly returns `provider_not_configured`; do not claim live PR #4 service verification.
 - [ ] No user authentication or tenant isolation exists for Ops/Coordination. Keep this behind trusted single-tenant deployment/network controls; do not present the local trust flag as authentication.
@@ -37,7 +37,7 @@ Status legend: **Done** = implemented and checked to the stated level; **In prog
 ## PR #2 handling
 
 - [x] Reviewed the current PR #2 description, changed-file list, branch head, and this batch's source/documentation diff; typecheck, full suite, build, audit, and smoke checks passed before updating the PR.
-- [x] Reviewed and finalized the 35-file frontend/documentation diff, committed as `ab549b8`, pushed only to `arena/09952395-cicc`, and updated PR #2's description. PR #2 remains open and unmerged; no push to `main`.
+- [x] Reviewed and finalized the 35-file frontend/documentation diff (`ab549b8`) and the follow-up review-status commit (`b5d6273`); both were pushed only to `arena/09952395-cicc`. PR #2's description was updated via REST and refreshed after PR #4 advanced to M20 head `43c90259b3868340d4e1b929a9fb2b74250b6c29`. PR #2 remains open and unmerged; no push to `main`.
 
 ## Later work (contract/product dependent)
 
