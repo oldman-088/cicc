@@ -270,6 +270,100 @@ class OsvConnector:
             )
         return record, advisory
 
+    def query_package(
+        self,
+        package: Mapping[str, Any],
+        *,
+        version: str | None = None,
+        commit: str | None = None,
+        max_pages: int = 5,
+        max_records: int = 2000,
+    ) -> tuple[tuple[NormalizedVulnerability, ...], tuple[str, ...]]:
+        """POST ``/v1/query`` and return **whole records** for one package or commit.
+
+        This is the endpoint that removes the N+1 problem in :meth:`query_batch`:
+        batch returns ids only, so a caller who needs severity, versions or a summary
+        from N hits makes N further requests. ``/v1/query`` returns the full objects.
+
+        Documented rules enforced here rather than trusted to the server:
+
+        * ``version`` and a versioned ``purl`` are mutually exclusive — sending both
+          is a documented **400**, so it is rejected locally with a precise message
+          instead of costing a round trip;
+        * ``commit`` and ``version`` are mutually exclusive;
+        * a package is identified by ``name``+``ecosystem`` **or** by ``purl``, and
+          mixing them is a client error;
+        * ``ecosystem`` is case-sensitive (``PyPI``, not ``pypi``), and a wrong guess
+          returns an empty result rather than an error — the single most likely way to
+          get a silent false negative, so it is warned about when it happens for a
+          name known to be spelled differently.
+
+        Duplicate records are collapsed: pagination is time-boxed server-side (a page
+        may repeat a record that appeared on a previous one), and returning the same
+        advisory twice would double-count it in any downstream tally.
+        """
+        query = _build_query(package, version=version, commit=commit)
+        warnings: list[str] = []
+        seen: dict[str, NormalizedVulnerability] = {}
+        token: str | None = None
+
+        for _ in range(max_pages):
+            payload = dict(query)
+            if token:
+                payload["page_token"] = token
+            body = self._post("query", payload)
+
+            raw = body.get("vulns")
+            if raw is None:
+                # A no-match query returns an empty body, not an error. Absence of
+                # the key must not read as "the endpoint is broken".
+                raw = []
+            if not isinstance(raw, list):
+                raise SourceResponseError(
+                    "OSV query returned a non-list 'vulns' field", source="osv"
+                )
+            for item in raw:
+                if not isinstance(item, Mapping):
+                    warnings.append("OSV query: malformed record ignored")
+                    continue
+                identifier = coerce_text(item.get("id"), field_name="id", limit=200)
+                if not identifier:
+                    warnings.append("OSV query: record with no id ignored")
+                    continue
+                if identifier in seen:
+                    continue
+                try:
+                    record, _advisory = self.parse_record(item, fetched_at=utcnow())
+                except ValidationError as exc:
+                    warnings.append(f"OSV query: record {identifier} rejected ({exc})")
+                    continue
+                if record is None:
+                    warnings.append(
+                        f"OSV query: {identifier} has no CVE alias and was not "
+                        "normalized into a CVE-keyed record"
+                    )
+                    continue
+                seen[identifier] = record
+                if len(seen) >= max_records:
+                    warnings.append(
+                        f"OSV query: stopped at {max_records} records; more were available"
+                    )
+                    return tuple(seen.values()), tuple(warnings)
+
+            next_token = body.get("next_page_token")
+            if not isinstance(next_token, str) or not next_token:
+                return tuple(seen.values()), tuple(warnings)
+            if next_token == token:
+                # A server echoing the same token would loop forever.
+                warnings.append("OSV query: repeated page token; stopping to avoid a loop")
+                return tuple(seen.values()), tuple(warnings)
+            token = next_token
+
+        warnings.append(
+            f"OSV query: reached the {max_pages}-page limit; results are incomplete"
+        )
+        return tuple(seen.values()), tuple(warnings)
+
     def query_batch(
         self, queries: Sequence[Mapping[str, Any]], *, max_pages: int = 5
     ) -> tuple[tuple[tuple[tuple[str, str | None], ...], ...], tuple[str, ...]]:
@@ -516,6 +610,91 @@ class OsvConnector:
             withdrawn=withdrawn,
             references=references,
         )
+
+
+_VERSIONED_PURL = re.compile(r"^pkg:[^@]+@[^@]+$")
+
+
+def _build_query(
+    package: Mapping[str, Any], *, version: str | None, commit: str | None
+) -> dict[str, Any]:
+    """Validate and assemble a ``/v1/query`` payload.
+
+    Every rule here is documented by OSV, and each one is enforced locally for the
+    same reason: the server answers a malformed query with **400 Bad Request**, and a
+    400 that costs a round trip in a batch job is a slow failure rather than a fast
+    one. Two of these are silent on the server side and far worse:
+
+    * a *wrongly cased* ecosystem returns an empty result, not an error, so a
+      `pypi` instead of `PyPI` looks exactly like "this package has no
+      vulnerabilities";
+    * a version supplied in both places is a documented 400, which is at least loud.
+    """
+    if not isinstance(package, Mapping):
+        raise ValidationError("OSV query: 'package' must be an object", field="package")
+    # A commit-only query does **not** need a package: OSV documents `package` as
+    # optional when `commit` is given, because a commit identifies the repository.
+    # Requiring one made the documented commit form unusable.
+    if not package and commit is None:
+        raise ValidationError("OSV query needs a package object", field="package")
+    if commit is not None and version is not None:
+        raise ValidationError(
+            "OSV query: 'commit' and 'version' are mutually exclusive",
+            field="version",
+        )
+    if commit is None and version is None:
+        raise ValidationError(
+            "OSV query: one of 'version' or 'commit' is required",
+            field="version",
+        )
+
+    spec = dict(package)
+    purl = spec.get("purl")
+    name = spec.get("name")
+    ecosystem = spec.get("ecosystem")
+
+    if purl is not None:
+        if name is not None or ecosystem is not None:
+            raise ValidationError(
+                "OSV query: use either 'purl' or 'name'+'ecosystem', not both",
+                field="package",
+            )
+        if not isinstance(purl, str) or not purl.startswith("pkg:"):
+            raise ValidationError("OSV query: purl must start with 'pkg:'", field="purl")
+        if version is not None and _VERSIONED_PURL.match(purl):
+            raise ValidationError(
+                "OSV query: the version is in both the purl and the 'version' field; "
+                "OSV rejects this with 400",
+                field="version",
+            )
+    elif spec:
+        if not name or not ecosystem:
+            raise ValidationError(
+                "OSV query: a package needs 'name' and 'ecosystem', or a 'purl'",
+                field="package",
+            )
+        # OSV documents ecosystem names as case-sensitive, with `PyPI` capitalised.
+        canonical = {
+            "pypi": "PyPI", "npm": "npm", "rubygems": "RubyGems", "maven": "Maven",
+            "nuget": "NuGet", "go": "Go", "packagist": "Packagist", "crates.io": "crates.io",
+        }
+        expected = canonical.get(str(ecosystem).strip().lower())
+        if expected is not None and ecosystem != expected:
+            raise ValidationError(
+                f"OSV ecosystems are case-sensitive: use '{expected}', not "
+                f"{ecosystem!r} - a wrong case returns an empty result, which looks "
+                "like a clean package",
+                field="ecosystem",
+            )
+
+    query: dict[str, Any] = {}
+    if spec:
+        query["package"] = spec
+    if version is not None:
+        query["version"] = version
+    if commit is not None:
+        query["commit"] = commit
+    return query
 
 
 def _retry_after(headers: Mapping[str, str]) -> float | None:

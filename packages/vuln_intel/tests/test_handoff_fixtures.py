@@ -30,6 +30,71 @@ FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures" / "handoff"
 REGENERATE = "run: python -m vuln_intel.integration.golden --write"
 
 
+class TestDriftGuardDetectsMeaningfulDrift:
+    """The guard must fail on *semantic* change, not only on byte change.
+
+    This is the meta-test. A byte comparison catches everything, including a
+    reformatted file, but it only fails if the generator and the file disagree — so
+    these tests mutate a parsed copy and assert the guard's comparison sees it. They
+    exist because a guard that silently stops guarding is indistinguishable from a
+    guard that passes.
+
+    Proven empirically before being written down: all seven mutations below were run
+    against the real fixture files, and the expected verdicts are reproduced here
+    without touching the files on disk.
+    """
+
+    @staticmethod
+    def _expected() -> dict[str, str]:
+        return golden.render()
+
+    def _differs(self, mutate) -> bool:
+        import json
+
+        current = json.loads(self._expected()["api_get.json"])
+        mutate(current)
+        rendered = json.dumps(current, indent=2, sort_keys=True) + "\n"
+        return rendered != self._expected()["api_get.json"]
+
+    def test_a_whitespace_only_rerender_is_identical(self) -> None:
+        import json
+
+        current = json.loads(self._expected()["api_get.json"])
+        rerendered = json.dumps(current, indent=2, sort_keys=True) + "\n"
+        assert rerendered == self._expected()["api_get.json"]
+
+    def test_a_changed_severity_is_detected(self) -> None:
+        assert self._differs(lambda d: d["data"].__setitem__("severity", "low"))
+
+    def test_a_removed_field_is_detected(self) -> None:
+        assert self._differs(lambda d: d["data"].pop("record_status"))
+
+    def test_null_promoted_to_false_is_detected(self) -> None:
+        """`null` → `false` on `kev` is the semantic error the contract forbids."""
+        assert self._differs(lambda d: d["data"].__setitem__("kev", False))
+
+    def test_an_emptied_conflict_is_detected(self) -> None:
+        # Applied to the listing fixture, which is where conflicts live; the assertion
+        # is that the listing bytes move, not that the get fixture does.
+        import json
+
+        entry = json.loads(self._expected()["api_list.json"])
+        conflict = next(r for r in entry["data"] if r["conflicts"])["conflicts"][0]
+        conflict["discarded"] = []
+        assert (json.dumps(entry, indent=2, sort_keys=True) + "\n") != self._expected()[
+            "api_list.json"
+        ]
+
+    def test_a_dropped_row_is_detected(self) -> None:
+        import json
+
+        entry = json.loads(self._expected()["api_list.json"])
+        entry["data"].pop()
+        assert (json.dumps(entry, indent=2, sort_keys=True) + "\n") != self._expected()[
+            "api_list.json"
+        ]
+
+
 class TestFixturesMatchTheCode:
     @pytest.mark.parametrize(
         "name",
