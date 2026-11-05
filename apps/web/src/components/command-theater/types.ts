@@ -1,6 +1,5 @@
-export const SUPPORTED_LOCALES = ["en", "ar", "fa"] as const;
-
-export type Locale = (typeof SUPPORTED_LOCALES)[number];
+export { isLocale, SUPPORTED_LOCALES } from "../application/localization";
+export type { Locale } from "../application/localization";
 
 export type IntelligenceEntityType =
   | "threat-actor"
@@ -134,8 +133,4 @@ export type GraphDataSourceKind = "demo" | "backend";
 export interface CommandTheaterDataSource {
   readonly kind: GraphDataSourceKind;
   loadPage(request: GraphPageRequest, signal: AbortSignal): Promise<GraphPage>;
-}
-
-export function isLocale(value: string): value is Locale {
-  return SUPPORTED_LOCALES.some((locale) => locale === value);
 }

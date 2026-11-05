@@ -12,6 +12,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { useCiccLocale } from "../application/CiccApplication";
 import { RelationshipExplorer } from "./RelationshipExplorer";
 import { RelationshipGraph2D } from "./RelationshipGraph2D";
 import { getMessages } from "./translations";
@@ -43,7 +44,7 @@ const LazyTheater3DCanvas = dynamic(
 );
 
 type CommandTheaterProps = {
-  /** Optional locale supplied by the host application. */
+  /** Initial locale for standalone use; the app-wide locale context is authoritative when present. */
   locale?: Locale;
   /** Adapter owned by the host CICC application; no backend route is assumed. */
   dataSource?: CommandTheaterDataSource;
@@ -99,7 +100,11 @@ export function CommandTheater({
   dataSource,
   demoMode = false,
 }: CommandTheaterProps) {
-  const [locale, setLocale] = useState<Locale>(initialLocale ?? "en");
+  const applicationLocale = useCiccLocale();
+  const [localLocale, setLocalLocale] = useState<Locale>(
+    initialLocale ?? applicationLocale?.locale ?? "en",
+  );
+  const locale = applicationLocale?.locale ?? localLocale;
   const [graphicsSupport, setGraphicsSupport] = useState<GraphicsSupport>("checking");
   const [graphicsFailureReason, setGraphicsFailureReason] = useState<"context-lost" | null>(null);
   const [view, setView] = useState<"2d" | "3d">("2d");
@@ -156,13 +161,17 @@ export function CommandTheater({
 
   useEffect(() => {
     if (initialLocale) {
-      setLocale(initialLocale);
+      setLocalLocale(initialLocale);
+      return;
+    }
+    if (applicationLocale) {
+      setLocalLocale(applicationLocale.locale);
       return;
     }
 
     const documentLocale = document.documentElement.lang.toLowerCase().split("-")[0];
-    if (isLocale(documentLocale)) setLocale(documentLocale);
-  }, [initialLocale]);
+    if (isLocale(documentLocale)) setLocalLocale(documentLocale);
+  }, [initialLocale, applicationLocale?.locale]);
 
   useEffect(() => {
     setGraphicsFailureReason(null);
@@ -299,17 +308,23 @@ export function CommandTheater({
             <p className={styles.subtitle}>{messages.subtitle}</p>
           </div>
 
-          <label className={styles.localeControl}>
-            <span>{messages.language}</span>
-            <select
-              value={locale}
-              onChange={(event) => setLocale(event.target.value as Locale)}
-            >
-              <option value="en">English</option>
-              <option value="ar">العربية</option>
-              <option value="fa">فارسی</option>
-            </select>
-          </label>
+          {!applicationLocale && (
+            <label className={styles.localeControl}>
+              <span>{messages.language}</span>
+              <select
+                value={locale}
+                onChange={(event) => {
+                  const nextLocale = event.target.value;
+                  if (!isLocale(nextLocale)) return;
+                  setLocalLocale(nextLocale);
+                }}
+              >
+                <option value="en">English</option>
+                <option value="ar">العربية</option>
+                <option value="fa">فارسی</option>
+              </select>
+            </label>
+          )}
         </header>
 
         {connectedData && (

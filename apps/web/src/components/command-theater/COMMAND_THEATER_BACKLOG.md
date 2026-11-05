@@ -1,10 +1,10 @@
 # Command Theater engineering log and backlog
 
-Updated: 2026-11-04
+Updated: 2026-11-05
 
 ## Current implementation status
 
-The active feature branch is `arena/09952395-cicc`. Command Theater has a typed, injected frontend data-source boundary with runtime validation, cursor pagination, retry/cancellation handling, metadata presentation, and explicit synthetic-demo isolation. This is an integration boundary, not a live CICC backend connection.
+The active feature branch is `arena/09952395-cicc`. Command Theater is hosted in the app-wide CICC shell, which provides shared EN/AR/FA locale state, document direction, responsive navigation, breadcrumbs, and skip-to-content behavior. Command Theater has a typed, injected frontend data-source boundary with runtime validation, cursor pagination, retry/cancellation handling, metadata presentation, and explicit synthetic-demo isolation. This is an integration boundary, not a live CICC backend connection.
 
 The 2D map supports selection by pointer and keyboard, roving focus, linked-entity arrow navigation, Home/End, Enter/Space, localized labels, and RTL-aware horizontal navigation. Selection is shared with the accessible entity explorer and 3D scene. WebGL initialization failure and simulated context loss return focus to the 2D control; the context-loss listener is cleaned up when the canvas unmounts and the failure is announced in the active locale. A bounded, in-memory 50-step selection history supports back/forward and truncates forward history after a new branch; it resets when the provider or filters change and is not a persisted investigation record.
 
@@ -21,7 +21,7 @@ Synthetic Node v22.22.3 CPU measurements in this workspace:
 
 These are isolated CPU microbenchmarks, not browser interaction latency, memory profiling, WebGL frame-time, or GPU measurements.
 
-Current automated results: TypeScript typecheck passes; 41 tests across 8 files pass; production build passes; `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities. Tests cover axe-core structural/accessibility rules (color contrast excluded because jsdom lacks a canvas implementation), RTL/LTR keyboard selection, bounded 50-step selection history, simulated context-loss listener cleanup, focus after 3D fallback, cursor failure paths, and 10,000-node/50,000-edge stress fixtures. Real-browser, GPU/context-loss, contrast, and manual screen-reader verification remain outstanding.
+Current automated results: TypeScript typecheck and production build pass; 60 tests across 13 files pass; `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities. Tests cover axe-core structural/accessibility rules for the shell, overview, settings, unconfigured module pages, and selected 2D Command Theater states (color contrast excluded because jsdom cannot validate it), EN/AR/FA language coordination, RTL/LTR keyboard selection, bounded 50-step selection history, simulated context-loss listener cleanup, focus after 3D fallback, cursor failure paths, and 10,000-node/50,000-edge stress fixtures. HTTP smoke requests return 200 for all seven frontend routes; this is not visual QA. Real-browser, GPU/context-loss, contrast, and manual screen-reader verification remain outstanding.
 
 ## Prioritized backlog
 

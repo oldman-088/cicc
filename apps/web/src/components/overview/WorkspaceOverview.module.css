@@ -1,0 +1,347 @@
+.page {
+  width: min(100%, var(--cicc-content-regular, 1320px));
+  min-height: calc(100dvh - var(--cicc-topbar-height, 4.25rem));
+  margin-inline: auto;
+  padding: clamp(1.2rem, 3vw, 2.7rem);
+  color: var(--cicc-text, #e7f0ff);
+}
+
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-block-end: clamp(1.5rem, 4vh, 2.5rem);
+}
+
+.heroCopy {
+  max-width: 52rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.55rem;
+  color: #70d7dd;
+  font-size: 0.67rem;
+  font-weight: 780;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  color: #f4f8ff;
+  font-size: clamp(1.8rem, 4vw, 2.7rem);
+  font-weight: 680;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+}
+
+.introduction {
+  max-width: 45rem;
+  margin: 0.8rem 0 0;
+  color: #9aacc2;
+  font-size: 0.98rem;
+}
+
+.scopeBadge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.72rem;
+  border: 1px solid #294258;
+  border-radius: 999px;
+  color: #b6c8da;
+  background: rgb(12 25 39 / 78%);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.integrationNotice {
+  display: grid;
+  grid-template-columns: 2.1rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.85rem;
+  margin-block-end: clamp(1.8rem, 5vh, 3.1rem);
+  padding: 1.1rem 1.2rem;
+  border: 1px solid rgb(238 186 101 / 34%);
+  border-radius: var(--cicc-radius-md, 0.85rem);
+  color: #dfcfad;
+  background: linear-gradient(105deg, rgb(82 59 28 / 28%), rgb(34 31 26 / 20%));
+}
+
+.noticeGlyph {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgb(238 186 101 / 35%);
+  border-radius: 0.6rem;
+  color: #ffd28b;
+  background: rgb(81 62 33 / 30%);
+}
+
+.noticeGlyph svg {
+  width: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.integrationNotice h2,
+.integrityNote h2 {
+  margin: 0;
+  color: #f2e0bb;
+  font-size: 0.83rem;
+  font-weight: 720;
+}
+
+.integrationNotice p,
+.integrityNote p {
+  max-width: 68rem;
+  margin: 0.35rem 0 0;
+  color: #b6a98f;
+  font-size: 0.76rem;
+  line-height: 1.65;
+}
+
+.workflows {
+  margin-block-end: 1.5rem;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 0.9rem;
+}
+
+.sectionHeading .eyebrow {
+  margin-block-end: 0.25rem;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  color: #edf5ff;
+  font-size: 1.15rem;
+  font-weight: 660;
+}
+
+.sectionHeading p:not(.eyebrow) {
+  margin: 0.3rem 0 0;
+  color: #8fa4bb;
+  font-size: 0.76rem;
+}
+
+.moduleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 0.85rem;
+}
+
+.moduleCard {
+  display: flex;
+  min-height: 15rem;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.15rem;
+  border: 1px solid #20394e;
+  border-radius: 0.95rem;
+  color: inherit;
+  background:
+    radial-gradient(ellipse at 0% 0%, rgb(29 81 99 / 17%), transparent 70%),
+    linear-gradient(145deg, rgb(13 29 45 / 96%), rgb(8 19 31 / 97%));
+  box-shadow: 0 12px 36px rgb(0 0 0 / 13%);
+  text-decoration: none;
+  transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.moduleCard:hover {
+  transform: translateY(-2px);
+  border-color: #4b8995;
+}
+
+.moduleCard:focus-visible {
+  outline: 3px solid var(--cicc-focus, #f3bf68);
+  outline-offset: 3px;
+}
+
+.cardTopline {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-block-end: 1.15rem;
+}
+
+.moduleGlyph {
+  display: grid;
+  width: 2.65rem;
+  height: 2.65rem;
+  place-items: center;
+  border: 1px solid rgb(112 215 221 / 30%);
+  border-radius: 0.75rem;
+  color: #82e0db;
+  background: rgb(17 58 69 / 62%);
+}
+
+.moduleGlyph svg {
+  width: 1.5rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.moduleGlyph circle {
+  fill: currentColor;
+  stroke: #0b1a28;
+  stroke-width: 1;
+}
+
+.demoBadge,
+.providerBadge {
+  max-width: 75%;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid rgb(238 186 101 / 38%);
+  border-radius: 999px;
+  color: #f4d7a2;
+  background: rgb(80 58 30 / 26%);
+  font-size: 0.62rem;
+  font-weight: 680;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.providerBadge {
+  border-color: #385269;
+  color: #a5b8cc;
+  background: rgb(20 37 53 / 52%);
+}
+
+.moduleCard h3 {
+  margin: 0;
+  color: #f1f7ff;
+  font-size: 1.05rem;
+  font-weight: 680;
+}
+
+.moduleCard p {
+  max-width: 36rem;
+  margin: 0.55rem 0 1.1rem;
+  color: #9aadc2;
+  font-size: 0.76rem;
+  line-height: 1.65;
+}
+
+.cardAction {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-start: auto;
+  padding-block-start: 0.7rem;
+  border-block-start: 1px solid rgb(45 70 90 / 65%);
+  color: #90e2dc;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.cardAction > span {
+  font-size: 1rem;
+  transition: transform 140ms ease;
+}
+
+.moduleCard:hover .cardAction > span {
+  transform: translate(2px, -2px);
+}
+
+:global([dir="rtl"]) .cardAction > span {
+  transform: scaleX(-1);
+}
+
+:global([dir="rtl"]) .moduleCard:hover .cardAction > span {
+  transform: scaleX(-1) translate(2px, -2px);
+}
+
+.integrityNote {
+  display: grid;
+  grid-template-columns: 1.65rem minmax(0, 1fr);
+  gap: 0.7rem;
+  margin-block-start: 1.4rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #1d3448;
+  border-radius: 0.75rem;
+  background: rgb(10 22 34 / 75%);
+}
+
+.integrityMark {
+  display: grid;
+  width: 1.4rem;
+  height: 1.4rem;
+  place-items: center;
+  border: 1px solid #3c6977;
+  border-radius: 50%;
+  color: #86d8d4;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.integrityNote h2 {
+  color: #c9d8e7;
+  font-size: 0.75rem;
+}
+
+.integrityNote p {
+  color: #8fa3b8;
+  font-size: 0.7rem;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 1.15rem 0.85rem 1.8rem;
+  }
+
+  .hero {
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .scopeBadge {
+    align-self: flex-start;
+  }
+
+  .integrationNotice {
+    padding: 0.9rem;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+  }
+
+  .moduleCard {
+    min-height: 14rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moduleCard,
+  .cardAction > span {
+    transition: none;
+  }
+
+  .moduleCard:hover {
+    transform: none;
+  }
+
+  .moduleCard:hover .cardAction > span,
+  :global([dir="rtl"]) .moduleCard:hover .cardAction > span {
+    transform: none;
+  }
+}
