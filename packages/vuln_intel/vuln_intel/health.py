@@ -266,3 +266,42 @@ class Metrics:
             "gauges": {k: round(v, 3) for k, v in sorted(self.gauges.items())},
             "uptime_seconds": round((utcnow() - self.started_at).total_seconds(), 1),
         }
+
+
+def connector_health(
+    kind: SourceKind | str,
+    *,
+    last_attempt: datetime | None,
+    last_success: datetime | None,
+    error: str | None = None,
+    now: datetime | None = None,
+    fresh_within: timedelta = timedelta(days=2),
+    required: bool = False,
+) -> SourceHealth:
+    """Health for a whole-document connector (Debian tracker, Ubuntu USN, GHSA).
+
+    These connectors track ``last_attempt``/``last_success`` directly instead of
+    going through a sync checkpoint; this projects those two timestamps onto the
+    same :class:`SourceHealth` vocabulary, so "never succeeded" (UNAVAILABLE),
+    "failed after good data" (DEGRADED, serving previous data) and "stale but
+    healthy" are distinguished exactly as for checkpointed sources.
+    """
+    moment = now or utcnow()
+    if last_attempt is None:
+        status = CollectionStatus.NOT_CONFIGURED
+    elif last_success is not None and last_success >= last_attempt:
+        status = CollectionStatus.OK
+    else:
+        # the most recent attempt did not succeed (or nothing ever did): FAILED,
+        # so _health_for_state can split "failed after good data" (DEGRADED) from
+        # "never succeeded" (UNAVAILABLE)
+        status = CollectionStatus.FAILED
+    state = SourceState(
+        kind=kind if isinstance(kind, SourceKind) else SourceKind(str(kind)),
+        status=status,
+        checked_at=moment,
+        last_success=last_success,
+        last_attempt=last_attempt,
+        error=error,
+    )
+    return _health_for_state(state, now=moment, fresh_within=fresh_within, required=required)

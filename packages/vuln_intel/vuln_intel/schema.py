@@ -80,6 +80,10 @@ class SourceKind(str, Enum):
     NVD = "nvd"
     OSV = "osv"
     EPSS = "epss"
+    #: Vendor tracker / advisory sources added by the takeover continuation.
+    DEBIAN_TRACKER = "debian-security-tracker"
+    UBUNTU_USN = "ubuntu-usn"
+    GHSA = "github-advisories"
 
 
 class RecordStatus(str, Enum):
