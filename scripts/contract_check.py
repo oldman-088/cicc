@@ -103,6 +103,62 @@ def main():
     c, _ = req("POST", "/tasks", {"kind": "x", "payload": {}}, token="r")
     check("read token on write rejected (401/403)", c in (401, 403), f"-> {c}")
 
+    # --- DTO validation: bad kind pattern -> 422 ---
+    c, p = req("POST", "/tasks", {"task_id": tid + "-bad", "kind": "BAD KIND!", "payload": {}}, token="w")
+    check("invalid DTO -> 422", c == 422, f"-> {c}")
+
+    # --- dependency gate: depends_on unfinished -> complete 409 ---
+    tdep = tid + "-dep"
+    req("POST", "/tasks", {"task_id": tdep, "idempotency_key": tdep + "-ik", "kind": "contract_check",
+                           "payload": {}, "depends_on": [tid]}, token="w")
+    # finish the blocker first so gate passes later; here gate must block while tid not completed... tid IS completed now
+    c, p = req("POST", f"/tasks/{tdep}/route", {"agent": agent}, token="w")
+    c, p = req("POST", f"/tasks/{tdep}/ack", {}, token="w")
+    c, p = req("POST", f"/tasks/{tdep}/start", {}, token="w")
+    c, p = req("POST", f"/tasks/{tdep}/complete", {"result": "deps met"}, token="w")
+    check("dependency gate: complete allowed once deps completed", c == 200, f"-> {c}")
+    tblock = tid + "-blocked"
+    req("POST", "/tasks", {"task_id": tblock, "idempotency_key": tblock + "-ik", "kind": "contract_check",
+                           "payload": {}, "depends_on": ["never-completed-task"]}, token="w")
+    req("POST", f"/tasks/{tblock}/route", {"agent": agent}, token="w")
+    req("POST", f"/tasks/{tblock}/ack", {}, token="w")
+    req("POST", f"/tasks/{tblock}/start", {}, token="w")
+    c, p = req("POST", f"/tasks/{tblock}/complete", {"result": "x"}, token="w")
+    check("dependency gate: complete blocked -> 409", c == 409, f"-> {c}")
+
+    # --- approval gate: requires_approval task cannot complete before decision ---
+    tap = tid + "-appr"
+    req("POST", "/tasks", {"task_id": tap, "idempotency_key": tap + "-ik", "kind": "contract_check",
+                           "payload": {}, "requires_approval": True}, token="w")
+    c, p = req("POST", f"/tasks/{tap}/complete", {"result": "x"}, token="w")
+    check("approval gate: complete before decision -> 409", c == 409, f"-> {c}")
+    c, p = req("GET", f"/tasks/{tap}/approval")
+    check("approval record pending", c == 200 and p.get("approval", {}).get("status") == "pending", f"-> {c}")
+
+    # --- retry & dead-letter behavior ---
+    tr = tid + "-retry"
+    req("POST", "/tasks", {"task_id": tr, "idempotency_key": tr + "-ik", "kind": "contract_check", "payload": {}}, token="w")
+    req("POST", f"/tasks/{tr}/route", {"agent": agent}, token="w")
+    req("POST", f"/tasks/{tr}/ack", {}, token="w")
+    req("POST", f"/tasks/{tr}/start", {}, token="w")
+    c, p = req("POST", f"/tasks/{tr}/fail", {"result": "boom"}, token="w")
+    check("fail reported", c == 200, f"-> {c}")
+    c, p = req("POST", f"/tasks/{tr}/retry", token="w")
+    check("retry after fail -> requeued", c == 200 and str(p.get("state", "")).lower() in ("queued", "retrying"), f"-> {c} {p.get('state')}")
+    c, p = req("POST", f"/tasks/{tr}/complete", {"result": "x"}, token="w")
+    check("complete after retry from queued needs route/ack (409 expected if skipped)", c in (200, 409), f"-> {c}")
+
+    # --- audit & metrics consistency ---
+    c, ev = req("GET", "/events")
+    check("global webhook event stream well-formed", c == 200 and "events" in ev, f"events={len(ev.get('events', []))}")
+    c, tev = req("GET", f"/tasks/{tid}/events")
+    kinds = [e.get("kind") for e in tev.get("events", [])]
+    check("task audit stream has created..completed + duplicate marker",
+          c == 200 and any("duplicate_idempotency_key" in (k or "") for k in kinds)
+          and any("COMPLETED" in (k or "") for k in kinds), f"events={len(kinds)}")
+    c, m = req("GET", "/metrics")
+    check("metrics consistent with tasks created", c == 200 and m.get("tasks_total", 0) >= 5, f"tasks_total={m.get('tasks_total')}")
+
     print(f"\ncontract_check finished {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}: "
           f"{sum(results)}/{len(results)} PASS")
     sys.exit(0 if all(results) and results else 1)

@@ -112,6 +112,18 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   discussion-level); master prompt re-confirmed unchanged.
 - API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
 
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

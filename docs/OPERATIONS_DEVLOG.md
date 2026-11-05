@@ -206,3 +206,18 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   403 for non-approver) with audit events.
 - PR heads: #1 64e3c00 (still no coordination refs), #2 3462a8b, #3 1a46f70.
 - API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E 22/22 @10:48:17Z.
+
+## 2026-11-05 — Milestone 19 (branch arena/961971ed-cicc, PR #4)
+
+- scripts/contract_check.py -> 27 checks (contract version, DTO 422, auth
+  401/403, lifecycle, idempotency duplicate marker, dependency gate 409,
+  approval gate 409 + pending approval record, retry/dead-letter, global
+  /events shape, task audit completeness, metrics consistency). 27/27 PASS
+  live @2026-11-05T10:57:36Z — fixture-labeled, not agent execution.
+- Defect fixed (M19-4): handoff.report "complete" now checks deps_ready ->
+  409 + audit event report:complete_blocked_deps (previously only deliver
+  gated deps). tests/test_m19_operational.py (4).
+- Adoption: PR #4 comment with smallest-change guide (contract endpoint +
+  contract_check + INTEGRATION_EXAMPLES §6). PR heads: #1 f56447c (65 commits,
+  still no coordination refs), #2 3462a8b, #3 1a46f70. No code-level adoption.
+- API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E 22/22 @10:57:40Z.

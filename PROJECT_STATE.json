@@ -19,7 +19,7 @@
         "DAG",
         "sweep"
       ],
-      "tests": "API 161/161 (7 real-PG + 1 live-GitHub); contract_check 16/16 live; E2E 22/22 live"
+      "tests": "API 165/165 (7 real-PG + 1 live-GitHub); contract_check 27/27 live; E2E 22/22 live"
     },
     "ops": {
       "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,7 +43,7 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M18"
+    "M1..M19"
   ],
   "contracts": {
     "version": "v1.0",
@@ -85,9 +85,9 @@
   },
   "i18n": "en/ar parity 187/187 at every commit since M11 (M14 '188' was a report miscount; no key lost)",
   "pr_heads_checked": {
-    "1": "64e3c00",
+    "1": "f56447c",
     "2": "3462a8b",
     "3": "1a46f70",
-    "checked": "2026-11-05T10:48Z"
+    "checked": "2026-11-05T10:58Z"
   }
 }

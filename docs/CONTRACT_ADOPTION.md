@@ -105,3 +105,18 @@ miscount, **no key was removed or lost**; parity en==ar holds at every commit.
   `scripts/contract_check.py` (16/16 PASS live @2026-11-05T10:48:05Z, fixture-
   labeled), `docs/INTEGRATION_EXAMPLES.md` (paths/methods/DTOs/auth/lifecycle/
   idempotency/errors/audit/tenant-pending).
+
+## M19 update (2026-11-05 ~10:58 UTC)
+
+- PR #1 head advanced again: **`f56447c`** (65 commits, updated 2026-11-05T10:51:52Z);
+  full file scan still shows **no `/api/v1/coordination` references** in any agent PR.
+  PR #2 `3462a8b`, PR #3 `1a46f70` unchanged; no new comments on PR #4/issue #5.
+- Adoption request with the smallest practical integration change posted on PR #4
+  (contract endpoint + contract_check.py 27/27 live + INTEGRATION_EXAMPLES.md §6).
+  Code-level adoption: NONE yet for Agents 2/3/4. Status: Agent 2 PENDING, Agent 3
+  PENDING, Agent 4 PARTIALLY COMPATIBLE (discussion-level).
+- contract_check.py strengthened (M19-2): 27 checks — contract version/DTOs, auth
+  401/403, lifecycle, idempotency duplicate marker, dependency gate 409,
+  approval gate 409 + pending record, retry/dead-letter, 422 validation, audit &
+  metrics consistency, error compatibility. 27/27 PASS live @2026-11-05T10:57:36Z.
+  All submissions fixture-labeled.

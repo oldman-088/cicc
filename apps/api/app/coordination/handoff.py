@@ -148,6 +148,12 @@ def report(s, task_id: str, action: str, result: str | None = None) -> dict | No
         return None
     to, from_states = mapping[action]
     applied = cur in from_states
+    if applied and action == "complete" and not registry.deps_ready(s, t):
+        # M19 defect fix: dependency gate applies to completion, not only delivery
+        registry.record_event(s, task_id, "report:complete_blocked_deps", "depends_on not all COMPLETED")
+        s.commit()
+        return {"task_id": t.task_id, "state": registry.normalize_state(t.state), "attempts": t.attempts,
+                "dead_letter": bool(t.dead_letter), "applied": False}
     if applied:
         registry.transition(s, t, to, result or action)
     else:

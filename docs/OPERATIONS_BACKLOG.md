@@ -229,6 +229,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T10:48:17Z.
 
+## Done — Milestone 19 (PR #4 update)
+
+- M19-1/2: contract_check.py 27/27 live (fixture-labeled); adoption request
+  posted with smallest integration change; no code-level adoption yet.
+- M19-4 defect: complete honors depends_on gate (409 + audit) — fixed and
+  pinned; dead-letter/retry/audit tests added (test_m19_operational.py, 4).
+- M19-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
+  22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -397,6 +407,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M18-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T10:48:17Z.
+
+## Done — Milestone 19 (PR #4 update)
+
+- M19-1/2: contract_check.py 27/27 live (fixture-labeled); adoption request
+  posted with smallest integration change; no code-level adoption yet.
+- M19-4 defect: complete honors depends_on gate (409 + audit) — fixed and
+  pinned; dead-letter/retry/audit tests added (test_m19_operational.py, 4).
+- M19-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
+  22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
 
 ## Next (backlog, priority order)
 
@@ -570,6 +590,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T10:48:17Z.
 
+## Done — Milestone 19 (PR #4 update)
+
+- M19-1/2: contract_check.py 27/27 live (fixture-labeled); adoption request
+  posted with smallest integration change; no code-level adoption yet.
+- M19-4 defect: complete honors depends_on gate (409 + audit) — fixed and
+  pinned; dead-letter/retry/audit tests added (test_m19_operational.py, 4).
+- M19-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
+  22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -735,6 +765,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T10:48:17Z.
 
+## Done — Milestone 19 (PR #4 update)
+
+- M19-1/2: contract_check.py 27/27 live (fixture-labeled); adoption request
+  posted with smallest integration change; no code-level adoption yet.
+- M19-4 defect: complete honors depends_on gate (409 + audit) — fixed and
+  pinned; dead-letter/retry/audit tests added (test_m19_operational.py, 4).
+- M19-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
+  22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -897,6 +937,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M18-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 161/161 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T10:48:17Z.
+
+## Done — Milestone 19 (PR #4 update)
+
+- M19-1/2: contract_check.py 27/27 live (fixture-labeled); adoption request
+  posted with smallest integration change; no code-level adoption yet.
+- M19-4 defect: complete honors depends_on gate (409 + audit) — fixed and
+  pinned; dead-letter/retry/audit tests added (test_m19_operational.py, 4).
+- M19-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
+  22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
 
 ## Next (backlog, priority order)
 
