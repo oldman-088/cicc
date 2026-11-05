@@ -203,6 +203,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
 - Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
 
+## Done — Milestone 17 (PR #4 update)
+
+- M17-1 evidence consistency: PR heads reconciled (PR#1 d913cfa, not stale
+  a1688bb); no agent PR references /api/v1/coordination yet; adoption doc
+  updated with timestamps. i18n 188->187 = report miscount, no key lost,
+  parity intact (per-commit counts documented).
+- M17-3: replay-detection alert verified across simulated restart (persists,
+  dedup holds); detection-not-rejection + no-signed-timestamp limitation
+  documented (SECURITY_REVIEW §M16/M14). BFF invariants unchanged.
+- M17-5: master prompt re-confirmed README.md@main@ca8f82c v1.0 (main
+  unchanged); alignment doc updated; Agent 1 ~90% / product ~25-35%.
+- Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live mode-labeled.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -345,6 +359,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   ca8f82c v1.0) + Agent-1-scoped REQUIREMENTS_TRACEABILITY / ACCEPTANCE_TESTS /
   BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
 - Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — Milestone 17 (PR #4 update)
+
+- M17-1 evidence consistency: PR heads reconciled (PR#1 d913cfa, not stale
+  a1688bb); no agent PR references /api/v1/coordination yet; adoption doc
+  updated with timestamps. i18n 188->187 = report miscount, no key lost,
+  parity intact (per-commit counts documented).
+- M17-3: replay-detection alert verified across simulated restart (persists,
+  dedup holds); detection-not-rejection + no-signed-timestamp limitation
+  documented (SECURITY_REVIEW §M16/M14). BFF invariants unchanged.
+- M17-5: master prompt re-confirmed README.md@main@ca8f82c v1.0 (main
+  unchanged); alignment doc updated; Agent 1 ~90% / product ~25-35%.
+- Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live mode-labeled.
 
 ## Next (backlog, priority order)
 
@@ -492,6 +520,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
 - Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
 
+## Done — Milestone 17 (PR #4 update)
+
+- M17-1 evidence consistency: PR heads reconciled (PR#1 d913cfa, not stale
+  a1688bb); no agent PR references /api/v1/coordination yet; adoption doc
+  updated with timestamps. i18n 188->187 = report miscount, no key lost,
+  parity intact (per-commit counts documented).
+- M17-3: replay-detection alert verified across simulated restart (persists,
+  dedup holds); detection-not-rejection + no-signed-timestamp limitation
+  documented (SECURITY_REVIEW §M16/M14). BFF invariants unchanged.
+- M17-5: master prompt re-confirmed README.md@main@ca8f82c v1.0 (main
+  unchanged); alignment doc updated; Agent 1 ~90% / product ~25-35%.
+- Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live mode-labeled.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -631,6 +673,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
 - Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
 
+## Done — Milestone 17 (PR #4 update)
+
+- M17-1 evidence consistency: PR heads reconciled (PR#1 d913cfa, not stale
+  a1688bb); no agent PR references /api/v1/coordination yet; adoption doc
+  updated with timestamps. i18n 188->187 = report miscount, no key lost,
+  parity intact (per-commit counts documented).
+- M17-3: replay-detection alert verified across simulated restart (persists,
+  dedup holds); detection-not-rejection + no-signed-timestamp limitation
+  documented (SECURITY_REVIEW §M16/M14). BFF invariants unchanged.
+- M17-5: master prompt re-confirmed README.md@main@ca8f82c v1.0 (main
+  unchanged); alignment doc updated; Agent 1 ~90% / product ~25-35%.
+- Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live mode-labeled.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -767,6 +823,20 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   ca8f82c v1.0) + Agent-1-scoped REQUIREMENTS_TRACEABILITY / ACCEPTANCE_TESTS /
   BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
 - Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — Milestone 17 (PR #4 update)
+
+- M17-1 evidence consistency: PR heads reconciled (PR#1 d913cfa, not stale
+  a1688bb); no agent PR references /api/v1/coordination yet; adoption doc
+  updated with timestamps. i18n 188->187 = report miscount, no key lost,
+  parity intact (per-commit counts documented).
+- M17-3: replay-detection alert verified across simulated restart (persists,
+  dedup holds); detection-not-rejection + no-signed-timestamp limitation
+  documented (SECURITY_REVIEW §M16/M14). BFF invariants unchanged.
+- M17-5: master prompt re-confirmed README.md@main@ca8f82c v1.0 (main
+  unchanged); alignment doc updated; Agent 1 ~90% / product ~25-35%.
+- Regression: API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live mode-labeled.
 
 ## Next (backlog, priority order)
 

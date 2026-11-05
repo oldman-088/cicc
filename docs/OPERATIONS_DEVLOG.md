@@ -179,3 +179,16 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   (CICC_GH_MAX_REPLAY_AGE_S default 86400) — detection only.
 - e2e_check.py: per-check mode labels; 22/22 PASS @10:28:12Z.
 - API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## 2026-11-05 — Milestone 17 (branch arena/961971ed-cicc, PR #4)
+
+- Evidence consistency: PR heads re-checked (PR#1 now d913cfa — M16's a1688bb
+  was stale; PR#2 3462a8b; PR#3 1a46f70); file scans show no coordination-API
+  references in any agent PR; CONTRACT_ADOPTION updated w/ timestamps.
+- i18n: per-commit en.json counts 175/182/187/187... — the M14 "188" was a
+  miscount; no key removed; en==ar parity holds every commit.
+- test_m17_reliability.py (2): replay alert persists across simulated restart
+  (file DB + fresh app), dedup holds (one task, one event row); fresh
+  duplicate within window -> no alert.
+- main still ca8f82c; README.md (master prompt v1.0) unchanged — re-confirmed.
+- API 157/157 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.

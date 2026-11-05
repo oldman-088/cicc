@@ -19,7 +19,7 @@
         "DAG",
         "sweep"
       ],
-      "tests": "API 155/155 (7 real-PG + 1 live-GitHub); conformance harness 5/5 (fixture-labeled); E2E 22/22 live"
+      "tests": "API 157/157 (7 real-PG + 1 live-GitHub); conformance 5/5; replay-restart 2/2; E2E 22/22 live"
     },
     "ops": {
       "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,7 +43,7 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M16"
+    "M1..M17"
   ],
   "contracts": {
     "version": "v1.0",
@@ -80,6 +80,14 @@
     "path": "README.md@main",
     "version": "ULTIMATE MASTER PROMPT v1.0",
     "commit": "ca8f82c",
+    "reconfirmed": "2026-11-05 (main unchanged)",
     "alignment_doc": "docs/MASTER_PROMPT_ALIGNMENT.md"
+  },
+  "i18n": "en/ar parity 187/187 at every commit since M11 (M14 '188' was a report miscount; no key lost)",
+  "pr_heads_checked": {
+    "1": "d913cfa",
+    "2": "3462a8b",
+    "3": "1a46f70",
+    "checked": "2026-11-05T10:35Z"
   }
 }

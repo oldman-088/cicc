@@ -71,3 +71,24 @@ PR #2 (`3462a8b`), PR #3 (`1a46f70`): **no file in any agent PR references
 | Agent 4 (PR #2, head 3462a8b) | **PARTIALLY COMPATIBLE (discussion-level)** — engaged on PR #4 | M13: path ambiguity (`/api/v1/overview` vs `/api/v1/ops/overview`) — resolved in docs/API_REFERENCE.md; auth/tenancy question — answered (single-tenant, BFF, no browser token, tenant pending owner); DTO/error reference — provided; ownership overlap — per APPS_INTEGRATION_STRATEGY.md. No DTO field mismatches remain open; visual QA pending |
 
 Conformance harness (fixture-labeled, NOT agent integration): tests/test_m16_conformance.py (5 tests) validates v1.0 DTOs/state enum/error codes against the live app.
+
+## M17 update (2026-11-05 ~10:35 UTC) — re-verified current heads
+
+Actual PR heads at check time (gh api, 2026-11-05 ~10:35 UTC):
+PR #1 `arena/fa0df787-cicc` = **`d913cfa`** (updated 2026-11-05T10:20:17Z) —
+**correction**: the M16 report cited `a1688bb`; that was the head at ~10:10Z,
+Agent 3 pushed again by 10:20Z. A full file scan of PR #1 @ d913cfa still
+finds **no reference to `/api/v1/coordination`**.
+PR #2 `arena/09952395-cicc` = `3462a8b` (2026-11-05T09:37:28Z); PR #3
+`arena/93315d2c-cicc` = `1a46f70` (2026-11-05T09:59:39Z). No new comments on
+PR #4 / issue #5 since the M16 follow-up.
+
+| Agent | Status (M17) |
+|---|---|
+| Agent 2 (PR #3 @ 1a46f70) | PENDING — no confirmation, no coordination-API references |
+| Agent 3 (PR #1 @ d913cfa) | PENDING — head reconciled (a1688bb → d913cfa); still no coordination-API references |
+| Agent 4 (PR #2 @ 3462a8b) | PARTIALLY COMPATIBLE (discussion-level) — blockers answered; implementation evidence + visual QA still outstanding |
+
+i18n note: en/ar key count is 187 at every commit since b1b2f1b (175@M9 →
+182@M10 → 187@M11, +5 broker keys); the "188" in the M14 report was a
+miscount, **no key was removed or lost**; parity en==ar holds at every commit.

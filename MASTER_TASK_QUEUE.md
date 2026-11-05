@@ -87,6 +87,18 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - Adoption per agent recorded (pending/partially-compatible) w/ specifics.
 - API 155/155; web 23/23 + tsc + build; i18n 188/188.
 
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

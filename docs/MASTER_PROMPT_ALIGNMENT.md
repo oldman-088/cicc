@@ -37,3 +37,16 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
 2. Original structure suggests `services/`, `packages/`, `infrastructure/`, `database/`; repo currently uses `apps/{api,web}` + `docs/` + `scripts/` — adapted per prompt's own "adapt if existing architecture is better" clause.
 3. DoD §17 requires tenant isolation tested, deployment instructions verified, DR documented, release readiness — **not yet met product-wide**; honestly reported as not production-ready.
 4. Master prompt's management files partially exist; M16 adds the Agent-1-scoped remainder.
+
+## M17 re-confirmation (2026-11-05 ~10:35 UTC)
+- `main` is still at **`ca8f82c`**; `README.md` is unchanged (diff vs branch
+  HEAD empty; last commit touching it = ca8f82c "Update README.md"). The
+  original Master Prompt remains **README.md @ main @ ca8f82c, v1.0** — same
+  file/version/revision as reviewed in M16. No newer authoritative version
+  found (searched all branches again).
+- Domain E + coordination reassessment: unchanged from M16 except added
+  replay-detection persistence test (M17) and conformance harness (M16).
+  Agent 1 estimate still ~90% (exclusions: tenant isolation, platform auth,
+  RabbitMQ live, notifications, Agent 4 QA — all owner/env-blocked).
+  Whole-product estimate unchanged (~25–35%, 4 open PRs, no confirmed
+  cross-agent integration).
