@@ -242,8 +242,10 @@ def test_m29_amendment_flow_propose_decide_trace(client):
     against duplicates; contract endpoint exposes the registry + effective version."""
     r = client.post("/api/v1/coordination/contract/amendments", json=_amd(), headers=W)
     assert r.status_code == 201 and r.json()["status"] == "pending"
-    # duplicate id rejected
-    assert client.post("/api/v1/coordination/contract/amendments", json=_amd(), headers=W).status_code == 422
+    # M30: identical duplicate propose is idempotent (200 duplicate:true); conflicting -> 422
+    rd = client.post("/api/v1/coordination/contract/amendments", json=_amd(), headers=W)
+    assert rd.status_code == 200 and rd.json()["duplicate"] is True
+    assert client.post("/api/v1/coordination/contract/amendments", json=_amd(title="changed"), headers=W).status_code == 422
     # non-approver cannot decide
     r = client.post("/api/v1/coordination/contract/amendments/AMD-001/decide",
                     json={"decision": "accept", "decided_by": "random"}, headers=W)
@@ -281,3 +283,64 @@ def test_m29_health_last_operations(client):
     assert lo["last_task_event"] is not None
     assert "NOT continuous monitoring" in lo["note"]
     assert lo["last_webhook_received"] is None and lo["last_github_sync_success"] is None
+
+
+def test_m30_amendment_lifecycle_hardening(client):
+    """M30: duplicate idempotency, proposer-only withdraw, supersede, stale sweep,
+    self-approval flag, backward-incompatible note requirement, audit history."""
+    import datetime as _dt
+    from app import ops as _ops, models as _m
+    from sqlalchemy import select as _sel
+    # idempotent duplicate propose -> 200 duplicate:true
+    r1 = client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-100"), headers=W)
+    assert r1.status_code == 201
+    r2 = client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-100"), headers=W)
+    assert r2.status_code == 200 and r2.json()["duplicate"] is True
+    # conflicting re-propose -> 422
+    assert client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-100", title="different"), headers=W).status_code == 422
+    # non-proposer cannot withdraw
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-100/withdraw", json={"by": "someone-else"}, headers=W)
+    assert r.status_code == 403
+    # proposer withdraws
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-100/withdraw", json={"by": "agent-1"}, headers=W)
+    assert r.status_code == 200 and r.json()["status"] == "withdrawn"
+    # withdrawn cannot be decided
+    assert client.post("/api/v1/coordination/contract/amendments/AMD-100/decide",
+                       json={"decision": "accept", "decided_by": "owner"}, headers=W).status_code == 409
+    # supersede flow: AMD-101 accepted supersedes AMD-102
+    client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-101"), headers=W)
+    client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-102"), headers=W)
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-101/decide",
+                    json={"decision": "accept", "decided_by": "owner", "supersedes": ["AMD-102"]}, headers=W)
+    assert r.status_code == 200 and r.json()["superseded"] == ["AMD-102"]
+    assert client.get("/api/v1/coordination/contract/amendments/AMD-102", headers=R).json()["status"] == "superseded"
+    # self-approval flagged
+    client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-103", proposed_by="owner"), headers=W)
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-103/decide",
+                    json={"decision": "accept", "decided_by": "owner"}, headers=W)
+    assert r.status_code == 200 and r.json()["self_approved"] is True
+    # backward-incompatible without note -> 422
+    client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-104", compatibility={"backward_compatible": False}), headers=W)
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-104/decide",
+                    json={"decision": "accept", "decided_by": "owner"}, headers=W)
+    assert r.status_code == 422
+    # with explicit note -> accepted, compat flags recorded
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-104/decide",
+                    json={"decision": "accept", "decided_by": "owner", "note": "owner-approved breaking change"}, headers=W)
+    assert r.status_code == 200 and r.json()["compatibility"]["backward_compatible"] is False
+    # audit history present and ordered
+    a = client.get("/api/v1/coordination/contract/amendments/AMD-104", headers=R).json()
+    kinds = [(h["from"], h["to"]) for h in a["history"]]
+    assert kinds == [(None, "pending"), ("pending", "accepted")]
+    # stale sweep: age AMD-105 beyond threshold
+    client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-105"), headers=W)
+    with _ops.SessionLocal() as s:
+        row = s.execute(_sel(_m.CoordinationAmendment).where(_m.CoordinationAmendment.amendment_id == "AMD-105")).scalar_one()
+        row.created_at = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=30)
+        s.commit()
+    r = client.post("/api/v1/coordination/sweep", headers=W)
+    assert "AMD-105" in r.json()["stale_amendments"]
+    assert client.get("/api/v1/coordination/contract/amendments/AMD-105", headers=R).json()["status"] == "stale"
+    # contract summary lists all statuses
+    c = client.get("/api/v1/coordination/contract", headers=R).json()["amendments"]
+    assert set(c["statuses"]) == {"pending", "accepted", "rejected", "withdrawn", "superseded", "stale"}

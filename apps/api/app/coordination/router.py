@@ -20,6 +20,7 @@ import json
 import os
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -127,9 +128,8 @@ def contract_descriptor(_gate: None = Depends(read_token_dependency)):
         desc["amendments"] = {
             "base_version": "1.0",
             "effective_version": desc["version"],
-            "pending": amendments.list_amendments(s, "pending"),
-            "accepted": amendments.list_amendments(s, "accepted"),
-            "rejected": amendments.list_amendments(s, "rejected"),
+            "statuses": list(amendments.STATUSES),
+            **{st: amendments.list_amendments(s, st) for st in amendments.STATUSES},
         }
         return desc
 
@@ -149,6 +149,7 @@ class AmendmentDecisionIn(BaseModel):
     decided_by: str
     note: str | None = None
     linked_refs: list[str] = []
+    supersedes: list[str] = []  # M30: mark other pending amendments superseded
 
 
 @router.post("/contract/amendments", status_code=201)
@@ -158,14 +159,15 @@ def propose_amendment(body: AmendmentIn, _gate: None = Depends(read_token_depend
     require_write_token(authorization)
     with ops.SessionLocal() as s:
         try:
-            row = amendments.propose(s, amendment_id=body.amendment_id, title=body.title,
+            row, duplicate = amendments.propose(s, amendment_id=body.amendment_id, title=body.title,
                                      description=body.description, proposed_by=body.proposed_by,
                                      affects=body.affects, compatibility=body.compatibility,
                                      target_version=body.target_version)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
         s.commit()
-        return row
+        row["duplicate"] = duplicate  # M30: idempotent re-proposal of identical pending amendment
+        return JSONResponse(status_code=200 if duplicate else 201, content=row)
 
 
 @router.get("/contract/amendments")
@@ -191,7 +193,22 @@ def decide_amendment_api(amendment_id: str, body: AmendmentDecisionIn,
     require_write_token(authorization)
     with ops.SessionLocal() as s:
         r = amendments.decide(s, amendment_id, body.decision, body.decided_by,
-                              body.note, body.linked_refs)
+                              body.note, body.linked_refs, body.supersedes,
+                              descriptor=contract.contract_v1())
+        s.commit()
+    if not r.get("ok"):
+        raise HTTPException(status_code=r["code"], detail=r["reason"])
+    return r
+
+
+@router.post("/contract/amendments/{amendment_id}/withdraw")
+def withdraw_amendment_api(amendment_id: str, body: dict,
+                           _gate: None = Depends(read_token_dependency),
+                           authorization: str | None = Header(default=None)):
+    """M30: proposer-only withdrawal of a pending amendment."""
+    require_write_token(authorization)
+    with ops.SessionLocal() as s:
+        r = amendments.withdraw(s, amendment_id, body.get("by", ""))
         s.commit()
     if not r.get("ok"):
         raise HTTPException(status_code=r["code"], detail=r["reason"])
@@ -490,9 +507,11 @@ def sweep(_gate: None = Depends(read_token_dependency), authorization: str | Non
         requeued = registry.requeue_ready(s)
         expired_approvals = approvals.sweep_expired(s)
         stale_agents = agent_registry.sweep_stale(s)
+        stale_amendments = amendments.sweep_stale(s)  # M30: stale pending amendments
         s.commit()
         return {"expired_tasks": expired_tasks, "requeued": requeued, "recovered_abandoned": recovered,
-                "expired_approvals": expired_approvals, "stale_agents": stale_agents}
+                "expired_approvals": expired_approvals, "stale_agents": stale_agents,
+                "stale_amendments": stale_amendments}
 
 
 # ---------------- agents ----------------

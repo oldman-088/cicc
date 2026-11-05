@@ -370,6 +370,7 @@ class CoordinationAmendment(Base):
     decided_by = Column(String(128), nullable=True)
     decision_note = Column(Text, nullable=True)
     linked_refs = Column(Text, nullable=True)      # JSON list: commits/PRs implementing it
+    history = Column(Text, nullable=True)          # M30: JSON audit trail of status transitions
     created_at = Column(DateTime(timezone=True), default=utcnow)
     decided_at = Column(DateTime(timezone=True), nullable=True)
 
