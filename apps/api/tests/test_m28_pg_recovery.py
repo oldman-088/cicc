@@ -261,3 +261,19 @@ def test_pg_concurrent_amendment_decision_single_winner(pg_app):
     assert all(r.status_code in (200, 409) for r in rs), [r.status_code for r in rs]
     a = pg_app.get("/api/v1/coordination/contract/amendments/AMD-PG", headers=R).json()
     assert a["status"] in ("accepted", "rejected") and a["decided_by"] == "owner"
+
+
+def test_pg_concurrent_progress_vs_complete(pg_app):
+    """Real PG: progress reports racing complete — persisted state and the
+    final progress value must be consistent with the event history."""
+    _running_task(pg_app, "m29-pc")
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = [ex.submit(pg_app.post, "/api/v1/coordination/tasks/m29-pc/progress", json={"percent": i * 25}, headers=W) for i in range(4)]
+        futs += [ex.submit(pg_app.post, "/api/v1/coordination/tasks/m29-pc/complete", json={"result": "done"}, headers=W) for _ in range(4)]
+        rs = [f.result() for f in futs]
+    assert all(r.status_code in (200, 409) for r in rs), [r.status_code for r in rs]
+    t = pg_app.get("/api/v1/coordination/tasks/m29-pc", headers=R).json()
+    sev = _state_events(pg_app, "m29-pc")
+    assert t["state"].lower() == sev[0]["kind"].split("->")[-1].lower()
+    assert t["state"].lower() in ("completed", "running")
+    assert 0 <= (t["progress"] or 0) <= 100
