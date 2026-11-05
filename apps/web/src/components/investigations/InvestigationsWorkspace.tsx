@@ -82,6 +82,31 @@ export function InvestigationsWorkspace() {
         <p className={styles.eyebrow}>{m.eyebrow}</p>
         <h1>{m.title}</h1>
         <p role="note">{m.localOnly}</p>
+        <div>
+          <button type="button" onClick={() => {
+            const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement("a");
+            anchor.href = url; anchor.download = "cicc-investigations.json"; anchor.click();
+            URL.revokeObjectURL(url);
+          }}>{locale === "ar" ? "تصدير JSON" : locale === "fa" ? "خروجی JSON" : "Export JSON"}</button>{" "}
+          <label>{locale === "ar" ? "استيراد JSON" : locale === "fa" ? "ورودی JSON" : "Import JSON"}
+            <input type="file" accept="application/json" onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void file.text().then((text) => {
+                try {
+                  const parsed: unknown = JSON.parse(text);
+                  if (!Array.isArray(parsed)) return;
+                  const valid = parsed.filter((item) => typeof item === "object" && item !== null && typeof (item as { id?: unknown }).id === "string" && typeof (item as { title?: unknown }).title === "string" && Array.isArray((item as { notes?: unknown }).notes)) as Investigation[];
+                  const migrated = valid.map((item) => ({ ...item, notes: item.notes.map((n) => typeof n === "string" ? { text: n as unknown as string, at: item.createdAt } : n), entities: Array.isArray(item.entities) ? item.entities : [], linkedTaskId: typeof item.linkedTaskId === "string" ? item.linkedTaskId : null }));
+                  setItems((current) => [...migrated.filter((item) => !current.some((c) => c.id === item.id)), ...current]);
+                } catch { /* malformed import files are rejected silently to the unchanged local state */ }
+              });
+            }} />
+          </label>
+          <span role="note"> {locale === "ar" ? "يبقى الاستيراد محلياً؛ لا يُرفع شيء." : locale === "fa" ? "ورودی محلی می‌ماند؛ چیزی بارگذاری نمی‌شود." : "Import stays local; nothing is uploaded."}</span>
+        </div>
       </header>
 
       <section aria-labelledby={`${formId}-create`} className={styles.panel}>
