@@ -7,5 +7,5 @@
 .layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
 .list { list-style: none; padding: 0; display: grid; gap: .5rem; }
 .list button { width: 100%; text-align: start; padding: .5rem; }
-button, input, select, textarea { font: inherit; }
-:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.page button, .page input, .page select, .page textarea { font: inherit; }
+.page :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
