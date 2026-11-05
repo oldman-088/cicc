@@ -157,7 +157,7 @@ def test_alert_assign_owner(client, monkeypatch):
 def test_keyed_write_rate_limit(monkeypatch, client):
     monkeypatch.setenv("CICC_OPS_WRITE_TOKEN", "w")
     monkeypatch.setenv("OPS_WRITE_RATE_LIMIT", "3")
-    ratelimit.write_limiter.limit = 3
+    monkeypatch.setattr(ratelimit.write_limiter, "limit", 3)  # restored after test
     H = {"Authorization": "Bearer w"}
     codes = [client.post("/api/v1/ops/tasks", json={"worker": "w", "queue": "q", "status": "success"}, headers=H).status_code for _ in range(5)]
     assert codes[:3] == [201, 201, 201]

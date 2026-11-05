@@ -226,3 +226,17 @@ export interface GitHubRepoStatus {
   open_issues?: { number: number; title: string; user: string; labels: string[] }[];
   check_runs?: { name: string; status: string; conclusion: string | null; head_branch: string; html_url: string }[];
 }
+
+export interface CoordinationMetrics {
+  tasks_total: number;
+  by_state: Record<string, number>;
+  by_kind: Record<string, number>;
+  active_by_agent: Record<string, number>;
+  avg_progress_active: number;
+  dead_lettered: number;
+  deliveries_total: number;
+  deliveries_by_outcome: Record<string, number>;
+  approvals_pending: number;
+  agents_registered: number;
+  agents_online: number;
+}

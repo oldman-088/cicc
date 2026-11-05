@@ -97,6 +97,8 @@ def create_task(s, *, task_id: str, event_id: str | None, source: str, kind: str
     record_event(s, task_id, "created", f"kind={kind} repo={repo} pr={pr_ref} requires_approval={requires_approval}")
     if requires_approval:
         transition(s, t, "WAITING_FOR_APPROVAL", "requires approval per policy")
+        from . import approvals as _approvals  # local import: approvals imports registry
+        _approvals.request_approval(s, t, requested_by=owner or source)
     return t
 
 
@@ -279,3 +281,42 @@ def progress(s, task_id: str, percent: int, note: str | None = None) -> dict | N
     record_event(s, task_id, "progress", f"{percent}%" + (f" {note}" if note else ""))
     s.flush()
     return {"task_id": task_id, "progress": percent, "state": normalize_state(t.state)}
+
+
+def metrics(s) -> dict:
+    """Aggregate coordination metrics (read-only, honest counts from DB)."""
+    from sqlalchemy import func as _func
+    tasks = s.execute(select(models.CoordinationTask)).scalars().all()
+    by_state, by_kind, by_agent_active = {}, {}, {}
+    prog_sum = prog_n = 0
+    dead = 0
+    for t in tasks:
+        st = normalize_state(t.state)
+        by_state[st] = by_state.get(st, 0) + 1
+        by_kind[t.kind] = by_kind.get(t.kind, 0) + 1
+        if st in ("QUEUED", "ASSIGNED", "DELIVERING", "ACKNOWLEDGED", "RUNNING", "WAITING_FOR_APPROVAL"):
+            by_agent_active[t.agent or "unassigned"] = by_agent_active.get(t.agent or "unassigned", 0) + 1
+            prog_sum += getattr(t, "progress", 0) or 0
+            prog_n += 1
+        if t.dead_letter:
+            dead += 1
+    deliv = s.execute(select(models.CoordinationDelivery)).scalars().all()
+    by_outcome = {}
+    for d in deliv:
+        by_outcome[d.status] = by_outcome.get(d.status, 0) + 1
+    appr = s.execute(select(models.CoordinationApproval)).scalars().all()
+    appr_pending = sum(1 for a in appr if a.status == "pending")
+    agents = s.execute(select(models.CoordinationAgent)).scalars().all()
+    return {
+        "tasks_total": len(tasks),
+        "by_state": by_state,
+        "by_kind": by_kind,
+        "active_by_agent": by_agent_active,
+        "avg_progress_active": round(prog_sum / prog_n, 1) if prog_n else 0.0,
+        "dead_lettered": dead,
+        "deliveries_total": len(deliv),
+        "deliveries_by_outcome": by_outcome,
+        "approvals_pending": appr_pending,
+        "agents_registered": len(agents),
+        "agents_online": sum(1 for a in agents if a.status in ("available", "busy")),
+    }

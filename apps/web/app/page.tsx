@@ -37,6 +37,7 @@ import type {
   GitHubEventItem,
   CoordinationAgent,
   GitHubRepoStatus,
+  CoordinationMetrics,
 } from "../lib/types";
 
 const REFRESH_MS = 15000;
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   const [coordEvents, setCoordEvents] = useState<GitHubEventItem[]>([]);
   const [coordAgents, setCoordAgents] = useState<CoordinationAgent[]>([]);
   const [ghStatus, setGhStatus] = useState<GitHubRepoStatus | null>(null);
+  const [coordMetrics, setCoordMetrics] = useState<CoordinationMetrics | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +78,7 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [h, o, d, hi, a, ts, al, w, sy, tk, tf, ct, ce, ca, gh] = await Promise.all([
+      const [h, o, d, hi, a, ts, al, w, sy, tk, tf, ct, ce, ca, gh, cm] = await Promise.all([
         fetch("/api/health", { cache: "no-store" }),
         fetch("/api/v1/ops/overview", { cache: "no-store" }),
         fetch("/api/v1/ops/dependencies", { cache: "no-store" }),
@@ -92,6 +94,7 @@ export default function DashboardPage() {
         fetch("/api/v1/coordination/events?limit=50", { cache: "no-store" }),
         fetch("/api/v1/coordination/agents", { cache: "no-store" }),
         fetch("/api/v1/coordination/github/status", { cache: "no-store" }),
+        fetch("/api/v1/coordination/metrics", { cache: "no-store" }),
       ]);
       setHealth(h.ok ? await h.json() : null);
       if (!o.ok) throw new Error(`overview_http_${o.status}`);
@@ -109,6 +112,7 @@ export default function DashboardPage() {
       setCoordEvents(ce.ok ? (await ce.json()).events : []);
       setCoordAgents(ca.ok ? (await ca.json()).agents : []);
       setGhStatus(gh.ok ? await gh.json() : null);
+      setCoordMetrics(cm.ok ? await cm.json() : null);
       setLastRefresh(new Date().toISOString());
     } catch {
       setHealth(null);
@@ -277,7 +281,7 @@ export default function DashboardPage() {
           {view === "alerts" && <AlertsView alerts={alerts} onAction={load} />}
 
           {view === "coordination" && (
-            <CoordinationView tasks={coordTasks} events={coordEvents} agents={coordAgents} gh={ghStatus} />
+            <CoordinationView tasks={coordTasks} events={coordEvents} agents={coordAgents} gh={ghStatus} metrics={coordMetrics} />
           )}
 
           {view === "workers" && (

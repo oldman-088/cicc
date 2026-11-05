@@ -14,6 +14,7 @@ Scope: `apps/api/app/coordination/*`, `apps/api/app/{ratelimit,platform_auth,not
 | Rate limiting | Global sliding window (429) + per-principal write limiter keyed by sha256(bearer) | test_keyed_write_rate_limit |
 | Body size | 16 KiB API cap (413) + 256 KiB webhook cap | existing + M7 tests |
 | Audit integrity | Every coordination transition (incl. rejected ones) recorded in coord_task_events; approvals in coord_approvals; ops events in events | lifecycle/approval tests |
+| Coordination writes | All coordination POST endpoints now require write token AND per-principal sliding-window rate limit (sha256-keyed, 429), incl. programmatic `POST /tasks` (strict field validation: kind charset, priority range, path-safe task_id, payload size via 16 KiB cap) | test_coordination_writes_rate_limited, test_create_task_validation |
 | Notifications | Disabled adapter only; no network code path; suppression events logged | test_notifications_never_send |
 | Delivery honesty | DELIVERING only after publisher confirm on a real broker; human-assisted records say "published", task stays QUEUED | test_handoff_broker_failure_falls_back |
 | DB changes | Additive-only migrations (inspector-based ADD COLUMN), no destructive ops; retention deletes only ops-owned tables | test_retention_purge_only_old_rows |

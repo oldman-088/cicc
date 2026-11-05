@@ -3,7 +3,7 @@
 import Section from "./Section";
 import { useLocale } from "../lib/i18n";
 import { formatTime } from "../lib/format";
-import type { CoordinationAgent, CoordinationTask, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
+import type { CoordinationAgent, CoordinationMetrics, CoordinationTask, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
 
 const STATE_COLORS: Record<string, string> = {
   NEW: "border-slate-500/50 text-slate-300",
@@ -22,11 +22,13 @@ export default function CoordinationView({
   events,
   agents,
   gh,
+  metrics,
 }: {
   tasks: CoordinationTask[];
   events: GitHubEventItem[];
   agents: CoordinationAgent[];
   gh: GitHubRepoStatus | null;
+  metrics: CoordinationMetrics | null;
 }) {
   const { t, locale } = useLocale();
   return (
@@ -163,6 +165,18 @@ export default function CoordinationView({
         )}
         <p className="mt-2 text-xs text-slate-500">{t("ghLiveNote")}</p>
       </Section>
+
+      {metrics && (
+        <div className="mb-4 flex flex-wrap gap-2 text-xs">
+          <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">{t("mTasks")}: {metrics.tasks_total}</span>
+          <span className="rounded border border-emerald-800 px-2 py-1 text-emerald-300">{t("mCompleted")}: {metrics.by_state.COMPLETED ?? 0}</span>
+          <span className="rounded border border-amber-800 px-2 py-1 text-amber-300">{t("mActive")}: {(metrics.by_state.QUEUED ?? 0) + (metrics.by_state.ASSIGNED ?? 0) + (metrics.by_state.RUNNING ?? 0) + (metrics.by_state.ACKNOWLEDGED ?? 0) + (metrics.by_state.DELIVERING ?? 0) + (metrics.by_state.WAITING_FOR_APPROVAL ?? 0)}</span>
+          <span className="rounded border border-red-800 px-2 py-1 text-red-300">{t("mDeadLetter")}: {metrics.dead_lettered}</span>
+          <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">{t("mDeliveries")}: {metrics.deliveries_total}</span>
+          <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">{t("mApprovalsPending")}: {metrics.approvals_pending}</span>
+          <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">{t("mAgentsOnline")}: {metrics.agents_online}/{metrics.agents_registered}</span>
+        </div>
+      )}
 
       <Section title={t("coordEventsTitle")}>
         {events.length === 0 ? (

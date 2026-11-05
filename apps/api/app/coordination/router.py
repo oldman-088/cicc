@@ -43,6 +43,23 @@ class ReportIn(BaseModel):
     result: str | None = Field(default=None, max_length=4000)
 
 
+class TaskIn(BaseModel):
+    task_id: str | None = Field(default=None, max_length=200, pattern=r"^[A-Za-z0-9_.:-]+$")
+    idempotency_key: str | None = Field(default=None, max_length=300)
+    kind: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
+    priority: int = Field(default=5, ge=1, le=10)
+    title: str | None = Field(default=None, max_length=500)
+    payload: dict = Field(default_factory=dict)
+    repo: str | None = Field(default=None, max_length=200)
+    pr_ref: str | None = Field(default=None, max_length=100)
+    branch_ref: str | None = Field(default=None, max_length=200)
+    owner: str | None = Field(default=None, max_length=200)
+    depends_on: list[str] | None = None
+    timeout_s: int | None = Field(default=None, ge=1, le=86400 * 30)
+    ttl_s: int | None = Field(default=None, ge=1, le=86400 * 365)
+    requires_approval: bool = False
+
+
 class ProgressIn(BaseModel):
     percent: int = Field(ge=0, le=100)
     note: str | None = Field(default=None, max_length=2000)
@@ -113,6 +130,39 @@ def list_events(_gate: None = Depends(read_token_dependency), limit: int = Query
 
 # ---------------- tasks ----------------
 
+@router.post("/tasks", status_code=201)
+def create_task_api(body: TaskIn, request: Request, _gate: None = Depends(read_token_dependency),
+                    authorization: str | None = Header(default=None)):
+    """Programmatic task creation (integration contract for Agents 2/3/4).
+    Idempotent on task_id and idempotency_key. Write-token + rate limited."""
+    require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
+    import uuid as _uuid
+    task_id = body.task_id or ("api-" + _uuid.uuid4().hex[:12])
+    with ops.SessionLocal() as s:
+        existing = None
+        if body.idempotency_key:
+            from sqlalchemy import select as _sel
+            existing = s.execute(_sel(models.CoordinationTask).where(
+                models.CoordinationTask.idempotency_key == body.idempotency_key)).scalar_one_or_none()
+        t = registry.create_task(
+            s, task_id=task_id, event_id=None, source="api", kind=body.kind,
+            repo=body.repo, pr_ref=body.pr_ref, branch_ref=body.branch_ref,
+            title=body.title, payload=body.payload, priority=body.priority,
+            owner=body.owner, depends_on=body.depends_on, timeout_s=body.timeout_s,
+            ttl_s=body.ttl_s, idempotency_key=body.idempotency_key,
+            requires_approval=body.requires_approval)
+        s.commit()
+        return {"task_id": t.task_id, "state": registry.normalize_state(t.state), "kind": t.kind,
+                "duplicate": existing is not None and existing.task_id != task_id}
+
+
+@router.get("/metrics")
+def coordination_metrics(_gate: None = Depends(read_token_dependency)):
+    with ops.SessionLocal() as s:
+        return registry.metrics(s)
+
+
 @router.get("/tasks")
 def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None = Query(None),
                agent: str | None = Query(None), kind: str | None = Query(None),
@@ -158,8 +208,9 @@ def get_task_approval(task_id: str, _gate: None = Depends(read_token_dependency)
 
 
 @router.post("/tasks/{task_id}/route")
-def route_task(task_id: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+def route_task(task_id: str, request: Request, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         t = _get_task(s, task_id)
         res = routing.route(s, t)
@@ -194,8 +245,9 @@ def deliver_task(task_id: str, request: Request, _gate: None = Depends(read_toke
 
 
 @router.post("/tasks/{task_id}/ack")
-def ack_task(task_id: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+def ack_task(task_id: str, request: Request, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         r = handoff.report(s, task_id, "ack")
         if r is None:
@@ -204,8 +256,9 @@ def ack_task(task_id: str, _gate: None = Depends(read_token_dependency), authori
 
 
 @router.post("/tasks/{task_id}/start")
-def start_task(task_id: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+def start_task(task_id: str, request: Request, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         r = handoff.report(s, task_id, "start")
         if r is None:
@@ -236,8 +289,9 @@ def fail_task(task_id: str, _gate: None = Depends(read_token_dependency), body: 
 
 
 @router.post("/tasks/{task_id}/cancel")
-def cancel_task(task_id: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+def cancel_task(task_id: str, request: Request, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         t = _get_task(s, task_id)
         ok = registry.transition(s, t, "CANCELLED", "cancelled by operator")
@@ -248,8 +302,9 @@ def cancel_task(task_id: str, _gate: None = Depends(read_token_dependency), auth
 
 
 @router.post("/tasks/{task_id}/retry")
-def retry_task(task_id: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+def retry_task(task_id: str, request: Request, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         t = _get_task(s, task_id)
         ok = registry.transition(s, t, "RETRYING", "manual retry") and registry.transition(s, t, "QUEUED", "re-queued")
@@ -260,9 +315,10 @@ def retry_task(task_id: str, _gate: None = Depends(read_token_dependency), autho
 
 
 @router.post("/tasks/{task_id}/approve")
-def approve_task(task_id: str, body: DecisionIn, _gate: None = Depends(read_token_dependency),
+def approve_task(task_id: str, body: DecisionIn, request: Request, _gate: None = Depends(read_token_dependency),
                  authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         r = approvals.decide(s, task_id, "approve", body.decided_by)
         s.commit()
@@ -274,9 +330,10 @@ def approve_task(task_id: str, body: DecisionIn, _gate: None = Depends(read_toke
 
 
 @router.post("/tasks/{task_id}/reject")
-def reject_task(task_id: str, body: DecisionIn, _gate: None = Depends(read_token_dependency),
+def reject_task(task_id: str, body: DecisionIn, request: Request, _gate: None = Depends(read_token_dependency),
                 authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         r = approvals.decide(s, task_id, "reject", body.decided_by)
         s.commit()
@@ -334,8 +391,9 @@ def agent_heartbeat(agent: str, body: AgentHeartbeatIn, request: Request,
 
 
 @router.post("/agents/{agent}/deregister")
-def deregister_agent(agent: str, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
+def deregister_agent(agent: str, request: Request, _gate: None = Depends(read_token_dependency), authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         ok = agent_registry.deregister(s, agent)
         s.commit()
@@ -373,9 +431,10 @@ def add_rule(body: RuleIn, request: Request, _gate: None = Depends(read_token_de
 # ---------------- progress, DAG, live GitHub sync (M8) ----------------
 
 @router.post("/tasks/{task_id}/progress")
-def report_progress(task_id: str, body: ProgressIn, _gate: None = Depends(read_token_dependency),
+def report_progress(task_id: str, body: ProgressIn, request: Request, _gate: None = Depends(read_token_dependency),
                     authorization: str | None = Header(default=None)):
     require_write_token(authorization)
+    write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
         r = registry.progress(s, task_id, body.percent, body.note)
         s.commit()

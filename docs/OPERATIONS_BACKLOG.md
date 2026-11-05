@@ -102,6 +102,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Task list filters (state/agent/kind); dashboard progress bar per task.
 - Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
 
+## Done — Milestone 10 (PR #4 update)
+
+- `POST /api/v1/coordination/tasks` programmatic enqueue (idempotent, validated,
+  write-token + rate-limited) — integration contract for Agents 2/3/4 in
+  docs/INTEGRATION_CONTRACTS.md.
+- `GET /api/v1/coordination/metrics` aggregate metrics + dashboard chips.
+- All coordination write endpoints rate-limited per principal (429); fixed a
+  leaked `write_limiter.limit=3` in a M6 test (now monkeypatch-restored).
+- `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
+- Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -143,6 +154,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   `next_retry_at`; sweep requeues RETRYING→QUEUED only after backoff elapses.
 - Task list filters (state/agent/kind); dashboard progress bar per task.
 - Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
+
+## Done — Milestone 10 (PR #4 update)
+
+- `POST /api/v1/coordination/tasks` programmatic enqueue (idempotent, validated,
+  write-token + rate-limited) — integration contract for Agents 2/3/4 in
+  docs/INTEGRATION_CONTRACTS.md.
+- `GET /api/v1/coordination/metrics` aggregate metrics + dashboard chips.
+- All coordination write endpoints rate-limited per principal (429); fixed a
+  leaked `write_limiter.limit=3` in a M6 test (now monkeypatch-restored).
+- `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
+- Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
 
 ## Next (backlog, priority order)
 
@@ -189,6 +211,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Task list filters (state/agent/kind); dashboard progress bar per task.
 - Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
 
+## Done — Milestone 10 (PR #4 update)
+
+- `POST /api/v1/coordination/tasks` programmatic enqueue (idempotent, validated,
+  write-token + rate-limited) — integration contract for Agents 2/3/4 in
+  docs/INTEGRATION_CONTRACTS.md.
+- `GET /api/v1/coordination/metrics` aggregate metrics + dashboard chips.
+- All coordination write endpoints rate-limited per principal (429); fixed a
+  leaked `write_limiter.limit=3` in a M6 test (now monkeypatch-restored).
+- `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
+- Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -227,6 +260,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Task list filters (state/agent/kind); dashboard progress bar per task.
 - Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
 
+## Done — Milestone 10 (PR #4 update)
+
+- `POST /api/v1/coordination/tasks` programmatic enqueue (idempotent, validated,
+  write-token + rate-limited) — integration contract for Agents 2/3/4 in
+  docs/INTEGRATION_CONTRACTS.md.
+- `GET /api/v1/coordination/metrics` aggregate metrics + dashboard chips.
+- All coordination write endpoints rate-limited per principal (429); fixed a
+  leaked `write_limiter.limit=3` in a M6 test (now monkeypatch-restored).
+- `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
+- Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -262,6 +306,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   `next_retry_at`; sweep requeues RETRYING→QUEUED only after backoff elapses.
 - Task list filters (state/agent/kind); dashboard progress bar per task.
 - Tests: API 118/118 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build.
+
+## Done — Milestone 10 (PR #4 update)
+
+- `POST /api/v1/coordination/tasks` programmatic enqueue (idempotent, validated,
+  write-token + rate-limited) — integration contract for Agents 2/3/4 in
+  docs/INTEGRATION_CONTRACTS.md.
+- `GET /api/v1/coordination/metrics` aggregate metrics + dashboard chips.
+- All coordination write endpoints rate-limited per principal (429); fixed a
+  leaked `write_limiter.limit=3` in a M6 test (now monkeypatch-restored).
+- `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
+- Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
 
 ## Next (backlog, priority order)
 

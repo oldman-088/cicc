@@ -173,5 +173,12 @@
   "ghOpenIssues": "Issues مفتوحة",
   "ghCheckRuns": "أحدث نتائج CI",
   "ghLiveNote": "بيانات مباشرة من api.github.com (استدعاء حقيقي محمي بـ circuit breaker). POST /api/v1/coordination/github/sync يستورد أحداث PR/CI كمهام.",
-  "colProgress": "التقدم"
+  "colProgress": "التقدم",
+  "mTasks": "مهام",
+  "mCompleted": "مكتملة",
+  "mActive": "نشطة",
+  "mDeadLetter": "dead-letter",
+  "mDeliveries": "تسليمات",
+  "mApprovalsPending": "موافقات معلّقة",
+  "mAgentsOnline": "وكلاء متصلون"
 }

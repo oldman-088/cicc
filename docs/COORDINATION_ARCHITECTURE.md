@@ -149,3 +149,17 @@ Still environment-blocked: real-broker delivery/confirm (no Docker/broker here).
   requeues them to QUEUED after the backoff elapses.
 - **Task list filters**: `GET /tasks?state=&agent=&kind=`; responses include
   `progress` and `next_retry_at`. Dashboard task table shows a progress bar.
+
+
+## v3.2 (Milestone 10 — programmatic enqueue + metrics + write rate limits)
+
+- `POST /api/v1/coordination/tasks` — Agents 2/3/4 enqueue work programmatically;
+  idempotent on task_id + idempotency_key; full field validation; contract in
+  docs/INTEGRATION_CONTRACTS.md.
+- `GET /api/v1/coordination/metrics` — aggregate honest counts (by state/kind,
+  active per agent, avg progress, deliveries by outcome, dead letters,
+  pending approvals, agents online/registered). Dashboard shows them as chips.
+- All coordination write endpoints are now rate-limited per principal (429)
+  in addition to the write-token gate.
+- `scripts/bench_coordination.py` — LIVE end-to-end benchmark (create→route→
+  deliver→ack→start→complete, p50/p95/max per step).

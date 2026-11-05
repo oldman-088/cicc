@@ -95,3 +95,18 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - GET /tasks filters (state/agent/kind); dashboard progress bar (EN/AR).
 - Test fix: fail() lands in RETRYING via dead_letter below max attempts —
   backoff assertions adjusted accordingly. API 118/118.
+
+## 2026-11-04 — Milestone 10 (branch arena/961971ed-cicc, PR #4)
+
+- POST /coordination/tasks (programmatic, idempotent, validated) + GET
+  /coordination/metrics; all coordination writes now per-principal rate
+  limited; bench_coordination.py; dashboard metric chips (EN/AR 182).
+- Fixed cross-test leak: test_milestone6 set write_limiter.limit=3 permanently;
+  now monkeypatch-restored (was invisible until coordination writes were
+  rate-limited). API 123/123.
+
+- M10 live-smoke catches: metrics() used wrong column names (outcome/decision/
+  status) -> fixed to status fields; API-created requires_approval tasks now
+  also create the coord_approvals row (request_approval made idempotent —
+  webhook path called it separately, caused MultipleResultsFound). Regression
+  test strengthened to iterate non-empty tables. API 123/123.

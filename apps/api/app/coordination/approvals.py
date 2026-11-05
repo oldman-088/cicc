@@ -39,6 +39,12 @@ def _utcnow() -> datetime:
 
 
 def request_approval(s, task: models.CoordinationTask, requested_by: str | None) -> models.CoordinationApproval:
+    """Idempotent: one pending approval per task."""
+    existing = s.execute(select(models.CoordinationApproval).where(
+        models.CoordinationApproval.task_id == task.task_id,
+        models.CoordinationApproval.status == "pending")).scalars().first()
+    if existing is not None:
+        return existing
     ap = models.CoordinationApproval(
         task_id=task.task_id, status="pending", requested_by=requested_by,
         expires_at=_utcnow() + timedelta(seconds=approval_ttl_s()),

@@ -173,5 +173,12 @@
   "ghOpenIssues": "Open issues",
   "ghCheckRuns": "Recent CI runs",
   "ghLiveNote": "Live data from api.github.com (real call, circuit-breaker guarded). POST /api/v1/coordination/github/sync ingests PR/CI events as tasks.",
-  "colProgress": "Progress"
+  "colProgress": "Progress",
+  "mTasks": "Tasks",
+  "mCompleted": "Completed",
+  "mActive": "Active",
+  "mDeadLetter": "Dead-letter",
+  "mDeliveries": "Deliveries",
+  "mApprovalsPending": "Approvals pending",
+  "mAgentsOnline": "Agents online"
 }
