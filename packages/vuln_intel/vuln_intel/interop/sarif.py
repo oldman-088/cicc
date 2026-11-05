@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 
 from ..errors import ValidationError
@@ -272,3 +273,73 @@ def to_vulnerability_candidates(
             VulnerabilityCandidate(cve=cve, finding=finding, cve_source=cve_source)
         )
     return tuple(sorted(out, key=lambda c: (c.cve, c.finding.tool, c.finding.rule_id or "")))
+
+
+SARIF_SPEC_VERSION = "2.1.0"
+
+
+def to_sarif(report, *, tool: str = "cicc-vuln-intel", tool_version: str | None = None,
+             generated_at: datetime | None = None) -> dict[str, Any]:
+    """Export an assessment report as SARIF 2.1.0 (outbound).
+
+    One result per exposure match: affected -> level "error", unverified ->
+    "note", not_affected -> level "none". Clusters with no exposure data are
+    not findings (they were never evaluated) and are listed in properties.
+    Provenance and honesty flags ride along as run properties; a fixture report
+    always says ``cicc:live_verified=false``.
+    """
+    moment = generated_at or report.run_at
+    results: list[dict[str, Any]] = []
+    if report.exposure is not None:
+        for match in report.exposure.matches:
+            level = "error"
+            results.append({
+                "ruleId": str(match.cve),
+                "level": level,
+                "message": {"text": f"{match.cve} affects "
+                                    f"{match.dependency.canonical_ecosystem}/"
+                                    f"{match.dependency.canonical_name}=="
+                                    f"{match.dependency.version} (asset: "
+                                    f"{match.dependency.asset or 'unknown'})"},
+                "locations": [{"physicalLocation": {
+                    "artifactLocation": {"uri": match.dependency.purl or "unknown"}}}],
+                "properties": {"asset": match.dependency.asset or "unknown",
+                               "ecosystem": match.dependency.canonical_ecosystem},
+            })
+        for match in report.exposure.unverified:
+            results.append({
+                "ruleId": str(match.cve),
+                "level": "note",
+                "message": {"text": f"{match.cve} names "
+                                    f"{match.dependency.canonical_name} but the version "
+                                    "range could not be evaluated"},
+                "properties": {"asset": match.dependency.asset or "unknown"},
+            })
+        for match in report.exposure.not_affected:
+            results.append({
+                "ruleId": str(match.cve),
+                "level": "none",
+                "message": {"text": f"{match.cve} does not affect installed "
+                                    f"{match.dependency.version}"},
+            })
+    unassessed = sorted(
+        str(cluster.merged.cve) for cluster in report.clusters
+        if report.exposure is None or str(cluster.merged.cve) not in
+        {str(m.cve) for m in (report.exposure.matches + report.exposure.unverified
+                                       + report.exposure.not_affected)}
+    )
+    return {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": SARIF_SPEC_VERSION,
+        "runs": [{
+            "tool": {"driver": {"name": tool, "version": tool_version or "unknown",
+                                "informationUri": "https://example.invalid/cicc"}},
+            "results": results,
+            "properties": {
+                "cicc:origin": report.origin.value,
+                "cicc:live_verified": "true" if report.live_verified else "false",
+                "cicc:unassessed": unassessed,
+                "cicc:generated_at": moment.astimezone(timezone.utc).isoformat(),
+            },
+        }],
+    }
