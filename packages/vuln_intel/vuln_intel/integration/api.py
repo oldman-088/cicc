@@ -211,6 +211,13 @@ def shape_record(row: Mapping[str, Any]) -> dict[str, Any]:
         "references": details.get("references") or [],
         "freshness": enrichment.get("freshness"),
         "policy": enrichment.get("policy"),
+        # Standing and structured conflicts. Consumers need to be able to exclude a
+        # withdrawn advisory *before* rendering it as work to do, and to show why a
+        # value is contested without scraping English out of `conflict_notes`.
+        "record_status": enrichment.get("record_status"),
+        "withdrawn": enrichment.get("withdrawn"),
+        "conflicts": enrichment.get("conflicts") or [],
+        "ssvc": enrichment.get("ssvc") or {},
     }
 
 

@@ -128,7 +128,12 @@ def to_source_details(record: NormalizedVulnerability) -> dict[str, Any]:
             "model_date": record.epss_model_date,
         },
         "sources": list(record.sources),
-        "conflicts": list(record.conflict_notes),
+        # Structured conflicts, because a UI cannot filter on prose. `conflict_notes`
+        # stays alongside it so an existing prose reader keeps working.
+        "conflicts": [c.as_dict() for c in record.conflicts],
+        "conflict_notes": list(record.conflict_notes),
+        "record_status": record.record_status.value if record.record_status else None,
+        "withdrawn": record.withdrawn.isoformat() if record.withdrawn else None,
     }
     details[ENRICHMENT_KEY] = to_enrichment(record)
     return details
@@ -153,7 +158,13 @@ def to_enrichment(record: NormalizedVulnerability) -> dict[str, Any]:
             "model_date": record.epss_model_date,
             "available": record.epss_score is not None,
         },
-        "conflicts": list(record.conflict_notes),
+        "conflicts": [c.as_dict() for c in record.conflicts],
+        "conflict_notes": list(record.conflict_notes),
+        # Standing: separate from severity, because "critical but withdrawn" and
+        # "critical" are different situations for whoever actions the backlog.
+        "record_status": record.record_status.value if record.record_status else None,
+        "withdrawn": record.withdrawn.isoformat() if record.withdrawn else None,
+        "ssvc": dict(record.ssvc),
         "verification": record.verification,
     }
 

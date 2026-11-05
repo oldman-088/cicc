@@ -419,3 +419,86 @@ class TestProjectStateFile:
         """Catches a stale number without hard-coding the exact count in two places."""
         state = self._state()
         assert state["quality_gates"]["tests_passed"] >= 600
+
+class TestStandingAndConflictsReachTheApi:
+    """The read contract silently dropped every field added this week.
+
+    `shape_record` copies a fixed key list, so `record_status`, `conflicts` and `ssvc`
+    existed on the record, travelled through the ingest payload, and then vanished at
+    the boundary a frontend actually reads. Nothing failed, because nothing asserted
+    the fields were there.
+    """
+
+    @staticmethod
+    def _row(**kwargs):
+        from vuln_intel.integration.mapping import to_source_details
+        from vuln_intel.schema import (
+            CveId,
+            FieldConflict,
+            NormalizedVulnerability,
+            Origin,
+            RecordStatus,
+        )
+
+        base = dict(
+            cve=CveId.parse("CVE-2026-9600"),
+            origin=Origin.FIXTURE,
+            sources=("nvd", "osv"),
+            record_status=RecordStatus.REJECTED,
+            ssvc=(("exploitation", "active"),),
+            conflicts=(
+                FieldConflict(
+                    field="severity", kept="critical", discarded=("high",),
+                    dissenters=("osv",),
+                ),
+            ),
+        )
+        base.update(kwargs)
+        record = NormalizedVulnerability(**base)
+        return {"cve": str(record.cve), "origin": "fixture",
+                "details": to_source_details(record)}
+
+    def test_record_status_is_exposed(self) -> None:
+        from vuln_intel.integration.api import shape_record
+
+        assert shape_record(self._row())["record_status"] == "rejected"
+
+    def test_conflicts_are_structured_not_prose(self) -> None:
+        from vuln_intel.integration.api import shape_record
+
+        conflicts = shape_record(self._row())["conflicts"]
+        assert conflicts == [
+            {
+                "field": "severity",
+                "kept": "critical",
+                "discarded": ["high"],
+                "dissenters": ["osv"],
+            }
+        ]
+
+    def test_ssvc_inputs_are_exposed(self) -> None:
+        from vuln_intel.integration.api import shape_record
+
+        assert shape_record(self._row())["ssvc"] == {"exploitation": "active"}
+
+    def test_absent_standing_stays_null_not_false(self) -> None:
+        from vuln_intel.integration.api import shape_record
+
+        row = self._row()
+        # Drop the standing from the stored enrichment, as a pre-existing row would be.
+        del row["details"]["cicc_enrichment"]["record_status"]
+        assert shape_record(row)["record_status"] is None
+        assert shape_record(row)["withdrawn"] is None
+
+    def test_prose_notes_are_kept_alongside_structure(self) -> None:
+        """Existing prose readers must not break."""
+        from vuln_intel.integration.mapping import to_source_details
+        from vuln_intel.schema import CveId, NormalizedVulnerability, Origin
+
+        record = NormalizedVulnerability(
+            cve=CveId.parse("CVE-2026-9601"), origin=Origin.FIXTURE,
+            conflict_notes=("severity disagreement",),
+        )
+        details = to_source_details(record)
+        assert details["cicc_enrichment"]["conflict_notes"] == ["severity disagreement"]
+        assert details["conflict_notes"] == ["severity disagreement"]
