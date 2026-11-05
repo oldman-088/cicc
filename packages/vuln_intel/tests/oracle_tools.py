@@ -37,17 +37,21 @@ import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError
 
-#: Versions the documented cross-check results in ``ORACLE_VALIDATION.md`` were
-#: produced with.  ``None`` means "any version is acceptable" for that oracle.
-#: These are asserted by ``test_oracle_tooling.py`` when the oracle is present: a
-#: version drift is a signal to re-run the audit and update the documented numbers,
-#: not something to absorb silently.
+#: Versions the documented cross-check results were produced with, for the oracles we
+#: can actually pin.  ``None`` means "recorded but not asserted".
+#:
+#: Only *pip-installed* oracles are pinned. ``dpkg`` and ``rpm`` are part of the host
+#: distribution: their version legitimately differs between a Debian container, an
+#: ``ubuntu-latest`` runner and a Fedora host, and asserting one value would fail CI
+#: for a reason that has nothing to do with correctness. The version that actually
+#: ran is still printed in the banner and written to the job summary, so the evidence
+#: is recorded even where it cannot be pinned.
 EXPECTED_VERSIONS: dict[str, str | None] = {
     "packaging": "26.3",
     "semantic_version": "2.10.0",
     "rpm-vercmp": "0.1.2",
-    "dpkg": "1.21.23",
-    "rpm": None,  # distribution-dependent; recorded but not pinned
+    "dpkg": None,  # distribution-provided; recorded, never asserted
+    "rpm": None,  # distribution-provided; recorded, never asserted
 }
 
 
