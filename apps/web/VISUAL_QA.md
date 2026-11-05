@@ -29,3 +29,6 @@ Still manual-only after automation: screen-reader sessions, true contrast measur
 
 ## Update — journey coverage (2026-11-05)
 Suite grew to **30 tests** (`e2e/journeys.spec.ts`: investigation create/annotate/reload persistence, local reminder read/unread persistence, honest unavailable failure states, cross-workspace navigation). First journey run (42033874095) was 29/30 — mobile navigation is collapsed, so the journey now opens the toggle like a real user. Run **42034338021: full success (30/30)**, with typecheck, 104 unit tests, and build also green.
+
+## Update — health/trace + import journeys (2026-11-05)
+Suite grew to **34 tests** (coordination-health unavailable journey; malformed-import rejection journey). First run (42035492189) was 30/34: the health on-demand note only rendered on success (now always visible — a genuine UX fix) and the import alert needed a scoped locator. Run **42035974098: full success (34/34)**, typecheck + 108 unit tests + build green.

@@ -75,3 +75,9 @@ Typecheck, component tests, axe-core structural checks, and production builds ar
 ---
 
 Command Theater's presentation-adapter rules are in `src/components/command-theater/COMMAND_THEATER_INTEGRATION.md`; graph follow-ups and isolated CPU measurements are in `src/components/command-theater/COMMAND_THEATER_BACKLOG.md` and `PERFORMANCE_REPORT.md`.
+
+## Server-sync / production preparation (frontend side, 2026-11-05)
+- Investigations and reminders persist under versioned localStorage keys (`cicc.investigations.v1`, `cicc.local-reminders.v1`, `cicc.notification-preferences.v1`) with legacy-shape migration on load and JSON export/import — the export format is the intended migration path to a future server API; nothing is uploaded today and the UI says so.
+- All provider access goes through the fixed-path BFF with server-only credentials; the browser never holds API tokens, so a future user-auth/tenant model can be enforced at the BFF without changing page components. No user identity, auth, or tenant isolation exists yet — the Coordination scope warning states this in-product.
+- Decoders are strict and fail-closed, so server DTO drift surfaces as an honest unavailable/invalid state rather than silent mis-rendering.
+- Blocked on backend/owner decisions: server investigation/notification APIs, identity/auth provider, tenant model, production deployment. Frontend will bind only against mounted, verified contracts.
