@@ -185,5 +185,10 @@
   "mDelivBroker": "broker-confirmed",
   "brokerLabel": "RabbitMQ broker",
   "brokerConnected": "connected",
-  "brokerUnavailable": "unavailable — deliveries are human-assisted"
+  "brokerUnavailable": "unavailable — deliveries are human-assisted",
+  "coordHealth": "Coordination health (on-demand check)",
+  "healthOverall": "overall",
+  "healthReasons": "reasons",
+  "healthLastOps": "last operations",
+  "healthNotContinuous": "on-demand only — no scheduler running"
 }

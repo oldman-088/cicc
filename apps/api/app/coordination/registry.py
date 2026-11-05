@@ -416,12 +416,30 @@ def health(s) -> dict:
          f"{len(pending)} pending of {len(appr)} total",
          [f"approval pending past expiry on: {', '.join(overdue_appr[:10])}" for _ in [0] if overdue_appr])
 
+    # --- last attempted / successful operations (M29: evidence-backed recency) ---
+    from sqlalchemy import func as _f
+    last_webhook = s.execute(select(_f.max(models.GitHubEvent.received_at))).scalar()
+    last_sync_ok = s.execute(select(_f.max(models.SyncAttempt.finished_at)).where(
+        models.SyncAttempt.status == "success")).scalar()
+    last_sync_any = s.execute(select(_f.max(models.SyncAttempt.finished_at))).scalar()
+    last_task_event = s.execute(select(_f.max(models.CoordinationTaskEvent.at))).scalar()
+    last_ops = {
+        "last_webhook_received": _iso(last_webhook),
+        "last_github_sync_success": _iso(last_sync_ok),
+        "last_github_sync_attempt": _iso(last_sync_any),
+        "last_task_event": _iso(last_task_event),
+        "checked_at": _iso(now),
+        "note": "on-demand check; NOT continuous monitoring (no scheduler running)",
+    }
+    comp("last_operations", "unknown" if not (last_webhook or last_sync_any or last_task_event) else "healthy",
+         "most recent recorded operations", [])
+
     sev = {"healthy": 0, "not_configured": 1, "unknown": 2, "unavailable": 3, "stale": 3,
            "degraded": 4, "failed": 5}
     overall = max((sev.get(c["status"], 2) for c in components), default=0)
     overall = {v: k for k, v in sev.items()}[overall]
     return {"overall": overall, "components": components, "reasons": reasons,
-            "at": _iso(now)}
+            "last_operations": last_ops, "at": _iso(now)}
 
 
 def trace(s, task_id: str) -> dict | None:

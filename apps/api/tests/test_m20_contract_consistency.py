@@ -271,3 +271,13 @@ def test_m29_amendment_flow_propose_decide_trace(client):
     # bad slug / missing fields -> 422
     assert client.post("/api/v1/coordination/contract/amendments", json=_amd("bad slug!"), headers=W).status_code == 422
     assert client.get("/api/v1/coordination/contract/amendments/NOPE", headers=R).status_code == 404
+
+
+def test_m29_health_last_operations(client):
+    """M29: health exposes last attempted/successful ops + honest on-demand note."""
+    client.post("/api/v1/coordination/tasks", json={"task_id": "m29-lo", "kind": "m29", "payload": {}}, headers=W)
+    h = client.get("/api/v1/coordination/health", headers=R).json()
+    lo = h["last_operations"]
+    assert lo["last_task_event"] is not None
+    assert "NOT continuous monitoring" in lo["note"]
+    assert lo["last_webhook_received"] is None and lo["last_github_sync_success"] is None

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Section from "./Section";
 import { useLocale } from "../lib/i18n";
 import { formatTime } from "../lib/format";
-import type { ComponentInfo, CoordinationAgent, CoordinationMetrics, CoordinationTask, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
+import type { ComponentInfo, CoordinationAgent, CoordinationHealth, CoordinationMetrics, CoordinationTask, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
 
 const STATE_COLORS: Record<string, string> = {
   NEW: "border-slate-500/50 text-slate-300",
@@ -34,6 +34,14 @@ export default function CoordinationView({
   broker: ComponentInfo | null;
 }) {
   const { t, locale } = useLocale();
+  // M29: actionable coordination health via BFF read path (on-demand, not continuous)
+  const [health, setHealth] = useState<CoordinationHealth | null>(null);
+  useEffect(() => {
+    fetch("/api/v1/coordination/health")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setHealth(j))
+      .catch(() => setHealth(null));
+  }, [tasks.length]);
   const [newTask, setNewTask] = useState({ title: "", kind: "ops_review", priority: 5 });
   const [newTaskResult, setNewTaskResult] = useState<string | null>(null);
   const [newTaskErr, setNewTaskErr] = useState<string | null>(null);
@@ -58,6 +66,29 @@ export default function CoordinationView({
   }
   return (
     <>
+      {health && (
+        <Section title={t("coordHealth")}>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-slate-400">{t("healthOverall")}:</span>
+            <span className={`font-semibold ${health.overall === "healthy" ? "text-emerald-300" : "text-amber-300"}`}>{health.overall}</span>
+            {health.components.map((c) => (
+              <span key={c.key} className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300" title={c.detail}>
+                {c.key}: {c.status}
+              </span>
+            ))}
+          </div>
+          {health.reasons.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs text-amber-200/90">
+              {health.reasons.slice(0, 8).map((r, i) => (<li key={i}>{r}</li>))}
+            </ul>
+          )}
+          {health.last_operations && (
+            <p className="mt-2 text-xs text-slate-500">
+              {t("healthLastOps")}: webhook {health.last_operations.last_webhook_received ?? "—"} · sync-ok {health.last_operations.last_github_sync_success ?? "—"} · task-event {health.last_operations.last_task_event ?? "—"} · {t("healthNotContinuous")}
+            </p>
+          )}
+        </Section>
+      )}
       <Section title={t("coordTitle")}>
         {tasks.length === 0 ? (
           <p className="text-sm text-slate-400">{t("noCoordTasks")}</p>

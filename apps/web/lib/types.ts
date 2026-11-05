@@ -229,6 +229,19 @@ export interface GitHubRepoStatus {
   check_runs?: { name: string; status: string; conclusion: string | null; head_branch: string; html_url: string }[];
 }
 
+export interface CoordinationHealthComponent {
+  key: string;
+  status: string;
+  detail: string;
+  reasons: string[];
+}
+export interface CoordinationHealth {
+  overall: string;
+  components: CoordinationHealthComponent[];
+  reasons: string[];
+  last_operations?: Record<string, string | null>;
+  at: string;
+}
 export interface CoordinationMetrics {
   tasks_total: number;
   by_state: Record<string, number>;

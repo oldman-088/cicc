@@ -185,5 +185,10 @@
   "mDelivBroker": "مؤكد عبر broker",
   "brokerLabel": "RabbitMQ broker",
   "brokerConnected": "متصل",
-  "brokerUnavailable": "غير متاح — التسليمات بشرية"
+  "brokerUnavailable": "غير متاح — التسليمات بشرية",
+  "coordHealth": "صحة التنسيق (فحص عند الطلب)",
+  "healthOverall": "الإجمالي",
+  "healthReasons": "الأسباب",
+  "healthLastOps": "آخر العمليات",
+  "healthNotContinuous": "عند الطلب فقط — لا يوجد مجدول"
 }
