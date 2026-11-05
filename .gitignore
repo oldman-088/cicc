@@ -3,3 +3,7 @@ node_modules/
 coverage/
 *.tsbuildinfo
 .DS_Store
+
+# Playwright artifacts
+apps/web/test-results/
+apps/web/playwright-report/
