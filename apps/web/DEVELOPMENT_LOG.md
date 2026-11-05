@@ -136,3 +136,12 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - Agent 1 M27 serialized `idempotency_key` on task reads (additive). Frontend `CoordinationTask` now decodes it and the Coordination UI displays it as the correlation key in task details.
 - Added `parseCoordinationTaskEvents`/`parseCoordinationTaskDetail` decoders and a per-task lifecycle-events viewer in the Coordination workspace (loading/error/empty states, EN/AR/FA, on-demand — no polling loops).
 - Threat and Vulnerability pages now render a dedicated `IntelligenceWorkspace` foundation (localized headers, disabled search/filter structure, detail/provenance placeholder, planned scope) while remaining honestly not-connected; adapters stay unbound until contracts are accepted and mounted. The previous generic unconfigured page remains for other modules.
+
+
+## 2026-11-05 — Continuous execution batch: coordination sorting/pagination/deep-links, investigation entities/timeline, local reminders, intelligence list
+
+- Coordination tasks: client-side sorting (newest/priority/state), 10-per-page pagination over the returned set (scope note preserved), `?task=<id>` deep-link support (opening Coordination with that query pre-fills task search), copy-task-link button, correlation key shown per task.
+- Investigations: associated entities (add/search), linked coordination task ID with a cross-workspace link into Coordination, chronological timeline (creation + timestamped notes), legacy plain-string notes migrated on load. Still browser-local only, labeled as such.
+- Notification center: user-created local reminders with category (investigation/operations/intelligence) and read/unread state, persisted locally. No delivered/server notifications are claimed; the service-unavailable notice remains.
+- Intelligence presentation: reusable `IntelligenceList` (query/kind filtering, detail with confidence-vs-verification and provenance) with labeled-fixture tests. It is a presentation component only; workspaces still present the honest not-connected state until contracts are accepted and mounted.
+- CI: web-ci has been executing on PR #7 pushes (GitHub Actions is the browser-capable runner). The last inspected run failed at the unit-test step; Actions log download is blocked from this sandbox (result-storage host is outside the egress allowlist), so failure diagnosis uses step-level results after each push. Playwright execution status remains EXECUTED only when a run proves it.

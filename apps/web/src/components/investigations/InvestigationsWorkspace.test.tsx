@@ -22,7 +22,7 @@ describe("Investigations workspace (browser-local)", () => {
     expect(await screen.findByRole("heading", { name: "Suspicious beaconing", level: 3 })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Add a note"), { target: { value: "Checked local notes" } });
     fireEvent.click(screen.getByRole("button", { name: "Add note" }));
-    expect(await screen.findByText("Checked local notes")).toBeInTheDocument();
+    expect((await screen.findAllByText(/Checked local notes/)).length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByRole("searchbox", { name: /Search local investigations/ }), { target: { value: "nomatch" } });
     expect(await screen.findByText(/No local investigations match/)).toBeInTheDocument();

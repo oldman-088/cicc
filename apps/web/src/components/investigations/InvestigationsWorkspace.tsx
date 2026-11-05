@@ -5,12 +5,15 @@ import { useCiccLocale } from "../application/CiccApplication";
 import styles from "./InvestigationsWorkspace.module.css";
 
 export type InvestigationStatus = "open" | "in-progress" | "closed";
+export type InvestigationNote = { text: string; at: string };
 export type Investigation = {
   id: string;
   title: string;
   summary: string;
   status: InvestigationStatus;
-  notes: string[];
+  notes: InvestigationNote[];
+  entities: string[];
+  linkedTaskId: string | null;
   createdAt: string;
 };
 
@@ -28,11 +31,21 @@ function load(): Investigation[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is Investigation =>
+    return parsed.filter((item) =>
       typeof item === "object" && item !== null &&
-      typeof (item as Investigation).id === "string" &&
-      typeof (item as Investigation).title === "string" &&
-      Array.isArray((item as Investigation).notes));
+      typeof (item as { id?: unknown }).id === "string" &&
+      typeof (item as { title?: unknown }).title === "string" &&
+      Array.isArray((item as { notes?: unknown }).notes))
+      .map((item) => {
+        const raw = item as { notes: unknown[]; entities?: unknown; linkedTaskId?: unknown } & Omit<Investigation, "notes" | "entities" | "linkedTaskId">;
+        return {
+          ...raw,
+          // Migrate legacy plain-string notes to timestamped note objects.
+          notes: raw.notes.map((n) => typeof n === "string" ? { text: n, at: raw.createdAt } : n as InvestigationNote),
+          entities: Array.isArray(raw.entities) ? raw.entities.filter((e): e is string => typeof e === "string") : [],
+          linkedTaskId: typeof raw.linkedTaskId === "string" ? raw.linkedTaskId : null,
+        };
+      });
   } catch { return []; }
 }
 
@@ -57,7 +70,7 @@ export function InvestigationsWorkspace() {
     const q = query.trim().toLocaleLowerCase(locale);
     return items.filter((item) =>
       (statusFilter === "all" || item.status === statusFilter) &&
-      (!q || [item.title, item.summary, ...item.notes].join(" ").toLocaleLowerCase(locale).includes(q)));
+      (!q || [item.title, item.summary, item.linkedTaskId ?? "", ...item.entities, ...item.notes.map((n) => n.text)].join(" ").toLocaleLowerCase(locale).includes(q)));
   }, [items, query, statusFilter, locale]);
 
   const selected = items.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
@@ -76,7 +89,7 @@ export function InvestigationsWorkspace() {
         <form onSubmit={(event) => {
           event.preventDefault();
           if (!title.trim()) return;
-          const item: Investigation = { id: `inv-${Date.now()}`, title: title.trim(), summary: summary.trim(), status: "open", notes: [], createdAt: new Date().toISOString() };
+          const item: Investigation = { id: `inv-${Date.now()}`, title: title.trim(), summary: summary.trim(), status: "open", notes: [], entities: [], linkedTaskId: null, createdAt: new Date().toISOString() };
           setItems((current) => [item, ...current]); setSelectedId(item.id); setTitle(""); setSummary("");
         }}>
           <label>{m.titleLabel}<input value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
@@ -119,10 +132,27 @@ export function InvestigationsWorkspace() {
                   <option value="open">{m.open}</option><option value="in-progress">{m.inProgress}</option><option value="closed">{m.closed}</option>
                 </select>
               </label>
+              <div>
+                <h4>{locale === "ar" ? "الكيانات المرتبطة" : locale === "fa" ? "موجودیت‌های مرتبط" : "Associated entities"}</h4>
+                <ul>{selected.entities.map((e) => <li key={e}><bdi dir="auto">{e}</bdi></li>)}</ul>
+                <form onSubmit={(ev) => { ev.preventDefault(); const input = new FormData(ev.currentTarget).get("entity"); if (typeof input !== "string" || !input.trim()) return; setItems((cur) => cur.map((i) => i.id === selected.id ? { ...i, entities: [...i.entities, input.trim()] } : i)); ev.currentTarget.reset(); }}>
+                  <label>{locale === "ar" ? "إضافة كيان" : locale === "fa" ? "افزودن موجودیت" : "Add entity (name or ID)"}<input name="entity" /></label>
+                  <button type="submit">{locale === "ar" ? "إضافة" : locale === "fa" ? "افزودن" : "Add entity"}</button>
+                </form>
+                <label>{locale === "ar" ? "معرّف مهمة التنسيق المرتبطة" : locale === "fa" ? "شناسهٔ وظیفهٔ هماهنگی مرتبط" : "Linked coordination task ID"}
+                  <input value={selected.linkedTaskId ?? ""} placeholder="api-…" onChange={(ev) => { const v = ev.target.value; setItems((cur) => cur.map((i) => i.id === selected.id ? { ...i, linkedTaskId: v || null } : i)); }} />
+                </label>
+                {selected.linkedTaskId && <p><a href={`/coordination?task=${encodeURIComponent(selected.linkedTaskId)}`}>{locale === "ar" ? "فتح في التنسيق" : locale === "fa" ? "بازکردن در هماهنگی" : "Open in Coordination"}</a></p>}
+                <h4>{locale === "ar" ? "الخط الزمني" : locale === "fa" ? "گاه‌شمار" : "Timeline"}</h4>
+                <ol>
+                  <li>{m.created}: {selected.createdAt}</li>
+                  {[...selected.notes].sort((a, b) => a.at.localeCompare(b.at)).map((n, i) => <li key={i}>{n.at} — <bdi dir="auto">{n.text}</bdi></li>)}
+                </ol>
+              </div>
               <h4>{m.notes}</h4>
-              <ul>{selected.notes.map((n, i) => <li key={i} dir="auto">{n}</li>)}</ul>
+              <ul>{selected.notes.map((n, i) => <li key={i} dir="auto">{n.text} <small>({n.at})</small></li>)}</ul>
               <form onSubmit={(e) => { e.preventDefault(); if (!note.trim()) return;
-                setItems((cur) => cur.map((i) => i.id === selected.id ? { ...i, notes: [...i.notes, note.trim()] } : i)); setNote(""); }}>
+                setItems((cur) => cur.map((i) => i.id === selected.id ? { ...i, notes: [...i.notes, { text: note.trim(), at: new Date().toISOString() }] } : i)); setNote(""); }}>
                 <label>{m.noteLabel}<input value={note} onChange={(e) => setNote(e.target.value)} /></label>
                 <button type="submit">{m.addNote}</button>
               </form>

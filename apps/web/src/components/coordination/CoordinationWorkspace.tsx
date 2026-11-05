@@ -67,6 +67,15 @@ type Messages = {
   noEvents: string;
   eventsError: string;
   correlationKey: string;
+  sortBy: string;
+  sortNewest: string;
+  sortPriority: string;
+  sortState: string;
+  previousPage: string;
+  nextPage: string;
+  pageLabel: string;
+  copyLink: string;
+  linkCopied: string;
   stale: string;
   health: string;
   agentStatus: string;
@@ -131,6 +140,7 @@ const copy: Record<Locale, Messages> = {
     noEvents: "The provider returned no lifecycle events for this task.",
     eventsError: "Task events could not be loaded from the provider.",
     correlationKey: "Correlation (idempotency) key",
+    sortBy: "Sort tasks", sortNewest: "Newest first", sortPriority: "Highest priority", sortState: "State (A–Z)", previousPage: "Previous page", nextPage: "Next page", pageLabel: "Page", copyLink: "Copy task link", linkCopied: "Link copied",
     stale: "Stale per provider",
     health: "Provider health",
     agentStatus: "Provider-reported status",
@@ -193,6 +203,7 @@ const copy: Record<Locale, Messages> = {
     noEvents: "لم يُرجع المزوّد أحداثاً لدورة حياة هذه المهمة.",
     eventsError: "تعذّر تحميل أحداث المهمة من المزوّد.",
     correlationKey: "مفتاح الارتباط (عدم التكرار)",
+    sortBy: "ترتيب المهام", sortNewest: "الأحدث أولاً", sortPriority: "الأولوية الأعلى", sortState: "الحالة (أ–ي)", previousPage: "الصفحة السابقة", nextPage: "الصفحة التالية", pageLabel: "صفحة", copyLink: "نسخ رابط المهمة", linkCopied: "نُسخ الرابط",
     stale: "قديم بحسب المزوّد",
     health: "صحة الوكيل بحسب المزوّد",
     agentStatus: "الحالة كما أبلغ عنها المزوّد",
@@ -255,6 +266,7 @@ const copy: Record<Locale, Messages> = {
     noEvents: "منبع برای این وظیفه رویداد چرخهٔ حیاتی برنگرداند.",
     eventsError: "بارگذاری رویدادهای وظیفه از منبع ممکن نشد.",
     correlationKey: "کلید هم‌بستگی (یکتایی)",
+    sortBy: "مرتب‌سازی وظایف", sortNewest: "تازه‌ترین اول", sortPriority: "بالاترین اولویت", sortState: "وضعیت (الفبا)", previousPage: "صفحهٔ قبل", nextPage: "صفحهٔ بعد", pageLabel: "صفحه", copyLink: "کپی پیوند وظیفه", linkCopied: "پیوند کپی شد",
     stale: "طبق منبع قدیمی است",
     health: "سلامت عامل طبق منبع",
     agentStatus: "وضعیت گزارش‌شده از منبع",
@@ -385,7 +397,10 @@ function TaskContent({
   messages: Messages;
 }) {
   const [stateFilter, setStateFilter] = useState("ALL");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("task") ?? ""));
+  const [sortBy, setSortBy] = useState<"newest" | "priority" | "state">("newest");
+  const [page, setPage] = useState(0);
+  const [copied, setCopied] = useState(false);
   const id = useId().replaceAll(":", "");
   const normalizedQuery = query.trim().toLocaleLowerCase(locale);
   const filteredTasks = tasks.filter((task) => {
@@ -393,7 +408,11 @@ function TaskContent({
     if (!normalizedQuery) return true;
     return [task.task_id, task.title, task.kind, task.agent, task.repo, task.branch_ref]
       .some((value) => value?.toLocaleLowerCase(locale).includes(normalizedQuery));
-  });
+  }).sort((a, b) => sortBy === "priority" ? b.priority - a.priority : sortBy === "state" ? a.state.localeCompare(b.state) : (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const visibleTasks = filteredTasks.slice(safePage * pageSize, safePage * pageSize + pageSize);
 
   return (
     <div>
@@ -409,11 +428,19 @@ function TaskContent({
           <span>{messages.searchLoaded}</span>
           <input id={`${id}-query`} dir="auto" type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
+        <label htmlFor={`${id}-sort`}>
+          <span>{messages.sortBy}</span>
+          <select id={`${id}-sort`} value={sortBy} onChange={(event) => { setSortBy(event.target.value as typeof sortBy); setPage(0); }}>
+            <option value="newest">{messages.sortNewest}</option>
+            <option value="priority">{messages.sortPriority}</option>
+            <option value="state">{messages.sortState}</option>
+          </select>
+        </label>
       </div>
       <p className={styles.scopeNote}>{messages.loadedScope} <bdi dir="ltr">{formatNumber(filteredTasks.length, locale)} / {formatNumber(tasks.length, locale)}</bdi> {messages.taskRecords}</p>
       {filteredTasks.length === 0 ? <p className={styles.inlineNote}>{messages.noMatches}</p> : (
         <ul className={styles.taskList}>
-          {filteredTasks.map((task) => (
+          {visibleTasks.map((task) => (
             <li key={task.task_id} className={styles.recordCard}>
               <details>
                 <summary>
@@ -435,11 +462,20 @@ function TaskContent({
                   <div><dt>{messages.updated}</dt><dd>{formatTimestamp(task.updated_at, locale, messages.noTimestamp)}</dd></div>
                   {task.idempotency_key && <div><dt>{messages.correlationKey}</dt><dd><code><bdi dir="ltr">{task.idempotency_key}</bdi></code></dd></div>}
                 </dl>
+                <button type="button" onClick={() => { const link = `${window.location.pathname}?task=${encodeURIComponent(task.task_id)}`; void navigator.clipboard?.writeText(`${window.location.origin}${link}`).then(() => setCopied(true)).catch(() => undefined); }}>{messages.copyLink}</button>
+                {copied && <span role="status"> {messages.linkCopied}</span>}
                 <TaskEvents taskId={task.task_id} locale={locale} messages={messages} />
               </details>
             </li>
           ))}
         </ul>
+      )}
+      {pageCount > 1 && (
+        <nav aria-label={messages.pageLabel}>
+          <button type="button" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>{messages.previousPage}</button>{" "}
+          <span>{messages.pageLabel} {safePage + 1} / {pageCount}</span>{" "}
+          <button type="button" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>{messages.nextPage}</button>
+        </nav>
       )}
     </div>
   );
