@@ -155,3 +155,14 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - SECURITY_REVIEW §M14 webhook findings; CONTRACT_ADOPTION accepted/rejected/
   pending; PR #4 comment to Agents 2/3 (confirm) and Agent 4 (visual QA).
 - API regression 150/150; web 23/23 + tsc + build; i18n 188/188.
+
+## 2026-11-05 — Milestone 15 (branch arena/961971ed-cicc, PR #4)
+
+- scripts/e2e_check.py: 22/22 PASS live (2026-11-05T10:14:51Z) — full
+  coordination lifecycle + deps gate + approvals + BFF tokenless frontend
+  reads + LIVE github; fixed two script bugs (missing write header on two
+  submits). Actors labeled simulated — no Arena execution claimed.
+- SECURITY_REVIEW §M15: BFF review; session architecture deliberately not
+  implemented (must align with platform auth_sessions sha256 contract);
+  webhook replay recap. CONTRACT_ADOPTION: all agents PENDING.
+- API 150/150; web 23/23 + tsc + build; i18n 188/188.

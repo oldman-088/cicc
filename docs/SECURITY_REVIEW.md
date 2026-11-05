@@ -89,6 +89,36 @@ storage (only the locale preference). Verified live on :3000 (no-token read
 200, bogus client token stripped→200, POST→403, cross-site→403) and by 6
 unit tests (`tests/bff.test.mjs`).
 
+## M15 review (2026-11-05)
+
+- **BFF token handling**: re-reviewed `apps/web/app/api/[...path]/route.ts` +
+  `lib/bff.mjs`. Token exists only in server env (`WEB_BFF_API_TOKEN`), is
+  injected at the proxy, and client `Authorization`/`Cookie`/`x-cicc-*` are
+  stripped before forwarding — verified live (bogus client token ignored) and
+  by unit tests. Logs are allowlist-only (method/path/status). No secret in
+  local/session storage (only the `cicc-locale` UI preference).
+- **Server-side auth/authz**: reads via BFF use the server read token; writes
+  are 403 through the BFF unless `WEB_BFF_ALLOW_WRITES=1`; optional
+  `Sec-Fetch-Site` same-origin enforcement blocks cross-site proxy abuse.
+  Direct API access still requires the read/write tokens (401 otherwise).
+- **Session architecture**: deliberately **NOT implemented**. The verified
+  platform contract (`arena/da631853-cicc`: `auth_sessions` with sha256
+  digests, `users.tenant_id/role/active`, fail-closed authorize) means any web
+  session layer must be issued/validated by the platform auth service, not
+  invented here. The inert `platform_auth.py` adapter is the integration
+  point; enabling it requires `CICC_OPS_USE_PLATFORM_AUTH=1` +
+  `CICC_PLATFORM_DB_URL` and the owner's tenant decision. Compatibility
+  requirement recorded: a future BFF session must consume platform-issued
+  sessions (sha256 digest verification server-side), never a parallel
+  session store.
+- **Webhook replay**: see §M14 — delivery-id dedup is the real protection;
+  GitHub provides no signed timestamp (documented, not invented); residual
+  risk = dedup-state loss on DB restore until rotation.
+- **Secret redaction & audit**: webhook payloads strip token-like keys
+  (tested with `ghp_...`/`Bearer` canaries); GH API token is header-only and
+  absent from all responses (tested); every coordination transition incl.
+  rejected ones is audited.
+
 ### Unresolved security decisions (owner)
 1. Tenant isolation model (A/B/C/D in the decision doc; recommendation B).
 2. Shared DB vs read-replica for platform auth (`CICC_PLATFORM_DB_URL`).

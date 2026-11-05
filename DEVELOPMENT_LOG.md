@@ -13,3 +13,4 @@
 - 2026-11-05 M12 (b1b2f1b+): cross-agent integration proof — E2E threat/vuln flows, adoption record, reliability tests (stale/expiry/dead-letter/restart), dashboard verification request to Agent 4
 - 2026-11-05 M13: Agent 4 blockers answered (API_REFERENCE.md), boundary tests + 409 report fix + events task_id; Agents 2/3 unconfirmed (not assumed); API 150/150
 - 2026-11-05 M14 (d644f91+): BFF token injection (server-only) + tests + live verify; webhook replay/timestamp findings; adoption accepted/rejected/pending; Agents 2/3 pending, Agent 4 QA requested
+- 2026-11-05 M15 (6e2151e+): e2e_check.py 22/22 PASS live; M15 security review (BFF + session-architecture note); adoption re-check — all agents pending explicit confirmation

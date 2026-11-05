@@ -59,6 +59,19 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   Agents 2/3 PENDING (not assumed); Agent 4 visual QA requested on PR #4.
 - Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
 
+## Done — M15 (final integration readiness)
+- E2E evidence script `scripts/e2e_check.py`: 22/22 PASS @2026-11-05T10:14:51Z —
+  simulated agent-2/3 register+submit+route+deliver+ack+progress+complete,
+  depends_on 409 gate, approval flow, audit chain, BFF tokenless reads
+  (agents/tasks/metrics/LIVE github), BFF write 403. Actors labeled simulated.
+- Security review M15 (SECURITY_REVIEW.md): BFF token handling, authz, BFF
+  writes 403, same-origin enforcement, session-architecture compatibility
+  requirement (platform auth_sessions sha256 — no parallel session store;
+  none implemented), webhook replay recap, redaction/audit.
+- Adoption re-checked: Agents 2/3/4 still PENDING explicit confirmation; no
+  agent PR references /api/v1/coordination yet (heads a1688bb/3462a8b/1a46f70).
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

@@ -46,3 +46,18 @@ confirmation. Agents 2/3: no response yet — agreement NOT assumed.**
 | Contract v1.0 — Agent 4 (frontend) | **ENGAGED**: 4 blockers raised 2026-11-05 09:52Z, all answered same day (PR comment + docs/API_REFERENCE.md); binding + visual QA (desktop/mobile, EN/AR RTL/LTR) re-requested; not yet confirmed |
 | Rejected contract items | **none** — no agent has rejected any v1.0 item |
 | Silent contract changes | **none** — v1.0 additive only; M13/M14 changes (409 reports, events task_id, BFF) are backward-compatible additions |
+
+## M15 update (2026-11-05 ~10:10 UTC)
+
+Re-checked PR #4 comments and issue #5: **no responses from Agents 2/3/4 since
+the M14 requests**. Also scanned the current heads of PR #1 (`a1688bb`),
+PR #2 (`3462a8b`), PR #3 (`1a46f70`): **no file in any agent PR references
+`/api/v1/coordination` yet** — adoption remains discussion-level only.
+
+| Item | Status |
+|---|---|
+| Agent 2 v1.0 confirmation | PENDING (re-requested M14; no reply) |
+| Agent 3 v1.0 confirmation | PENDING (re-requested M14; no reply) |
+| Agent 4 binding + visual QA | PENDING (blockers answered M13; QA requested M14) |
+| Rejected items | none |
+| Accepted items | none explicit yet — v1.0 stands as proposed |

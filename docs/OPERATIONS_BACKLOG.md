@@ -171,6 +171,23 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   visual QA (desktop/mobile, EN/AR RTL, states) requested.
 - Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
 
+## Done — Milestone 15 (PR #4 update)
+
+- M15-04 E2E evidence: `scripts/e2e_check.py` run live @2026-11-05T10:14:51Z —
+  **22/22 PASS**: simulated Agent2 threat task full lifecycle + audit, Agent3
+  vuln task depends_on 409 gate, approval flow (409/approve/QUEUED), and
+  frontend reads through the BFF with NO browser token (agents/tasks/metrics/
+  LIVE github), BFF write 403. Simulated actors explicitly labeled.
+- M15-03 security review: BFF token handling verified (live + unit), session
+  architecture NOT implemented — compatibility requirement documented
+  (platform auth_sessions sha256 contract; adapter stays inert until owner
+  enables platform auth); webhook replay findings recap; redaction/audit tests.
+- M15-01 adoption re-check: Agents 2/3/4 still pending explicit v1.0
+  confirmation (no replies; no agent PR references /api/v1/coordination at
+  heads a1688bb / 3462a8b / 1a46f70). Accepted: none explicit; rejected: none.
+- Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
+  + build; i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -281,6 +298,23 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   PENDING (confirmation re-requested on PR #4 + issue #5); Agent 4 engaged,
   visual QA (desktop/mobile, EN/AR RTL, states) requested.
 - Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
+
+## Done — Milestone 15 (PR #4 update)
+
+- M15-04 E2E evidence: `scripts/e2e_check.py` run live @2026-11-05T10:14:51Z —
+  **22/22 PASS**: simulated Agent2 threat task full lifecycle + audit, Agent3
+  vuln task depends_on 409 gate, approval flow (409/approve/QUEUED), and
+  frontend reads through the BFF with NO browser token (agents/tasks/metrics/
+  LIVE github), BFF write 403. Simulated actors explicitly labeled.
+- M15-03 security review: BFF token handling verified (live + unit), session
+  architecture NOT implemented — compatibility requirement documented
+  (platform auth_sessions sha256 contract; adapter stays inert until owner
+  enables platform auth); webhook replay findings recap; redaction/audit tests.
+- M15-01 adoption re-check: Agents 2/3/4 still pending explicit v1.0
+  confirmation (no replies; no agent PR references /api/v1/coordination at
+  heads a1688bb / 3462a8b / 1a46f70). Accepted: none explicit; rejected: none.
+- Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
+  + build; i18n 188/188.
 
 ## Next (backlog, priority order)
 
@@ -396,6 +430,23 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   visual QA (desktop/mobile, EN/AR RTL, states) requested.
 - Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
 
+## Done — Milestone 15 (PR #4 update)
+
+- M15-04 E2E evidence: `scripts/e2e_check.py` run live @2026-11-05T10:14:51Z —
+  **22/22 PASS**: simulated Agent2 threat task full lifecycle + audit, Agent3
+  vuln task depends_on 409 gate, approval flow (409/approve/QUEUED), and
+  frontend reads through the BFF with NO browser token (agents/tasks/metrics/
+  LIVE github), BFF write 403. Simulated actors explicitly labeled.
+- M15-03 security review: BFF token handling verified (live + unit), session
+  architecture NOT implemented — compatibility requirement documented
+  (platform auth_sessions sha256 contract; adapter stays inert until owner
+  enables platform auth); webhook replay findings recap; redaction/audit tests.
+- M15-01 adoption re-check: Agents 2/3/4 still pending explicit v1.0
+  confirmation (no replies; no agent PR references /api/v1/coordination at
+  heads a1688bb / 3462a8b / 1a46f70). Accepted: none explicit; rejected: none.
+- Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
+  + build; i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -503,6 +554,23 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   visual QA (desktop/mobile, EN/AR RTL, states) requested.
 - Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
 
+## Done — Milestone 15 (PR #4 update)
+
+- M15-04 E2E evidence: `scripts/e2e_check.py` run live @2026-11-05T10:14:51Z —
+  **22/22 PASS**: simulated Agent2 threat task full lifecycle + audit, Agent3
+  vuln task depends_on 409 gate, approval flow (409/approve/QUEUED), and
+  frontend reads through the BFF with NO browser token (agents/tasks/metrics/
+  LIVE github), BFF write 403. Simulated actors explicitly labeled.
+- M15-03 security review: BFF token handling verified (live + unit), session
+  architecture NOT implemented — compatibility requirement documented
+  (platform auth_sessions sha256 contract; adapter stays inert until owner
+  enables platform auth); webhook replay findings recap; redaction/audit tests.
+- M15-01 adoption re-check: Agents 2/3/4 still pending explicit v1.0
+  confirmation (no replies; no agent PR references /api/v1/coordination at
+  heads a1688bb / 3462a8b / 1a46f70). Accepted: none explicit; rejected: none.
+- Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
+  + build; i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -607,6 +675,23 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   PENDING (confirmation re-requested on PR #4 + issue #5); Agent 4 engaged,
   visual QA (desktop/mobile, EN/AR RTL, states) requested.
 - Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
+
+## Done — Milestone 15 (PR #4 update)
+
+- M15-04 E2E evidence: `scripts/e2e_check.py` run live @2026-11-05T10:14:51Z —
+  **22/22 PASS**: simulated Agent2 threat task full lifecycle + audit, Agent3
+  vuln task depends_on 409 gate, approval flow (409/approve/QUEUED), and
+  frontend reads through the BFF with NO browser token (agents/tasks/metrics/
+  LIVE github), BFF write 403. Simulated actors explicitly labeled.
+- M15-03 security review: BFF token handling verified (live + unit), session
+  architecture NOT implemented — compatibility requirement documented
+  (platform auth_sessions sha256 contract; adapter stays inert until owner
+  enables platform auth); webhook replay findings recap; redaction/audit tests.
+- M15-01 adoption re-check: Agents 2/3/4 still pending explicit v1.0
+  confirmation (no replies; no agent PR references /api/v1/coordination at
+  heads a1688bb / 3462a8b / 1a46f70). Accepted: none explicit; rejected: none.
+- Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
+  + build; i18n 188/188.
 
 ## Next (backlog, priority order)
 
