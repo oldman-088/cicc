@@ -31,13 +31,15 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Iterable, Mapping
 
-from .schema import Origin
+from .errors import ValidationError
+from .schema import Origin, utcnow
 
 __all__ = [
     "CONFIDENCE_SCHEMA",
     "ConfidenceBasis",
     "ConfidenceHistory",
     "ConfidenceValue",
+    "SourceReliabilityPolicy",
     "derive_confidence",
     "deserialise_confidence",
     "serialise_confidence",
@@ -158,6 +160,40 @@ class ConfidenceValue:
         )
 
 
+@dataclass(frozen=True)
+class SourceReliabilityPolicy:
+    """B-10 groundwork: per-source reliability weights + recency decay.
+
+    **PROVISIONAL — owner approval required before these weights mean anything
+    organizational.** The default instance reproduces the current count-based
+    curve exactly, so existing behaviour is unchanged until the owner approves a
+    weighted policy. Weights are validated (0..1, at least one non-zero) but
+    validity is not approval: ``approved`` defaults to ``False`` and every
+    result computed under an unapproved policy is marked provisional.
+    """
+
+    weights: Mapping[str, float] = field(default_factory=dict)
+    #: Weight multiplier decay per day since the newest contributing observation.
+    recency_decay_per_day: float = 0.0
+    approved: bool = False
+    name: str = "default-count-curve"
+
+    def __post_init__(self) -> None:
+        for source, weight in self.weights.items():
+            if not isinstance(weight, (int, float)) or isinstance(weight, bool):
+                raise ValidationError(f"weight for {source!r} must be a number", field="weights")
+            if not 0.0 <= float(weight) <= 1.0:
+                raise ValidationError(f"weight for {source!r} must be within 0..1", field="weights")
+        if self.weights and not any(w > 0 for w in self.weights.values()):
+            raise ValidationError("at least one weight must be > 0", field="weights")
+        if not 0.0 <= self.recency_decay_per_day <= 1.0:
+            raise ValidationError("recency_decay_per_day must be within 0..1", field="recency_decay_per_day")
+
+    def weight_of(self, source: str) -> float:
+        """Explicit weight, else the neutral default (count-curve behaviour)."""
+        return float(self.weights.get(source, 1.0))
+
+
 def derive_confidence(
     *,
     sources: Iterable[str],
@@ -165,6 +201,8 @@ def derive_confidence(
     policy_approved: bool,
     computed_at: datetime | None = None,
     origin: Origin | str = Origin.LIVE,
+    reliability: SourceReliabilityPolicy | None = None,
+    newest_observation: datetime | None = None,
 ) -> ConfidenceValue:
     """Compute a corroboration confidence and record how it was reached.
 
@@ -191,19 +229,40 @@ def derive_confidence(
         )
 
     count = len(names)
-    if count >= 3:
-        value = 1.0
-    elif count == 2:
-        value = 0.7
+    if reliability is not None and reliability.weights:
+        # Weighted corroboration (B-10): sum of per-source weights, normalized by
+        # the maximum possible (number of sources at weight 1), then the same
+        # saturating curve shape so the two policies stay comparable. Recency
+        # decay applies when a newest observation timestamp is supplied.
+        raw = sum(reliability.weight_of(name) for name in names)
+        value = min(1.0, raw / max(1, count))
+        if newest_observation is not None and reliability.recency_decay_per_day > 0:
+            moment = computed_at or utcnow()
+            age_days = max(0.0, (moment - newest_observation).total_seconds() / 86400.0)
+            value = round(value * (1.0 - reliability.recency_decay_per_day) ** age_days, 4)
+        policy_approved = policy_approved and reliability.approved
+        policy = f"{policy}+reliability:{reliability.name}"
+        inputs_extra: tuple[str, ...] = (
+            "weighted corroboration: " + ", ".join(
+                f"{n}={reliability.weight_of(n):.2f}" for n in names
+            ),
+            f"reliability policy '{reliability.name}' approved={reliability.approved}",
+        )
     else:
-        value = 0.3
+        if count >= 3:
+            value = 1.0
+        elif count == 2:
+            value = 0.7
+        else:
+            value = 0.3
+        inputs_extra = (f"curve: 1 source=0.3, 2=0.7, 3+=1.0 (policy '{policy}')",)
 
     return ConfidenceValue(
         value=value,
         basis=ConfidenceBasis.CORROBORATION,
         inputs=(
             f"{count} independent source(s): " + ", ".join(names),
-            f"curve: 1 source=0.3, 2=0.7, 3+=1.0 (policy '{policy}')",
+            *inputs_extra,
         ),
         policy=policy,
         policy_approved=policy_approved,

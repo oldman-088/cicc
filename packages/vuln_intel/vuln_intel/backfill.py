@@ -36,10 +36,12 @@ from .schema import NormalizedVulnerability, utcnow
 from .sync import Checkpoint, CheckpointStore, SyncWindow, plan_windows
 
 __all__ = [
+    "BackfillProgress",
     "BackfillReport",
     "BackfillRunner",
     "BackfillWindowResult",
     "plan_backfill",
+    "progress_view",
 ]
 
 
@@ -311,3 +313,92 @@ class BackfillRunner:
                 attempted_at=attempted_at,
             )
         )
+
+
+@dataclass(frozen=True)
+class BackfillProgress:
+    """Operator-facing progress for a backfill run.
+
+    ``eta_seconds`` is ``None`` until at least ``MIN_TIMED_WINDOWS`` windows have
+    a measured duration — an ETA from less timing data is a guess, and a guess is
+    presented as ``None`` with ``eta_reason`` saying why, never as a number.
+    """
+
+    windows_total: int
+    windows_done: int
+    windows_failed: int
+    windows_skipped: int
+    records: int
+    percent: float
+    eta_seconds: float | None
+    eta_reason: str | None
+    state: str  # "planned" | "running" | "interrupted" | "failed" | "complete"
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "windows_total": self.windows_total,
+            "windows_done": self.windows_done,
+            "windows_failed": self.windows_failed,
+            "windows_skipped": self.windows_skipped,
+            "records": self.records,
+            "percent": round(self.percent, 1),
+            "eta_seconds": self.eta_seconds,
+            "eta_reason": self.eta_reason,
+            "state": self.state,
+        }
+
+
+#: Minimum timed windows before an ETA is reported at all.
+MIN_TIMED_WINDOWS = 3
+
+
+def progress_view(
+    report: BackfillReport,
+    window_durations: Sequence[float] = (),
+) -> BackfillProgress:
+    """Derive operator progress from a finished/interrupted run's report.
+
+    ``window_durations`` are measured seconds per completed window, in order.
+    The ETA is the mean duration times the remaining windows, reported only when
+    at least :data:`MIN_TIMED_WINDOWS` windows are timed; otherwise it is None
+    with an explicit reason. State is derived from the report flags, keeping
+    dry-run, interrupted, failed and complete distinguishable.
+    """
+    total = report.windows_total
+    done = report.windows_done
+    remaining = max(0, total - done - report.windows_skipped)
+    percent = (100.0 * (done + report.windows_skipped) / total) if total else 100.0
+    if report.dry_run:
+        state = "planned"
+    elif report.interrupted:
+        state = "interrupted"
+    elif report.windows_failed:
+        state = "failed"
+    elif report.complete:
+        state = "complete"
+    else:
+        state = "running"
+    timed = [d for d in window_durations if d >= 0]
+    if remaining == 0:
+        eta = None
+        reason = "no windows remaining"
+    elif len(timed) < MIN_TIMED_WINDOWS:
+        eta = None
+        reason = (
+            f"ETA withheld: {len(timed)} timed window(s), "
+            f"need at least {MIN_TIMED_WINDOWS} for a non-misleading estimate"
+        )
+    else:
+        eta = (sum(timed) / len(timed)) * remaining
+        reason = f"mean of {len(timed)} timed windows; estimate, not a guarantee"
+    return BackfillProgress(
+        windows_total=total,
+        windows_done=done,
+        windows_failed=report.windows_failed,
+        windows_skipped=report.windows_skipped,
+        records=report.records,
+        percent=percent,
+        eta_seconds=round(eta, 1) if eta is not None else None,
+        eta_reason=reason,
+        state=state,
+    )
