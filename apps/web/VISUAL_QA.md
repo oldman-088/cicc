@@ -41,3 +41,6 @@ Suite grew to **38 tests** (+Arabic RTL investigation journey). Run **4203991703
 
 ## Update — diagnostics + delete journeys (2026-11-05)
 Suite grew to **40 tests** (+investigation delete journey). Run **42041423416: full success (40/40)**, typecheck + 116 unit tests + build green.
+
+## Update — theme/offline/404 journeys (2026-11-05)
+Suite grew to **46 tests** (+light-theme persistence, offline banner + local-work-offline, honest 404). Run **42043141258: full success (46/46)** (long runner duration ~12m, no failures), typecheck + 118 unit tests + build green.
