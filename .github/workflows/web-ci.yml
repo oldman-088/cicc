@@ -12,7 +12,11 @@ jobs:
         with: { node-version: "20", cache: "npm" }
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
+      - name: Run unit tests (log uploaded as artifact on failure)
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee unit-test.log
       - run: npm run build --workspace=@cicc/web
       - name: Install Playwright Chromium (browser-capable CI runner)
         run: npx playwright install --with-deps chromium
@@ -28,4 +32,6 @@ jobs:
           path: |
             apps/web/test-results
             apps/web/playwright-report
+            unit-test.log
+            apps/web/unit-test.log
           if-no-files-found: ignore
