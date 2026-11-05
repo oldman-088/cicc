@@ -160,6 +160,18 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
 - API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
 
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

@@ -123,6 +123,9 @@ def transition(s, task: models.CoordinationTask, new_state: str, detail: str | N
         task.next_retry_at = utcnow() + timedelta(seconds=backoff_seconds(task.attempts or 1))
     if new_state == "QUEUED":
         task.next_retry_at = None
+        # M23: reviving a dead-lettered/retrying task clears the flag, otherwise
+        # dead_letter=true would contradict the QUEUED state
+        task.dead_letter = False
     if new_state == "FAILED":
         task.dead_letter = task.dead_letter or False
     record_event(s, task.task_id, f"state:{old}->{new_state}", detail)

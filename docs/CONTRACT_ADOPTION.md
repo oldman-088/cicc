@@ -165,3 +165,13 @@ miscount, **no key was removed or lost**; parity en==ar holds at every commit.
 - Heartbeat DTO mismatch fixed: active_tasks?/meta? now accepted + persisted
   (meta.heartbeat), descriptor + consistency test updated.
 - Agents 2/3: PENDING. Agent 2 remains primary TI owner (no Agent 6 takeover).
+
+## M23 update (2026-11-05 ~11:48 UTC)
+
+- PR heads live: #1 **`84fca76`** (11:32:32Z), #2 `744ccd3`, #3 `1a46f70`,
+  **#6 `a221003` (new, 11:35:22Z) — Agent 6 backup TI** (per owner-confirmed
+  takeover; title confirms cross-agent contracts work, no /api/v1/coordination
+  refs in its files). No new comments on PR #4/issue #5.
+- Agent 4: unchanged — proxy code in PR #2 @744ccd3, surface verified
+  compatible (M22); actual execution still UNVERIFIED.
+- Agents 2/3: PENDING (no coordination refs in PR #3 / PR #1 @84fca76).

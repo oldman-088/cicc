@@ -76,7 +76,7 @@ def contract_v1() -> dict:
             "DecisionIn": ["decided_by", "note?"],
             "AgentRegisterIn": ["agent", "specialization?", "capabilities?", "version?", "meta?"],
             "AgentHeartbeatIn": ["status?", "active_tasks?", "meta?"],
-            "AgentDTO (GET /agents)": ["agent", "specialization", "capabilities", "status", "stale", "version", "meta", "last_heartbeat", "registered_at", "active_tasks", "completed", "failed", "retries", "by_state"],
+            "AgentDTO (GET /agents)": ["agent", "specialization", "capabilities", "status", "stale", "health", "version", "meta", "last_heartbeat", "registered_at", "active_tasks", "completed", "failed", "retries", "by_state"],
         },
         "error_codes": ERROR_CODES,
         "idempotency": {

@@ -264,3 +264,22 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   DTO consistency updated; regression test added.
 - API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E 22/22
   @11:34:17Z. Master prompt README.md@main@ca8f82c v1.0 unchanged.
+
+## 2026-11-05 — Milestone 23 (branch arena/961971ed-cicc, PR #4)
+
+- Lifecycle defect fixed: transition to QUEUED now clears dead_letter, so a
+  revived task no longer shows dead_letter=true while queued. Test:
+  test_m23_lifecycle.py::test_dead_letter_flag_cleared_on_revive.
+- test_task_state_and_events_never_contradict: latest state: event must equal
+  persisted state; rejected re-complete audited.
+- Agent health: GET /agents now returns health in
+  {ACTIVE, STALE, UNAVAILABLE, UNKNOWN} (ACTIVE=fresh heartbeat+non-offline,
+  STALE=heartbeat older than CICC_AGENT_STALE_S, UNAVAILABLE=status offline,
+  UNKNOWN=no heartbeat ever). Status transitions (heartbeat/deregister/sweep)
+  audited into ops events (source coordination.agents). Descriptor AgentDTO
+  updated; wire==descriptor pinned.
+- PR evidence: #1 84fca76, #2 744ccd3, #3 1a46f70, #6 a221003 (Agent 6 backup
+  TI, owner-confirmed takeover; no coordination refs). No cross-agent
+  execution — still NONE.
+- API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; contract_check
+  31/31 @11:48:18Z; E2E 22/22 @11:48:22Z. Master prompt unchanged @ca8f82c.

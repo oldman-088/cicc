@@ -272,6 +272,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
 
+## Done — Milestone 23 (PR #4 update)
+
+- M23-1 lifecycle: dead_letter/state contradiction fixed + pinned; state vs
+  event-history consistency test added.
+- M23-2 agent health: ACTIVE/STALE/UNAVAILABLE/UNKNOWN in /agents; status
+  transitions audited to ops events; descriptor+wire pinned.
+- M23-3: real cross-agent integration still NONE (UNVERIFIED) — Agent 4 live
+  run evidence still required; PR #6 (Agent 6 backup TI) recorded.
+- M23-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -483,6 +495,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M22-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
+
+## Done — Milestone 23 (PR #4 update)
+
+- M23-1 lifecycle: dead_letter/state contradiction fixed + pinned; state vs
+  event-history consistency test added.
+- M23-2 agent health: ACTIVE/STALE/UNAVAILABLE/UNKNOWN in /agents; status
+  transitions audited to ops events; descriptor+wire pinned.
+- M23-3: real cross-agent integration still NONE (UNVERIFIED) — Agent 4 live
+  run evidence still required; PR #6 (Agent 6 backup TI) recorded.
+- M23-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
 
 ## Next (backlog, priority order)
 
@@ -699,6 +723,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
 
+## Done — Milestone 23 (PR #4 update)
+
+- M23-1 lifecycle: dead_letter/state contradiction fixed + pinned; state vs
+  event-history consistency test added.
+- M23-2 agent health: ACTIVE/STALE/UNAVAILABLE/UNKNOWN in /agents; status
+  transitions audited to ops events; descriptor+wire pinned.
+- M23-3: real cross-agent integration still NONE (UNVERIFIED) — Agent 4 live
+  run evidence still required; PR #6 (Agent 6 backup TI) recorded.
+- M23-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -907,6 +943,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
 
+## Done — Milestone 23 (PR #4 update)
+
+- M23-1 lifecycle: dead_letter/state contradiction fixed + pinned; state vs
+  event-history consistency test added.
+- M23-2 agent health: ACTIVE/STALE/UNAVAILABLE/UNKNOWN in /agents; status
+  transitions audited to ops events; descriptor+wire pinned.
+- M23-3: real cross-agent integration still NONE (UNVERIFIED) — Agent 4 live
+  run evidence still required; PR #6 (Agent 6 backup TI) recorded.
+- M23-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -1112,6 +1160,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M22-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
+
+## Done — Milestone 23 (PR #4 update)
+
+- M23-1 lifecycle: dead_letter/state contradiction fixed + pinned; state vs
+  event-history consistency test added.
+- M23-2 agent health: ACTIVE/STALE/UNAVAILABLE/UNKNOWN in /agents; status
+  transitions audited to ops events; descriptor+wire pinned.
+- M23-3: real cross-agent integration still NONE (UNVERIFIED) — Agent 4 live
+  run evidence still required; PR #6 (Agent 6 backup TI) recorded.
+- M23-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
 
 ## Next (backlog, priority order)
 

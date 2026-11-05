@@ -88,3 +88,10 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   Agent-4 proxy surface verified compatible live). Whole product ~30-40%;
   first real cross-agent execution still NOT occurred (only fixture reads and
   read-only code review of PR #2). DoD §17 unmet -> not production-ready.
+
+## M23 re-confirmation (2026-11-05 ~11:48 UTC)
+- `main` still `ca8f82c`; `README.md` (v1.0) unchanged/unmodified. Agent 1
+  ~90% (M23: dead_letter/state contradiction fixed, agent health
+  ACTIVE/STALE/UNAVAILABLE/UNKNOWN + status-transition audit, state-vs-events
+  consistency test). Whole product ~30-40%; no real cross-agent execution yet;
+  DoD §17 unmet -> not production-ready.

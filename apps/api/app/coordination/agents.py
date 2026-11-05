@@ -50,14 +50,34 @@ def register(s, agent: str, specialization: str | None = None, capabilities: lis
     return {"agent": agent, "created": created, "status": row.status}
 
 
+def _audit_status(s, agent: str, old: str | None, new: str | None, why: str) -> None:
+    """M23: audit agent status transitions into the ops event log."""
+    if old != new:
+        from app import ops as _ops
+        _ops.record_event("info", "coordination.agents", f"agent {agent}: {old} -> {new} ({why})", s=s)
+
+
+def health_of(row) -> str:
+    """M23: explicit health classification — ACTIVE / STALE / UNAVAILABLE / UNKNOWN."""
+    if row.last_heartbeat is None:
+        return "UNKNOWN"
+    if is_stale(row):
+        return "STALE"
+    if row.status == "offline":
+        return "UNAVAILABLE"
+    return "ACTIVE"
+
+
 def heartbeat(s, agent: str, status: str | None = None, active_tasks: int | None = None,
               meta: dict | None = None) -> dict | None:
     row = s.get(models.CoordinationAgent, agent)
     if row is None:
         return None
+    old_status = row.status
     row.last_heartbeat = _utcnow()
     if status in AGENT_STATUSES:
         row.status = status
+    _audit_status(s, agent, old_status, row.status, "heartbeat")
     # M22: honor the documented heartbeat fields (INTEGRATION_CONTRACTS.md #2);
     # persist them inside the free-form meta JSON — no schema change
     if active_tasks is not None or meta is not None:
@@ -80,6 +100,7 @@ def deregister(s, agent: str) -> bool:
     row = s.get(models.CoordinationAgent, agent)
     if row is None:
         return False
+    _audit_status(s, agent, row.status, "offline", "deregister")
     row.status = "offline"
     row.last_heartbeat = _utcnow()
     s.flush()
@@ -106,6 +127,7 @@ def list_agents(s) -> list[dict]:
             "capabilities": json.loads(row.capabilities) if row.capabilities else [],
             "status": effective,
             "stale": stale,
+            "health": health_of(row),  # M23: ACTIVE|STALE|UNAVAILABLE|UNKNOWN
             "version": row.version,
             "meta": json.loads(row.meta) if row.meta else {},
             "last_heartbeat": row.last_heartbeat.isoformat() if row.last_heartbeat else None,
@@ -121,6 +143,7 @@ def sweep_stale(s) -> list[str]:
     out = []
     for row in s.execute(select(models.CoordinationAgent)).scalars().all():
         if is_stale(row, now) and row.status != "offline":
+            _audit_status(s, row.agent, row.status, "offline", "stale heartbeat sweep")
             row.status = "offline"
             out.append(row.agent)
     if out:
