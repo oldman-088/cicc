@@ -25,9 +25,12 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from .config import ENV_PREFIX, Secret, Settings
+from .connectors.debian import DebianTrackerConnector
 from .connectors.epss import EpssConnector, UnavailableEpssProvider
+from .connectors.ghsa import GhsaConnector
 from .connectors.nvd import NvdConnector
 from .connectors.osv import OsvConnector
+from .connectors.ubuntu import UbuntuUsnConnector
 from .errors import SourceError, SourceNotFound, SourceResponseError, ValidationError
 from .kev import CachedKevCatalog, KevConnector
 from .schema import CollectionStatus, NormalizedVulnerability, Origin
@@ -54,6 +57,11 @@ class ConnectorBundle:
     live: bool = False
     #: Human-readable notes about the assembly, safe to log.
     notes: tuple[str, ...] = ()
+    #: Vendor tracker connectors added by the takeover continuation. Optional so
+    #: existing constructions keep working; built by ``build_connectors``.
+    debian: DebianTrackerConnector | None = None
+    ubuntu: UbuntuUsnConnector | None = None
+    ghsa: GhsaConnector | None = None
 
     def describe(self) -> dict[str, object]:
         """JSON-safe summary. Contains no credential material."""
@@ -66,6 +74,10 @@ class ConnectorBundle:
             "http_timeout": self.nvd.timeout,
             "kev_max_age_days": self.kev_cache.max_age.days,
             "epss": type(self.epss).__name__,
+            "debian_tracker": self.debian is not None,
+            "ubuntu_usn": self.ubuntu is not None,
+            "ghsa": self.ghsa is not None,
+            "ghsa_token": "configured" if (self.ghsa and self.ghsa.token) else "absent",
             "notes": list(self.notes),
         }
 
@@ -189,12 +201,35 @@ def build_connectors(
     else:
         epss_provider = UnavailableEpssProvider()
 
+    debian = DebianTrackerConnector(
+        transport=_one("debian"),
+        timeout=max(settings.http_timeout, 60.0),
+        sleep=sleep,
+        origin=settings.origin.value,
+    )
+    ubuntu = UbuntuUsnConnector(
+        transport=_one("ubuntu"),
+        timeout=max(settings.http_timeout, 60.0),
+        sleep=sleep,
+        origin=settings.origin.value,
+    )
+    ghsa = GhsaConnector(
+        transport=_one("ghsa"),
+        timeout=settings.http_timeout,
+        sleep=sleep,
+        origin=settings.origin.value,
+        token=_unwrap_key(settings.ghsa_token),
+    )
+
     return ConnectorBundle(
         nvd=nvd,
         osv=osv,
         kev=kev,
         epss=epss_provider,
         kev_cache=CachedKevCatalog(connector=kev, max_age=settings.kev_max_age),
+        debian=debian,
+        ubuntu=ubuntu,
+        ghsa=ghsa,
         live=live,
         notes=tuple(notes),
     )

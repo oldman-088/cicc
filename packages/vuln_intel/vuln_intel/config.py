@@ -60,6 +60,7 @@ ENV_PREFIX = "CICC_VULN_"
 #: share one source of truth so the reference cannot drift.
 ENV_VARS: Mapping[str, str] = {
     "LIVE_COLLECTION": "master switch for real provider requests (default false)",
+    "GHSA_TOKEN": "optional GitHub token for the advisory database (header-only, masked)",
     "NVD_API_KEY": "NVD API key; raises the rate limit from 5 to 50 per 30s",
     "NVD_PAGE_SIZE": "records per NVD page, 1-2000 (default 200)",
     "NVD_MAX_PAGES": "page ceiling per unbounded search (default 10)",
@@ -179,6 +180,8 @@ class Settings:
     http_timeout: float = 30.0
     kev_max_age: timedelta = timedelta(days=2)
     epss_enabled: bool = False
+    #: Optional GitHub token; Secret-masked like the NVD key. Header-only.
+    ghsa_token: Secret = Secret()
     checkpoint_path: Path | None = None
     origin: Origin = Origin.LIVE
     tenant_id: str | None = None
@@ -225,6 +228,7 @@ class Settings:
                 days=_int(source, "KEV_MAX_AGE_DAYS", 2, low=1, high=365)
             ),
             epss_enabled=_bool(source, "EPSS_ENABLED", False),
+            ghsa_token=Secret((source.get(ENV_PREFIX + "GHSA_TOKEN") or "").strip()),
             checkpoint_path=Path(checkpoint_raw) if checkpoint_raw else None,
             origin=origin,
             tenant_id=tenant,
@@ -260,6 +264,7 @@ class Settings:
             "http_timeout": self.http_timeout,
             "kev_max_age_days": self.kev_max_age.days,
             "epss_enabled": self.epss_enabled,
+            "ghsa_token": str(self.ghsa_token) or "(unset)",
             "checkpoint_path": str(self.checkpoint_path) if self.checkpoint_path else None,
             "origin": self.origin.value,
             "tenant_id": self.tenant_id,

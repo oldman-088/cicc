@@ -94,6 +94,7 @@ class TestSettingsFromEnvironment:
             ENV_PREFIX + "CHECKPOINT_PATH": "/var/lib/cicc/ckpt.json",
             ENV_PREFIX + "ORIGIN": "live",
             ENV_PREFIX + "TENANT_ID": "tenant-a",
+            ENV_PREFIX + "GHSA_TOKEN": "ghp_testtoken123",
         }
         settings = Settings.from_env(env)
         assert settings.live_collection is True
@@ -105,6 +106,8 @@ class TestSettingsFromEnvironment:
         assert settings.epss_enabled is True
         assert settings.checkpoint_path is not None
         assert settings.tenant_id == "tenant-a"
+        assert settings.ghsa_token.reveal() == "ghp_testtoken123"
+        assert "ghp_testtoken123" not in repr(settings)
         # Documented set and implemented set must not drift apart.
         for name in ENV_VARS:
             assert ENV_PREFIX + name in env
