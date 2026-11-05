@@ -39,11 +39,15 @@ from .mapping import to_source_details
 __all__ = [
     "MERGED_VIEW_NOTICE",
     "AppendResult",
+    "CompactionReport",
     "ImmutableObservationLog",
     "Observation",
     "ObservationLog",
+    "ObservationSnapshot",
+    "compact_observations",
     "digest_payload",
     "to_observations",
+    "verify_snapshot_chain",
 ]
 
 #: Every merged record produced from observations carries this statement.
@@ -166,6 +170,22 @@ class ImmutableObservationLog:
     def size(self) -> int:
         return sum(len(rows) for rows in self._rows.values())
 
+    def compact(self) -> CompactionReport:
+        """Fold the whole log into digest-chain-preserving snapshots.
+
+        The log itself is untouched — compaction is a *view*, because the
+        append-only rows are the evidence. The report states how many rows
+        folded into how many snapshots and whether every chain verifies, so a
+        compaction can never silently corrupt the audit trail.
+        """
+        all_rows = [row for rows in self._rows.values() for row in rows]
+        snapshots = compact_observations(all_rows)
+        return CompactionReport(snapshots=snapshots, rows_before=len(all_rows))
+
+    def snapshots_for(self, *, tenant_id: str, cve: str) -> tuple[ObservationSnapshot, ...]:
+        """Compaction of one CVE's observations, one snapshot per source."""
+        return compact_observations(self.list_for(tenant_id=tenant_id, cve=cve))
+
 
 def to_observations(
     record: NormalizedVulnerability, *, tenant_id: str, collected_at: datetime
@@ -225,3 +245,127 @@ def to_observations(
 def observations_to_json(observations: Iterable[Observation]) -> list[dict[str, Any]]:
     """Export helper for reports and drift investigation."""
     return [observation.as_dict() for observation in observations]
+
+
+@dataclass(frozen=True)
+class ObservationSnapshot:
+    """One (tenant, cve, source) run folded into a single auditable unit.
+
+    The append-only rows are never rewritten; a snapshot *summarises* them.
+    ``digest_chain`` keeps **every** observation digest in arrival order —
+    duplicates included — so the chain is tamper-evident even though the row
+    count is compacted. ``chain_digest`` commits to that chain.
+    """
+
+    tenant_id: str
+    cve: str
+    source: str
+    origin: Origin
+    observation_count: int
+    first_collected_at: datetime
+    last_collected_at: datetime
+    #: Digest of the newest observation in the chain (the current claim).
+    latest_digest: str
+    #: Every digest in the chain, in order. A folded duplicate still appears.
+    digest_chain: tuple[str, ...]
+    #: Latest source-scoped payload, for consumers that only need "what is
+    #: currently claimed".
+    payload: Mapping[str, Any]
+    #: SHA-256 over the ordered digest chain — the compaction commitment.
+    #: **Stored, not derived**: a derived property would verify against itself
+    #: and tampering would be undetectable. Computed once at construction.
+    chain_digest: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.chain_digest is None:
+            object.__setattr__(self, "chain_digest", self._compute_chain_digest())
+        if not self.digest_chain:
+            raise ValueError("a snapshot needs at least one observation digest")
+
+    def _compute_chain_digest(self) -> str:
+        material = "\n".join(self.digest_chain).encode("utf-8")
+        return hashlib.sha256(material).hexdigest()
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "tenant_id": self.tenant_id,
+            "cve": self.cve,
+            "source": self.source,
+            "origin": self.origin.value,
+            "observation_count": self.observation_count,
+            "first_collected_at": self.first_collected_at.isoformat(),
+            "last_collected_at": self.last_collected_at.isoformat(),
+            "latest_digest": self.latest_digest,
+            "digest_chain": list(self.digest_chain),
+            "chain_digest": self.chain_digest,
+            "payload": dict(self.payload),
+        }
+
+
+def verify_snapshot_chain(snapshot: ObservationSnapshot) -> bool:
+    """Recompute the chain commitment from the chain and compare with the stored one.
+
+    A compaction whose chain does not verify is not a summary — it is corrupted
+    evidence, and must be treated as such rather than trusted.
+    """
+    return (
+        snapshot.chain_digest == snapshot._compute_chain_digest()
+        and len(snapshot.digest_chain) == snapshot.observation_count
+    )
+
+
+def compact_observations(observations: Iterable[Observation]) -> tuple[ObservationSnapshot, ...]:
+    """Fold observations into one snapshot per (tenant, cve, source).
+
+    Ordering is by ``collected_at`` then digest, matching ``list_for``, so a
+    replay compacts deterministically. The chain keeps every digest — folding
+    reduces *rows*, never *evidence*.
+    """
+    grouped: dict[tuple[str, str, str], list[Observation]] = {}
+    for observation in observations:
+        grouped.setdefault(
+            (observation.tenant_id, str(observation.cve), observation.source), []
+        ).append(observation)
+    snapshots: list[ObservationSnapshot] = []
+    for (tenant_id, cve, source), rows in grouped.items():
+        rows.sort(key=lambda o: (o.collected_at, o.digest))
+        snapshots.append(
+            ObservationSnapshot(
+                tenant_id=tenant_id,
+                cve=cve,
+                source=source,
+                origin=rows[0].origin,
+                observation_count=len(rows),
+                first_collected_at=rows[0].collected_at,
+                last_collected_at=rows[-1].collected_at,
+                latest_digest=rows[-1].digest,
+                digest_chain=tuple(row.digest for row in rows),
+                payload=rows[-1].payload,
+            )
+        )
+    snapshots.sort(key=lambda s: (s.tenant_id, s.cve, s.source))
+    return tuple(snapshots)
+
+
+@dataclass(frozen=True)
+class CompactionReport:
+    """What a compaction pass folded, and whether every chain still verifies."""
+
+    snapshots: tuple[ObservationSnapshot, ...]
+    rows_before: int
+
+    @property
+    def rows_after(self) -> int:
+        return len(self.snapshots)
+
+    @property
+    def chains_verified(self) -> bool:
+        return all(verify_snapshot_chain(s) for s in self.snapshots)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "rows_before": self.rows_before,
+            "rows_after": self.rows_after,
+            "chains_verified": self.chains_verified,
+            "snapshots": [s.as_dict() for s in self.snapshots],
+        }
