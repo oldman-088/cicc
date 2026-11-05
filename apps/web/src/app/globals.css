@@ -1,0 +1,132 @@
+:root {
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --cicc-canvas: #07101b;
+  --cicc-surface: #0c1927;
+  --cicc-surface-raised: #0f2030;
+  --cicc-surface-inset: #091724;
+  --cicc-border: #20364b;
+  --cicc-border-subtle: #1c3044;
+  --cicc-text: #e7f0ff;
+  --cicc-text-strong: #f4f8ff;
+  --cicc-text-muted: #9aacc2;
+  --cicc-accent: #70d7dd;
+  --cicc-info: #8fc6ff;
+  --cicc-success: #7eddd4;
+  --cicc-warning: #ffd28b;
+  --cicc-danger: #f2c4ba;
+  --cicc-focus: #f3bf68;
+
+  --cicc-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --cicc-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --cicc-content-wide: 1560px;
+  --cicc-content-regular: 1320px;
+
+  --cicc-space-1: 0.25rem;
+  --cicc-space-2: 0.5rem;
+  --cicc-space-3: 0.75rem;
+  --cicc-space-4: 1rem;
+  --cicc-space-6: 1.5rem;
+  --cicc-space-8: 2rem;
+  --cicc-radius-sm: 0.55rem;
+  --cicc-radius-md: 0.85rem;
+  --cicc-radius-lg: 1rem;
+  --cicc-shadow-panel: 0 18px 55px rgb(0 0 0 / 18%);
+
+  --cicc-sidebar-width: 16rem;
+  --cicc-topbar-height: 4.25rem;
+}
+
+/* Optional light theme (Master Prompt §3.1); dark is the default command-center theme. */
+:root[data-cicc-theme="light"] {
+  color-scheme: light;
+  --cicc-canvas: #eef3f8;
+  --cicc-surface: #ffffff;
+  --cicc-surface-raised: #f4f8fc;
+  --cicc-surface-inset: #e6eef6;
+  --cicc-border: #b9c9d8;
+  --cicc-border-subtle: #cfdce9;
+  --cicc-text: #16283c;
+  --cicc-text-strong: #0a1a2c;
+  --cicc-text-muted: #47617c;
+  --cicc-accent: #0e7d8c;
+  --cicc-info: #1d5fb8;
+  --cicc-success: #0d7a6a;
+  --cicc-warning: #8a5a00;
+  --cicc-danger: #a03325;
+  --cicc-focus: #b56b00;
+  --cicc-shadow-panel: 0 18px 55px rgb(30 60 90 / 14%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--cicc-canvas);
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--cicc-text);
+  background: var(--cicc-canvas);
+  font-family: var(--cicc-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 3px solid var(--cicc-focus);
+  outline-offset: 3px;
+}
+
+::selection {
+  color: #06111b;
+  background: #8ae6e5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html[data-cicc-reduce-motion="true"] *,
+html[data-cicc-reduce-motion="true"] *::before,
+html[data-cicc-reduce-motion="true"] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid CanvasText;
+  }
+}

@@ -1,0 +1,21 @@
+.panel {
+  margin: 1rem auto;
+  max-width: 72rem;
+  padding: 1rem;
+}
+
+.panel input {
+  display: block;
+  margin-top: 0.5rem;
+  min-width: min(28rem, 100%);
+  padding: 0.5rem;
+}
+
+.panel ul {
+  margin-top: 0.75rem;
+  padding-inline-start: 1.25rem;
+}
+
+.panel li {
+  margin-bottom: 0.5rem;
+}
