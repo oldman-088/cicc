@@ -74,5 +74,5 @@ Typecheck, component tests, axe-core checks, and production builds are available
 - `npm test -- --reporter=dot`: 60 tests across 13 files passed. axe-core structural checks run in JSDOM with the color-contrast rule disabled.
 - `npm audit --omit=dev --audit-level=high`: 0 vulnerabilities.
 - HTTP smoke requests to the existing port-3000 Next server returned 200 for all seven routes. PID 2368 remained alive; the server was not stopped. This is not visual/device/browser accessibility validation.
-- `git diff --cached --check` passed for the staged change set.
+- `git diff --cached --check` passed for the staged change set. Commit `860ead9` was pushed to `arena/09952395-cicc`; PR #2 was updated and remains open/unmerged.
 - No browser visual inspection, screen-reader, manual keyboard/device, fluent-speaker, contrast, or GPU/WebGL verification was performed.

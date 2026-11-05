@@ -20,8 +20,8 @@ Status legend: **Done** = implemented and checked to the stated level; **In prog
 - [x] 60 automated tests across 13 files passed, including axe-core structural checks with color contrast disabled.
 - [x] Fresh typecheck, 60-test suite, production build, package audit, and staged `git diff --check` passed; results are recorded in the backlog and development log.
 - [x] All seven route responses returned HTTP 200 on the existing port-3000 server; PID 2368 stayed running. This is HTTP smoke only.
-- [ ] Inspect the full Git diff, including untracked files; preserve unrelated/untracked work. Make a focused commit on this branch, push only to `origin arena/09952395-cicc`, and update PR #2 without merging.
-- [ ] Check the PR metadata after pushing; do not use classic Projects operations or merge the PR.
+- [x] Reviewed the scoped Git diff (37 frontend/doc files; no unrelated work or untracked files removed), committed as `860ead9`, and pushed only to `origin arena/09952395-cicc`.
+- [x] Updated PR #2 title/body through GitHub API. It targets `main`, remains open, and was not merged.
 
 ## P0 — data integrity and integration governance
 

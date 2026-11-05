@@ -35,7 +35,7 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - HTTP smoke requests to the existing Next development server on port 3000 returned 200 for all seven routes; PID 2368 remained alive. This verifies route responses only, not rendering or browser interaction.
 - axe-core structural checks disable color contrast because JSDOM cannot validate rendered contrast. No browser, device, GPU, manual keyboard, screen-reader, or fluent-speaker verification is claimed.
 - Historic isolated Node graph microbenchmarks remain 3.10ms median for 10,000-node layout and 6.37ms median for a 10,000-node/50,001-edge view-selection input. They are not browser/GPU performance measurements.
-- `git diff --cached --check` passed after staging the scoped frontend/doc change set. The focused commit, push to this branch, and PR #2 body update remain pending.
+- `git diff --cached --check` passed after staging the scoped frontend/doc change set. Commit `860ead9` was pushed to `arena/09952395-cicc`; PR #2 title/body were updated via GitHub API and the PR remains open, unmerged, and targeted at `main`.
 
 ### Decisions and outstanding work
 
