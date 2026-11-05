@@ -47,3 +47,54 @@ only `CICC_COORD_APPROVERS` may approve/reject. Every transition is audited
 (`GET /tasks/{id}/events`). Deliveries are recorded in `/tasks/{id}/deliveries`;
 "delivered" is only claimed with broker publisher-confirm; otherwise honest
 `human_assisted/published`.
+
+---
+
+# Contract v1.0 (M11-02) — stable, backward-compatible; confirmation requested from Agents 2/3/4 via PR #4 comment
+
+All coordination endpoints are under `/api/v1/coordination`, read-gated by
+read token, write-gated by write token + per-principal rate limit (429).
+Every state transition is audited (`GET /tasks/{id}/events`).
+
+| # | Capability | Method & path | Key fields | Response |
+|---|---|---|---|---|
+| 1 | Agent register | `POST /agents/register` | `agent`, `capabilities[]`, `meta?` | 201 `{agent, status}` — idempotent |
+| 2 | Heartbeat | `POST /agents/{agent}/heartbeat` | `status?`, `active_tasks?`, `meta?` | 200; stale after `CICC_AGENT_STALE_S` (300s) |
+| 3 | Deregister | `POST /agents/{agent}/deregister` | — | 200 `{status: offline}`; 404 unknown |
+| 4 | List agents | `GET /agents` | — | `{agents: [..., stale]}` |
+| 5 | Submit task | `POST /tasks` | `kind`, `payload`, `idempotency_key?`, `priority` 1–10, `depends_on?`, `timeout_s?`, `ttl_s?`, `requires_approval?` | 201 `{task_id, state, duplicate}` |
+| 6 | List tasks | `GET /tasks?state=&agent=&kind=` | filters | `{tasks: [..., progress, next_retry_at, routing_explanation]}` |
+| 7 | Route/assign | `POST /tasks/{id}/route` | — | `{agent, state, explanation}` (explainable) |
+| 8 | Deliver | `POST /tasks/{id}/deliver` | — | 200 `{delivered, via}` — `delivered:true` ONLY with broker publisher-confirm; no broker → `via: human_assisted, delivered:false` (honest); 409 while WAITING_FOR_APPROVAL or deps unmet |
+| 9 | Ack | `POST /tasks/{id}/ack` | — | → ACKNOWLEDGED |
+| 10 | Start | `POST /tasks/{id}/start` | — | → RUNNING |
+| 11 | Progress | `POST /tasks/{id}/progress` | `percent` 0–100, `note?` | 200, audited |
+| 12 | Complete | `POST /tasks/{id}/complete` | `result?` | → COMPLETED |
+| 13 | Fail | `POST /tasks/{id}/fail` | `reason` | → RETRYING (backoff) or dead-letter→BLOCKED after `CICC_COORD_MAX_ATTEMPTS` |
+| 14 | Retry/cancel | `POST /tasks/{id}/retry` \| `/cancel` | — | audited |
+| 15 | Approve/reject | `POST /tasks/{id}/approve` \| `/reject` | `decided_by` (+`note`) | 403 non-approver, 409 no pending, 410 expired |
+| 16 | Approval state | `GET /tasks/{id}/approval` | — | `{approval: {status, requested_by, decided_by, expires_at}}` |
+| 17 | Audit trail | `GET /tasks/{id}/events` | — | `{events: [{at, kind, detail}]}` |
+| 18 | Deliveries | `GET /tasks/{id}/deliveries` | — | `{deliveries: [{channel, status, attempt, ...}]}` |
+| 19 | DAG | `GET /tasks/dag` | — | `{nodes, edges}` |
+| 20 | Metrics | `GET /metrics` | — | honest aggregates (see M10) |
+| 21 | Sweep | `POST /sweep` | — | `{expired_tasks, requeued, expired_approvals, stale_agents}` |
+| 22 | Webhook (GitHub→us) | `POST /webhook/github` | HMAC headers | 401 bad sig / fail-closed, dedup by delivery |
+| 23 | GitHub live | `GET /github/status`, `POST /github/sync` | — | probe/sync vs api.github.com |
+| 24 | GitHub events | `GET /events?limit=` | — | ingested webhook events w/ provenance |
+| 25 | Routing rules | `GET /rules`, `POST /rules` | `name, match, agent, priority` | explainable rules-first routing |
+
+## Agent 4 dashboard contract (M11-06)
+The Coordination dashboard consumes ONLY these verified endpoints:
+`/agents`, `/tasks` (+filters), `/tasks/dag`, `/metrics`, `/events`,
+`/github/status`, plus ops `/api/v1/overview` (services incl. `rabbitmq`
+broker chip). It distinguishes: online vs stale agents; CREATED/QUEUED/
+ASSIGNED/DELIVERING/ACKNOWLEDGED/RUNNING/WAITING_FOR_APPROVAL/BLOCKED/FAILED/
+RETRYING/COMPLETED/CANCELLED/EXPIRED; broker-confirmed vs human-assisted
+deliveries; broker connected vs unavailable; live metrics vs `—` when a
+fetch fails. No fabricated data: failed fetches render as unavailable.
+
+## Backward compatibility
+- Legacy state aliases accepted on input, normalized to the 14 canonical states.
+- `delivered:false + via:human_assisted` semantics unchanged since M7.
+- New fields are additive; no endpoint removed since M6.

@@ -255,3 +255,14 @@ full overview p50 8.2ms; retention purge p50 0.9ms. task stats over the full
   `CICC_COORD_APPROVAL_TTL_S`, `CICC_COORD_MAX_ATTEMPTS`, `RABBITMQ_AMQP_URL`.
 - Additive-only migrations extended to coord_tasks (owner, depends_on,
   timeout_s, expires_at, idempotency_key, dead_letter, routing_explanation).
+
+
+## §13 (M11) — coordination integration contract v1.0
+See `docs/INTEGRATION_CONTRACTS.md` (25 endpoints incl. POST /tasks, progress,
+dag, metrics, sweep, github status/sync). Deliver semantics: `delivered:true`
+only with broker publisher-confirm; no broker → `via:human_assisted,
+delivered:false` (payload prepared, NOT delivered). Deps unmet or
+WAITING_FOR_APPROVAL → 409. Rate limits: read token on reads, write token +
+per-principal 429 on all coordination writes. New env knobs since M9:
+`CICC_COORD_RETRY_BACKOFF_S`, `CICC_GH_WEBHOOK_SECRET_PREVIOUS`,
+`CICC_GH_REPO`.

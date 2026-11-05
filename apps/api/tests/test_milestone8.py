@@ -146,3 +146,56 @@ def test_sync_task_ids_are_url_safe(client, monkeypatch):
     tid = tasks[0]["task_id"]
     r = client.post(f"/api/v1/coordination/tasks/{tid}/progress", json={"percent": 10})
     assert r.status_code == 200
+
+
+# ---------- M11-04: pagination + transient retry ----------
+
+def test_get_pages_paginates_until_short_page(monkeypatch):
+    calls = []
+
+    def fake_get(path, timeout=8.0, _retried=False):
+        calls.append(path)
+        import re as _re
+        page = int(_re.search(r"[?&]page=(\d+)", path).group(1))
+        if page == 1:
+            return list(range(100))          # full page -> next page
+        if page == 2:
+            return list(range(30))           # short page -> stop
+        raise AssertionError("should not fetch page 3")
+
+    monkeypatch.setattr(github_sync, "_get", fake_get)
+    out = github_sync._get_pages("/repos/x/y/pulls?state=open", max_pages=3, per_page=100)
+    assert len(out) == 130 and len(calls) == 2
+
+
+def test_get_retries_transient_then_gives_up(monkeypatch):
+    import urllib.error
+    state = {"n": 0}
+
+    def flaky(path, timeout=8.0, _retried=False):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise urllib.error.URLError("connection reset")
+        return {"ok": True}
+
+    monkeypatch.setattr(github_sync, "_get_once", flaky)
+    monkeypatch.setattr(github_sync.time, "sleep", lambda *_: None)
+    assert github_sync._get("/x") == {"ok": True} and state["n"] == 2
+
+    def always_down(path, timeout=8.0, _retried=False):
+        raise TimeoutError("down")
+
+    monkeypatch.setattr(github_sync, "_get_once", always_down)
+    with pytest.raises(TimeoutError):
+        github_sync._get("/x")  # retried once, then raised
+
+
+def test_get_does_not_retry_4xx(monkeypatch):
+    import urllib.error
+
+    def not_found(path, timeout=8.0, _retried=False):
+        raise urllib.error.HTTPError(path, 404, "nf", {}, None)
+
+    monkeypatch.setattr(github_sync, "_get_once", not_found)
+    with pytest.raises(urllib.error.HTTPError):
+        github_sync._get("/x")

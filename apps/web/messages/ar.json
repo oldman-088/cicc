@@ -180,5 +180,10 @@
   "mDeadLetter": "dead-letter",
   "mDeliveries": "تسليمات",
   "mApprovalsPending": "موافقات معلّقة",
-  "mAgentsOnline": "وكلاء متصلون"
+  "mAgentsOnline": "وكلاء متصلون",
+  "mDelivHuman": "بشري (منشور، ليس مُسلَّم)",
+  "mDelivBroker": "مؤكد عبر broker",
+  "brokerLabel": "RabbitMQ broker",
+  "brokerConnected": "متصل",
+  "brokerUnavailable": "غير متاح — التسليمات بشرية"
 }

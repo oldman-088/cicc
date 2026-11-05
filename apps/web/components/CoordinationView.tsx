@@ -3,7 +3,7 @@
 import Section from "./Section";
 import { useLocale } from "../lib/i18n";
 import { formatTime } from "../lib/format";
-import type { CoordinationAgent, CoordinationMetrics, CoordinationTask, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
+import type { ComponentInfo, CoordinationAgent, CoordinationMetrics, CoordinationTask, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
 
 const STATE_COLORS: Record<string, string> = {
   NEW: "border-slate-500/50 text-slate-300",
@@ -23,12 +23,14 @@ export default function CoordinationView({
   agents,
   gh,
   metrics,
+  broker,
 }: {
   tasks: CoordinationTask[];
   events: GitHubEventItem[];
   agents: CoordinationAgent[];
   gh: GitHubRepoStatus | null;
   metrics: CoordinationMetrics | null;
+  broker: ComponentInfo | null;
 }) {
   const { t, locale } = useLocale();
   return (
@@ -166,6 +168,13 @@ export default function CoordinationView({
         <p className="mt-2 text-xs text-slate-500">{t("ghLiveNote")}</p>
       </Section>
 
+      {broker && (
+        <div className="mb-4">
+          <span className={`rounded border px-2 py-1 text-xs ${broker.status === "ok" || broker.status === "up" ? "border-emerald-800 text-emerald-300" : "border-red-800 text-red-300"}`}>
+            {t("brokerLabel")}: {broker.status === "ok" || broker.status === "up" ? t("brokerConnected") : t("brokerUnavailable")}
+          </span>
+        </div>
+      )}
       {metrics && (
         <div className="mb-4 flex flex-wrap gap-2 text-xs">
           <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">{t("mTasks")}: {metrics.tasks_total}</span>
@@ -175,6 +184,10 @@ export default function CoordinationView({
           <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">{t("mDeliveries")}: {metrics.deliveries_total}</span>
           <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">{t("mApprovalsPending")}: {metrics.approvals_pending}</span>
           <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">{t("mAgentsOnline")}: {metrics.agents_online}/{metrics.agents_registered}</span>
+          <span className="rounded border border-slate-700 px-2 py-1 text-slate-300">
+            {t("mDelivHuman")}: {metrics.deliveries_by_outcome?.human_assisted ?? metrics.deliveries_by_outcome?.published ?? 0}
+            {" · "}{t("mDelivBroker")}: {metrics.deliveries_by_outcome?.confirmed ?? 0}
+          </span>
         </div>
       )}
 

@@ -129,9 +129,8 @@ def test_dependencies_gate_delivery(client):
         t.depends_on = json.dumps(["gh-other"])
         s.commit()
     r = client.post("/api/v1/coordination/tasks/gh-d-dep/deliver")
-    assert r.status_code == 200
-    d = r.json()
-    assert d["delivered"] is False and d["reason"] == "dependencies not completed"
+    assert r.status_code == 409  # M11: deps gate is a hard 409
+    assert r.json()["detail"] == "dependencies not completed"
     evs = client.get("/api/v1/coordination/tasks/gh-d-dep/events").json()["events"]
     assert any("deps" in (e["kind"] or "") for e in evs)
 

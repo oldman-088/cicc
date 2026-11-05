@@ -163,3 +163,22 @@ Still environment-blocked: real-broker delivery/confirm (no Docker/broker here).
   in addition to the write-token gate.
 - `scripts/bench_coordination.py` — LIVE end-to-end benchmark (create→route→
   deliver→ack→start→complete, p50/p95/max per step).
+
+
+## v4 (Milestone 11 — integration & reliability proof)
+
+- **M11-01**: full cross-agent lifecycle proven at the HTTP boundary
+  (`tests/test_m11_lifecycle.py`, 9 scenarios): success w/ complete audit
+  trail; approval enforced (409 deliver while waiting, 403 non-approver,
+  reject→FAILED); delayed via `depends_on` (**deliver now returns hard 409**);
+  duplicates (idempotency_key + webhook delivery); TTL expiry (**CREATED/
+  VALIDATING → EXPIRED transition added** — sweep previously could not expire
+  them); fail→RETRYING (backoff)→dead-letter→BLOCKED; RUNNING timeout.
+- **M11-04**: GitHub sync hardened — paginated list endpoints (per_page=100,
+  ≤3 pages), one transient retry (5xx/429/timeout/conn, never 4xx), full-body
+  read (1 MB cap truncated large pages — live-caught), rate-limit guard kept.
+- **M11-02**: contract v1.0 table (25 endpoints) + Agent 4 dashboard contract
+  in INTEGRATION_CONTRACTS.md; confirmation requested on PR #4.
+- **M11-06**: dashboard shows broker connected/unavailable chip and
+  broker-confirmed vs human-assisted delivery split; failed fetches render
+  as unavailable.

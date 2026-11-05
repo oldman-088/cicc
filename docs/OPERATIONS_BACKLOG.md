@@ -113,6 +113,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
 - Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
 
+## Done — Milestone 11 (PR #4 update)
+
+- M11-01: 9 lifecycle integration scenarios at the HTTP boundary (success +
+  full audit, approval enforced/rejected, delayed via deps (409), duplicate,
+  TTL expiry, fail→retry→dead-letter, timeout). Real fixes: EXPIRED allowed
+  from CREATED/VALIDATING; deps gate = hard 409. API 135/135.
+- M11-02: contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4
+  comment requesting confirmation from Agents 2/3/4 (proceed with v1.0 if silent).
+- M11-04: GitHub sync reliability — pagination (≤3 pages), transient retry
+  (5xx/429/timeout only), full-body reads (fixed live-caught 1MB truncation),
+  rate-limit guard, token never logged.
+- M11-05: docs/TENANT_ISOLATION_DECISION.md (A shared+filter / B schema-per-
+  tenant [recommended] / C RLS / D separate DB; migration + trade-offs).
+- M11-06: dashboard broker chip (connected/unavailable) + delivery channel
+  split (broker-confirmed vs human-assisted); unavailable data shown as such.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -165,6 +181,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   leaked `write_limiter.limit=3` in a M6 test (now monkeypatch-restored).
 - `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
 - Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
+
+## Done — Milestone 11 (PR #4 update)
+
+- M11-01: 9 lifecycle integration scenarios at the HTTP boundary (success +
+  full audit, approval enforced/rejected, delayed via deps (409), duplicate,
+  TTL expiry, fail→retry→dead-letter, timeout). Real fixes: EXPIRED allowed
+  from CREATED/VALIDATING; deps gate = hard 409. API 135/135.
+- M11-02: contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4
+  comment requesting confirmation from Agents 2/3/4 (proceed with v1.0 if silent).
+- M11-04: GitHub sync reliability — pagination (≤3 pages), transient retry
+  (5xx/429/timeout only), full-body reads (fixed live-caught 1MB truncation),
+  rate-limit guard, token never logged.
+- M11-05: docs/TENANT_ISOLATION_DECISION.md (A shared+filter / B schema-per-
+  tenant [recommended] / C RLS / D separate DB; migration + trade-offs).
+- M11-06: dashboard broker chip (connected/unavailable) + delivery channel
+  split (broker-confirmed vs human-assisted); unavailable data shown as such.
 
 ## Next (backlog, priority order)
 
@@ -222,6 +254,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
 - Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
 
+## Done — Milestone 11 (PR #4 update)
+
+- M11-01: 9 lifecycle integration scenarios at the HTTP boundary (success +
+  full audit, approval enforced/rejected, delayed via deps (409), duplicate,
+  TTL expiry, fail→retry→dead-letter, timeout). Real fixes: EXPIRED allowed
+  from CREATED/VALIDATING; deps gate = hard 409. API 135/135.
+- M11-02: contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4
+  comment requesting confirmation from Agents 2/3/4 (proceed with v1.0 if silent).
+- M11-04: GitHub sync reliability — pagination (≤3 pages), transient retry
+  (5xx/429/timeout only), full-body reads (fixed live-caught 1MB truncation),
+  rate-limit guard, token never logged.
+- M11-05: docs/TENANT_ISOLATION_DECISION.md (A shared+filter / B schema-per-
+  tenant [recommended] / C RLS / D separate DB; migration + trade-offs).
+- M11-06: dashboard broker chip (connected/unavailable) + delivery channel
+  split (broker-confirmed vs human-assisted); unavailable data shown as such.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -271,6 +319,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
 - Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
 
+## Done — Milestone 11 (PR #4 update)
+
+- M11-01: 9 lifecycle integration scenarios at the HTTP boundary (success +
+  full audit, approval enforced/rejected, delayed via deps (409), duplicate,
+  TTL expiry, fail→retry→dead-letter, timeout). Real fixes: EXPIRED allowed
+  from CREATED/VALIDATING; deps gate = hard 409. API 135/135.
+- M11-02: contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4
+  comment requesting confirmation from Agents 2/3/4 (proceed with v1.0 if silent).
+- M11-04: GitHub sync reliability — pagination (≤3 pages), transient retry
+  (5xx/429/timeout only), full-body reads (fixed live-caught 1MB truncation),
+  rate-limit guard, token never logged.
+- M11-05: docs/TENANT_ISOLATION_DECISION.md (A shared+filter / B schema-per-
+  tenant [recommended] / C RLS / D separate DB; migration + trade-offs).
+- M11-06: dashboard broker chip (connected/unavailable) + delivery channel
+  split (broker-confirmed vs human-assisted); unavailable data shown as such.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -318,10 +382,27 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - `scripts/bench_coordination.py` LIVE benchmark (p50/p95/max per lifecycle step).
 - Tests: API 123/123 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 182/182.
 
+## Done — Milestone 11 (PR #4 update)
+
+- M11-01: 9 lifecycle integration scenarios at the HTTP boundary (success +
+  full audit, approval enforced/rejected, delayed via deps (409), duplicate,
+  TTL expiry, fail→retry→dead-letter, timeout). Real fixes: EXPIRED allowed
+  from CREATED/VALIDATING; deps gate = hard 409. API 135/135.
+- M11-02: contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4
+  comment requesting confirmation from Agents 2/3/4 (proceed with v1.0 if silent).
+- M11-04: GitHub sync reliability — pagination (≤3 pages), transient retry
+  (5xx/429/timeout only), full-body reads (fixed live-caught 1MB truncation),
+  rate-limit guard, token never logged.
+- M11-05: docs/TENANT_ISOLATION_DECISION.md (A shared+filter / B schema-per-
+  tenant [recommended] / C RLS / D separate DB; migration + trade-offs).
+- M11-06: dashboard broker chip (connected/unavailable) + delivery channel
+  split (broker-confirmed vs human-assisted); unavailable data shown as such.
+
 ## Next (backlog, priority order)
 
-1. Real RabbitMQ verification + broker delivery loop where Docker exists
-   (env-blocked here; procedure committed; attach evidence to PR #4).
+1. M11-03: Real RabbitMQ verification where Docker exists (env-blocked here;
+   durable queue, persistent publish, confirms, ack, redelivery, DLQ, outage
+   recovery, duplicates — record evidence+timestamps on PR #4).
 2. Agent 4 contract confirmation (PR #4 comment / issue #5) -> wire ops_client.
 3. prefetch=1 runbook note; webhook delivery timestamp freshness check
    (needs a signed timestamp — GitHub does not send one; evaluate).

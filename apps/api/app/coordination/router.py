@@ -241,6 +241,10 @@ def deliver_task(task_id: str, request: Request, _gate: None = Depends(read_toke
             raise HTTPException(status_code=409, detail="task is WAITING_FOR_APPROVAL; not deliverable")
         res = handoff.deliver(s, t)
         s.commit()
+        if res.get("delivered") is False and res.get("reason") == "dependencies not completed":
+            raise HTTPException(status_code=409, detail=res["reason"])
+        # note: delivered=False with via=human_assisted is the HONEST no-broker
+        # path (payload prepared, not delivered) -> returned 200, not an error
         return {"task_id": task_id, "state": registry.normalize_state(t.state), **res}
 
 

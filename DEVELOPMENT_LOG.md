@@ -9,3 +9,4 @@
 - 2026-11-04 M6 (478f820): maintenance state, escalation policy engine, worker registry, rate limits, notifications-disabled; coordination foundation (webhook/registry/routing/handoff/reporting)
 - 2026-11-04 M7 (89e3a3c): coordination v2 (agents, explainable workload routing, lifecycle v2, approvals, delivery records, webhook hardening); ops alert history + latency/retry metrics
 - 2026-11-04 M8 (this commit): OSS research decisions (docs/OSS_RESEARCH.md), LIVE GitHub API sync (api.github.com reachable — verified live), progress reports, dependency DAG, SECURITY_REVIEW.md
+- 2026-11-05 M11 (c610917+): integration proof — lifecycle tests 9 scenarios, contract v1.0, GitHub pagination/retry hardening, tenant decision doc, dashboard broker/channel honesty

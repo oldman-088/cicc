@@ -110,3 +110,16 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   also create the coord_approvals row (request_approval made idempotent —
   webhook path called it separately, caused MultipleResultsFound). Regression
   test strengthened to iterate non-empty tables. API 123/123.
+
+## 2026-11-05 — Milestone 11 (branch arena/961971ed-cicc, PR #4)
+
+- M11-01 tests/test_m11_lifecycle.py (9 scenarios) — found+fixed: CREATED/
+  VALIDATING missing EXPIRED transition (TTL sweep silently no-op'd);
+  deliver with unmet deps now 409 (was 200 delivered:false). M7 deps test
+  updated to 409.
+- M11-04 github_sync: _get_pages (per_page=100, <=3 pages), transient retry
+  in _get (5xx/429/URLError/timeout, never 4xx), full-body read (1MB cap
+  truncated actions/runs JSON — live-caught), unit tests for all three.
+- M11-02 contract v1.0 + PR comment; M11-05 tenant decision doc; M11-06 web
+  broker chip + channel split (EN/AR 188).
+- API 135/135 (7 real-PG + 1 live-GitHub live again after fix); web 17/17+tsc+build.

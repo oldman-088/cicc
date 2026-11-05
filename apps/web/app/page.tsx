@@ -281,7 +281,7 @@ export default function DashboardPage() {
           {view === "alerts" && <AlertsView alerts={alerts} onAction={load} />}
 
           {view === "coordination" && (
-            <CoordinationView tasks={coordTasks} events={coordEvents} agents={coordAgents} gh={ghStatus} metrics={coordMetrics} />
+            <CoordinationView tasks={coordTasks} events={coordEvents} agents={coordAgents} gh={ghStatus} metrics={coordMetrics} broker={broker} />
           )}
 
           {view === "workers" && (

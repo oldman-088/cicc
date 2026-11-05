@@ -180,5 +180,10 @@
   "mDeadLetter": "Dead-letter",
   "mDeliveries": "Deliveries",
   "mApprovalsPending": "Approvals pending",
-  "mAgentsOnline": "Agents online"
+  "mAgentsOnline": "Agents online",
+  "mDelivHuman": "human-assisted (published, NOT delivered)",
+  "mDelivBroker": "broker-confirmed",
+  "brokerLabel": "RabbitMQ broker",
+  "brokerConnected": "connected",
+  "brokerUnavailable": "unavailable — deliveries are human-assisted"
 }

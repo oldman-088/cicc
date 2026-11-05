@@ -16,6 +16,14 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - Platform-auth adapter (inert, fail-closed) matching verified contract on arena/da631853-cicc; tenant-isolation PLAN (not enabled).
 - Tooling: bench_scale.py, verify_rabbitmq.py (mgmt + AMQP roundtrip), ops_client.py, check_no_secrets.sh, docker-compose.verify.yml, validate_compose.sh (VERIFY_RABBITMQ=1).
 
+## Done — M11 (integration & reliability proof)
+- M11-01 lifecycle integration tests (9 scenarios) green at HTTP boundary; 2 real fixes: EXPIRED from CREATED/VALIDATING, deps→409.
+- M11-02 contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4 comment requesting confirmation.
+- M11-04 GitHub reliability: pagination, transient retry, full-body reads (live-caught truncation bug).
+- M11-05 tenant-isolation decision doc (options A–D, rec: B) — awaiting owner.
+- M11-06 dashboard: broker chip + delivery channel split + honest unavailable states.
+- API 135/135 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

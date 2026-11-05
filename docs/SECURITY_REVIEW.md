@@ -29,6 +29,15 @@ Scope: `apps/api/app/coordination/*`, `apps/api/app/{ratelimit,platform_auth,not
 6. **Retry backoff** (M9): `CICC_COORD_RETRY_BACKOFF_S` (default 30) exponential `base*2^(attempts-1)` capped 1h, stored as `next_retry_at`; sweep requeues only after backoff elapses. Prevents hot retry loops.
 7. **No CSRF surface**: API is bearer-token based, no cookies; web dashboard calls same-origin relative URLs only. Accepted.
 
+## M11 updates
+- Deliver with unmet `depends_on` now returns **409** (was 200 with
+  `delivered:false`) — clearer contract, audited `delivery_blocked_deps`.
+- GitHub API calls: transient retry (5xx/429/timeout only), pagination cap,
+  full-body reads, rate-limit guard (<5 remaining aborts), token header-only.
+- Tenant isolation: decision document `docs/TENANT_ISOLATION_DECISION.md`
+  (options A–D, recommendation B schema-per-tenant with additive tenant_id
+  columns; **awaiting owner decision — not claimed production-ready**).
+
 ## Open security work (backlog)
 - Tenant-scoped ops data + per-tenant rate buckets (awaiting DB-model decision).
 - Webhook secret rotation procedure.
