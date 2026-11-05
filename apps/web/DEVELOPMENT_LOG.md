@@ -145,3 +145,10 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - Notification center: user-created local reminders with category (investigation/operations/intelligence) and read/unread state, persisted locally. No delivered/server notifications are claimed; the service-unavailable notice remains.
 - Intelligence presentation: reusable `IntelligenceList` (query/kind filtering, detail with confidence-vs-verification and provenance) with labeled-fixture tests. It is a presentation component only; workspaces still present the honest not-connected state until contracts are accepted and mounted.
 - CI: web-ci has been executing on PR #7 pushes (GitHub Actions is the browser-capable runner). The last inspected run failed at the unit-test step; Actions log download is blocked from this sandbox (result-storage host is outside the egress allowlist), so failure diagnosis uses step-level results after each push. Playwright execution status remains EXECUTED only when a run proves it.
+
+
+## 2026-11-05 — Continuous batch: CI diagnosis, first browser execution, coordination/investigation depth
+
+- **CI root cause found and fixed:** `web-ci` unit-test step failed on Node 20 (`ERR_REQUIRE_ESM` from jsdom's `@exodus/bytes` under `html-encoding-sniffer`); reproduced locally with Node 20.18.0 via the npm `node` package. Workflow now uses Node 22 — CI unit tests (104), typecheck, and build pass.
+- **Browser QA EXECUTED:** GitHub Actions is the authorized browser-capable runner. Run 42031636411: **20/22 Playwright tests passed** in real Chromium (all 8 routes desktop+mobile screenshots, no-overflow, RTL/LTR locale switching, keyboard focus). The 2 failures corrected a wrong test assumption (default Command Theater graph is accessible SVG, not WebGL canvas). Run **42032057257: full success, 22/22**.
+- Coordination: task sorting/pagination/deep-links/copy-link; Investigations: entities, linked coordination task, timeline, note migration; Notifications: local reminders with categories/read-unread; IntelligenceList presentation component with fixture tests. See the milestone commit list on PR #7.

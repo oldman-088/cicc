@@ -1,6 +1,6 @@
 # Browser visual QA — status and reproducible procedure
 
-**Status (2026-11-05, Backup Agent 4 takeover): NOT YET EXECUTED. No screenshots exist and none are claimed.**
+**Status (2026-11-05, updated): EXECUTED AND PASSED IN CI — GitHub Actions run 42032057257 (`web-ci`, success): typecheck, 104 unit tests, production build, Chromium install, and all 22 Playwright tests passed (desktop + mobile, 8 routes, EN/AR/FA directionality, keyboard focus, graph mount). Screenshots/traces are CI artifacts of that run (artifact download is not reachable from the dev sandbox, so no screenshots are embedded here). In the sandbox itself a browser still cannot be downloaded; local execution remains unavailable. First CI execution (run 42031636411) was 20/22 — the two failures were a test assumption that the Command Theater mounts a WebGL canvas by default; the default graph is an accessible SVG, and the test was corrected to accept SVG/canvas/fallback while still failing on a blank region.
 
 ## Exact environment limitation
 - `npm install @playwright/test` succeeds (npm registry reachable), and the suite in
