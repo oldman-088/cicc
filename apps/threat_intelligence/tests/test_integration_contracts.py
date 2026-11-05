@@ -7,7 +7,7 @@ Covers:
 - Agent 4 Frontend typed DTO envelopes
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -241,33 +241,349 @@ class TestAgent4FrontendEnvelopes:
 
     def test_bridge_exposes_frontend_freshness_metadata(self):
         from apps.threat_intelligence.integration_contracts import (
+            ConfidenceDTO,
+            DataOrigin,
             FreshnessMetaDTO,
+            HostMountStatus,
+            ProvenanceRefDTO,
             ThreatIntelDetailEnvelope,
+            ThreatIntelEntityDTO,
+            ThreatIntelEntityType,
+            ThreatIntelErrorBody,
             ThreatIntelErrorEnvelope,
             ThreatIntelListEnvelope,
+            VerificationMode,
         )
 
         bridge = ThreatIntelligenceIntegrationBridge(tenant_id="tenant-contracts")
         summary = bridge.summarize_provenance("IOC-0001", ["source-a", "source-a"])
+        now = datetime(2026, 11, 5, 12, 0, tzinfo=timezone.utc)
+
+        entity = ThreatIntelEntityDTO(
+            id="IOC-0001",
+            type=ThreatIntelEntityType.INDICATOR,
+            name="192.0.2.10",
+            confidence=ConfidenceDTO(score=0.72, corroborating_source_count=1),
+            first_seen=now,
+            last_seen=now,
+            provenance=[ProvenanceRefDTO(source_id="source-a", observation_count=2)],
+            attributes={"value": "192.0.2.10", "indicator_type": "ipv4"},
+        )
+        freshness = FreshnessMetaDTO(collected_at=now, age_seconds=60, stale_after_seconds=3600)
 
         detail = ThreatIntelDetailEnvelope(
-            data={"indicator_id": "IOC-0001", "value": "192.0.2.10"},
-            provenance_summary=summary,
-            tenant_id="tenant-contracts",
+            data=entity, provenance_summary=summary, freshness=freshness
         )
-        assert detail.freshness.origin == "EXPERIMENTAL_DEMO_DATA_ONLY"
-        assert detail.freshness.verification_mode == "fixture_tested"
-        assert detail.freshness.host_mount_status == "not_mounted_pending_owner_approval"
+        assert detail.freshness.origin is DataOrigin.EXPERIMENTAL_DEMO
+        assert detail.freshness.verification_mode is VerificationMode.FIXTURE_TESTED
+        assert (
+            detail.freshness.host_mount_status
+            is HostMountStatus.NOT_MOUNTED_PENDING_OWNER_APPROVAL
+        )
 
-        listing = ThreatIntelListEnvelope(data=[detail.data])
+        listing = ThreatIntelListEnvelope(data=[detail.data], freshness=freshness)
         assert listing.page.limit == 50
         assert listing.page.next_cursor is None
+        assert listing.page.has_more is False
 
-        err = ThreatIntelErrorEnvelope(status=422, error_code="validation_error", message="bad input")
+        err = ThreatIntelErrorEnvelope(
+            status=422,
+            error=ThreatIntelErrorBody(code="validation_error", message="bad input"),
+        )
         assert 400 <= err.status <= 599
-        assert isinstance(FreshnessMetaDTO().collected_at, datetime)
+        assert err.to_response_body() == {
+            "error": {"code": "validation_error", "message": "bad input"}
+        }
         with pytest.raises(ValidationError):
-            ThreatIntelErrorEnvelope(status=200, error_code="ok", message="not an error")
+            ThreatIntelErrorEnvelope(
+                status=200, error=ThreatIntelErrorBody(code="ok", message="not an error")
+            )
+
+
+class TestAgent4Amendments:
+    """
+    The seven amendments submitted by Backup Agent 4 on PR #6
+    (https://github.com/oldman-088/cicc/pull/6#issuecomment-6657783177).
+    """
+
+    NOW = datetime(2026, 11, 5, 12, 0, tzinfo=timezone.utc)
+
+    def _freshness(self, **kw):
+        from apps.threat_intelligence.integration_contracts import FreshnessMetaDTO
+
+        base = {"collected_at": self.NOW}
+        base.update(kw)
+        return FreshnessMetaDTO(**base)
+
+    # 1. Typed payloads ------------------------------------------------------
+    def test_amendment_1_entity_dto_is_typed_with_a_closed_type_enum(self):
+        from apps.threat_intelligence.integration_contracts import (
+            ThreatIntelEntityDTO,
+            ThreatIntelEntityType,
+        )
+
+        entity = ThreatIntelEntityDTO(
+            id="a-1", type=ThreatIntelEntityType.THREAT_ACTOR, name="APT-Test"
+        )
+        assert entity.type is ThreatIntelEntityType.THREAT_ACTOR
+        assert entity.confidence.score == 0.0
+        assert entity.first_seen is None and entity.last_seen is None
+        assert entity.provenance == []
+        with pytest.raises(ValidationError):
+            ThreatIntelEntityDTO(id="a-1", type="not_a_real_entity_type")
+
+    def test_amendment_1_confidence_and_verification_are_separate_semantics(self):
+        from apps.threat_intelligence.integration_contracts import (
+            ConfidenceDTO,
+            VerificationMode,
+        )
+
+        conf = ConfidenceDTO(
+            score=0.95, verification_mode=VerificationMode.FIXTURE_TESTED, conflict_open=True
+        )
+        assert conf.score == 0.95
+        assert conf.verification_mode is VerificationMode.FIXTURE_TESTED
+        assert conf.conflict_open is True
+        with pytest.raises(ValidationError):
+            ConfidenceDTO(score=1.5)
+
+    def test_amendment_1_envelopes_reject_untyped_dicts(self):
+        from apps.threat_intelligence.integration_contracts import (
+            ThreatIntelDetailEnvelope,
+            ThreatIntelListEnvelope,
+        )
+
+        with pytest.raises(ValidationError):
+            ThreatIntelListEnvelope(
+                data=[{"indicator_id": "IOC-1"}], freshness=self._freshness()
+            )
+        with pytest.raises(ValidationError):
+            ThreatIntelDetailEnvelope(
+                data={"indicator_id": "IOC-1"}, freshness=self._freshness()
+            )
+
+    def test_amendment_1_list_items_carry_per_record_provenance(self):
+        from apps.threat_intelligence.integration_contracts import (
+            ProvenanceRefDTO,
+            ThreatIntelEntityDTO,
+            ThreatIntelEntityType,
+            ThreatIntelListEnvelope,
+        )
+
+        listing = ThreatIntelListEnvelope(
+            data=[
+                ThreatIntelEntityDTO(
+                    id="IOC-1",
+                    type=ThreatIntelEntityType.INDICATOR,
+                    provenance=[
+                        ProvenanceRefDTO(
+                            source_id="urlhaus",
+                            observation_count=3,
+                            source_reference="https://urlhaus.example.invalid/1",
+                            retrieved_at=self.NOW,
+                        )
+                    ],
+                )
+            ],
+            freshness=self._freshness(),
+        )
+        assert listing.data[0].provenance[0].source_id == "urlhaus"
+        assert listing.data[0].provenance[0].observation_count == 3
+
+    # 2. Timestamps ----------------------------------------------------------
+    def test_amendment_2_collected_at_has_no_default(self):
+        from apps.threat_intelligence.integration_contracts import FreshnessMetaDTO
+
+        with pytest.raises(ValidationError):
+            FreshnessMetaDTO()
+
+    def test_amendment_2_naive_timestamps_are_rejected(self):
+        from apps.threat_intelligence.integration_contracts import (
+            FreshnessMetaDTO,
+            ThreatIntelEntityDTO,
+            ThreatIntelEntityType,
+        )
+
+        naive = datetime(2026, 11, 5, 12, 0)
+        with pytest.raises(ValidationError):
+            FreshnessMetaDTO(collected_at=naive)
+        with pytest.raises(ValidationError):
+            FreshnessMetaDTO(collected_at=self.NOW, last_successful_sync=naive)
+        with pytest.raises(ValidationError):
+            ThreatIntelEntityDTO(
+                id="a-1", type=ThreatIntelEntityType.THREAT_ACTOR, first_seen=naive
+            )
+
+    def test_amendment_2_aware_timestamps_are_accepted(self):
+        freshness = self._freshness(last_successful_sync=self.NOW)
+        assert freshness.collected_at.tzinfo is not None
+        assert freshness.last_successful_sync.tzinfo is not None
+
+    # 3. No tenant_id in frontend envelopes ----------------------------------
+    def test_amendment_3_tenant_id_is_absent_from_frontend_envelopes(self):
+        from apps.threat_intelligence.integration_contracts import (
+            ThreatIntelDetailEnvelope,
+            ThreatIntelEntityDTO,
+            ThreatIntelEntityType,
+            ThreatIntelListEnvelope,
+        )
+
+        assert "tenant_id" not in ThreatIntelListEnvelope.model_fields
+        assert "tenant_id" not in ThreatIntelDetailEnvelope.model_fields
+        entity = ThreatIntelEntityDTO(id="a-1", type=ThreatIntelEntityType.THREAT_ACTOR)
+        with pytest.raises(ValidationError):
+            ThreatIntelListEnvelope(
+                data=[entity], freshness=self._freshness(), tenant_id="tenant-x"
+            )
+        with pytest.raises(ValidationError):
+            ThreatIntelDetailEnvelope(
+                data=entity, freshness=self._freshness(), tenant_id="tenant-x"
+            )
+
+    # 4. Error envelope alignment -------------------------------------------
+    def test_amendment_4_error_envelope_serialises_as_nested_error_object(self):
+        from apps.threat_intelligence.integration_contracts import (
+            ThreatIntelErrorBody,
+            ThreatIntelErrorEnvelope,
+        )
+
+        err = ThreatIntelErrorEnvelope(
+            status=422,
+            error=ThreatIntelErrorBody(
+                code="validation_error",
+                message="field is required",
+                correlation_id="corr-123",
+                details={"field": "indicator_type"},
+            ),
+        )
+        assert err.to_response_body() == {
+            "error": {
+                "code": "validation_error",
+                "message": "field is required",
+                "correlation_id": "corr-123",
+                "details": {"field": "indicator_type"},
+            }
+        }
+        assert "error_code" not in ThreatIntelErrorEnvelope.model_fields
+
+    def test_amendment_4_429_requires_retry_after_and_others_forbid_it(self):
+        from apps.threat_intelligence.integration_contracts import (
+            ThreatIntelErrorBody,
+            ThreatIntelErrorEnvelope,
+        )
+
+        ok = ThreatIntelErrorEnvelope(
+            status=429,
+            error=ThreatIntelErrorBody(
+                code="rate_limited", message="slow down", retry_after_seconds=30
+            ),
+        )
+        assert ok.to_response_body()["error"]["retry_after_seconds"] == 30
+        with pytest.raises(ValidationError):
+            ThreatIntelErrorEnvelope(
+                status=429, error=ThreatIntelErrorBody(code="rate_limited", message="x")
+            )
+        with pytest.raises(ValidationError):
+            ThreatIntelErrorEnvelope(
+                status=503, error=ThreatIntelErrorBody(code="unavailable", message="x")
+            )
+        with pytest.raises(ValidationError):
+            ThreatIntelErrorEnvelope(
+                status=404,
+                error=ThreatIntelErrorBody(
+                    code="not_found", message="x", retry_after_seconds=10
+                ),
+            )
+
+    # 5. Pagination semantics -----------------------------------------------
+    def test_amendment_5_total_count_is_nullable_and_cursor_is_authoritative(self):
+        from apps.threat_intelligence.integration_contracts import PaginationMetaDTO
+
+        unknown = PaginationMetaDTO(limit=50, next_cursor="eyJvZmZzZXQiOjUwfQ")
+        assert unknown.total_count is None
+        assert unknown.has_more is True
+
+        exhausted = PaginationMetaDTO(limit=50, total_count=12)
+        assert exhausted.has_more is False
+        assert exhausted.total_count == 12
+
+        with pytest.raises(ValidationError):
+            PaginationMetaDTO(total_count=-1)
+
+    # 6. Freshness enums and thresholds -------------------------------------
+    def test_amendment_6_freshness_fields_are_enums_not_free_strings(self):
+        from apps.threat_intelligence.integration_contracts import (
+            DataOrigin,
+            HostMountStatus,
+            VerificationMode,
+        )
+
+        freshness = self._freshness()
+        assert isinstance(freshness.origin, DataOrigin)
+        assert isinstance(freshness.verification_mode, VerificationMode)
+        assert isinstance(freshness.host_mount_status, HostMountStatus)
+        with pytest.raises(ValidationError):
+            self._freshness(origin="probably_live")
+        with pytest.raises(ValidationError):
+            self._freshness(verification_mode="live_verified_i_promise")
+        with pytest.raises(ValidationError):
+            self._freshness(host_mount_status="mounted")
+
+    def test_amendment_6_staleness_is_explainable_not_a_bare_boolean(self):
+        from apps.threat_intelligence.integration_contracts import FreshnessMetaDTO
+
+        explained = FreshnessMetaDTO(
+            collected_at=self.NOW, age_seconds=7200, stale_after_seconds=3600, is_stale=True
+        )
+        assert explained.age_seconds == 7200
+        assert explained.stale_after_seconds == 3600
+        assert explained.is_stale is True
+
+        # A bare `is_stale` with no declared horizon is refused.
+        with pytest.raises(ValidationError):
+            FreshnessMetaDTO(collected_at=self.NOW, is_stale=True)
+        # So is a stale flag that contradicts the arithmetic.
+        with pytest.raises(ValidationError):
+            FreshnessMetaDTO(
+                collected_at=self.NOW,
+                age_seconds=10,
+                stale_after_seconds=3600,
+                is_stale=True,
+            )
+
+    # 7. Nullable provenance on detail --------------------------------------
+    def test_amendment_7_detail_provenance_summary_is_nullable(self):
+        from apps.threat_intelligence.integration_contracts import (
+            ThreatIntelDetailEnvelope,
+            ThreatIntelEntityDTO,
+            ThreatIntelEntityType,
+        )
+
+        entity = ThreatIntelEntityDTO(id="a-1", type=ThreatIntelEntityType.THREAT_ACTOR)
+        detail = ThreatIntelDetailEnvelope(data=entity, freshness=self._freshness())
+        assert detail.provenance_summary is None
+
+        bridge = ThreatIntelligenceIntegrationBridge(tenant_id="tenant-contracts")
+        with_prov = ThreatIntelDetailEnvelope(
+            data=entity,
+            provenance_summary=bridge.summarize_provenance("a-1", ["src-a"]),
+            freshness=self._freshness(),
+        )
+        assert with_prov.provenance_summary.sources == ["src-a"]
+
+    # 8. Contract status unchanged ------------------------------------------
+    def test_amendment_8_contract_remains_proposed_and_unmounted(self):
+        from apps.threat_intelligence.integration_contracts import (
+            HostMountStatus,
+            ThreatIntelListEnvelope,
+        )
+
+        listing = ThreatIntelListEnvelope(data=[], freshness=self._freshness())
+        assert listing.freshness.host_mount_status is (
+            HostMountStatus.NOT_MOUNTED_PENDING_OWNER_APPROVAL
+        )
+        assert listing.contract_version.endswith("-proposed")
+        assert listing.freshness.verification_mode.value == "fixture_tested"
 
 
 class TestEndToEndCrossDomainFlow:

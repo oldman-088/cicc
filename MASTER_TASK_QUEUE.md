@@ -5,7 +5,7 @@
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft - untouched)
 - Status: Stage 2 — P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (fixture-tested, none mounted)
-- Total Tests: 534/534 passed (0 warnings)
+- Total Tests: 849/849 passed (0 warnings)
 - Base: main @ ca8f82c
 - PR: #6 (OPEN, base main)
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
@@ -64,7 +64,9 @@
   - [x] Agent 3 M1-M6 mismatch resolutions (KEV requiredAction, vendor advisories, mapping_type, sub-technique identity, provenance granularity, tri-state consulted)
   - [x] Agent 4 frontend typed DTO envelopes with verification_mode / host_mount_status honesty fields
   - [x] Status: implemented and tested; NOT accepted by Agents 1/3/4; no host mounting performed
-- [ ] AE-22: Continue with P2-01: Cross-Entity Relationship Analysis Engine
+- [x] AE-22: P2-01 Cross-Entity Relationship Analysis Engine (COMPLETED by Agent 6 — `relationship_analysis.py`, 73 tests: typed semantics, direction, provenance, temporal validity, duplicates, contradictions, cycle-safe traversal, shortest path)
+- [x] AE-22b: Conflict resolution foundation (COMPLETED by Agent 6 — `conflict_resolution.py`, 47 tests: claims vs conclusions, deterministic strategies, unresolved preserved)
+- [x] AE-22c: Domain B item 24 Threat Intelligence Reports (COMPLETED by Agent 6 — `reports.py`, 43 tests: typed model, stable IDs, classification, provenance, append-only history, deduplication, search)
 - [ ] AE-23: Continue with P2-02: Confidence Scoring and Reliability Framework (foundation shipped in `source_reliability.py`)
 - [ ] AE-24: Continue with P2-03: Temporal Intelligence Analysis
 - [ ] AE-25: Continue with P2-04: Conflicting Intelligence Resolution (conflict records shipped in OSINT + persistence)
@@ -85,7 +87,7 @@
   - [x] Per-source circuit breaker with bounded half-open probes
   - [x] Idempotency index, `WorkerMetrics`, bounded structured event log, TTL expiry
   - [ ] NOT DONE: a running worker — **`run_pending` is caller-invoked and synchronous; no thread/process/asyncio loop is started**
-- [~] AE-29: P3-04 Observability and Performance (PARTIAL by Agent 6)
+- [x] AE-29: P3-04 Domain Observability (COMPLETED by Agent 6 — `observability.py`, 36 tests: source health, freshness recomputation, collection/worker state, circuit breakers, conflict + relationship rollups, bounded events/snapshots). NOT a shared system-health contract — Agent 1's contract remains proposed and unmounted.
   - [x] `WorkerMetrics` counters (global + per source), `health_snapshot()`, `export_state()`
   - [x] `SourceReliabilityService.health_report()` across tier / availability / freshness / verification
   - [ ] NOT DONE: a dashboard consumer, metrics endpoint, or performance benchmarking
@@ -93,6 +95,10 @@
 - [x] AE-29c: Cross-agent contract registry with pinned provenance (COMPLETED by Agent 6 — `contract_registry.py`, 36 tests; 5 proposed, 0 accepted)
 - [x] AE-29d: Static integrity checks (COMPLETED by Agent 6 — `test_package_integrity.py`, 141 tests)
 - [x] AE-29e: PR #3 <-> PR #6 reconciliation (DOCUMENTED — `docs/PR3_PR6_RECONCILIATION.md`)
+- [x] AE-29f: P2 live-source readiness (COMPLETED by Agent 6 — `live_source_readiness.py`, 51 tests: injected transport only, opt-in gate, schema/size/content-type validation, rate-limit floor, retries, provenance stamping). No live request has been made.
+- [x] AE-29g: Backup Agent 4 frontend amendments 1-7 (IMPLEMENTED by Agent 6 — `integration_contracts.py` 1.1.0-proposed, 33 tests). NOT accepted: awaiting frontend owner confirmation and a mounted host endpoint.
+- [x] AE-29h: P1 persistence hardening (COMPLETED by Agent 6 — +15 tests: transaction rollback, concurrent writers/readers, reopen behaviour, non-destructive schema, documented SQLite limitations)
+- [x] AE-29i: Timezone defect fixed in `source_reliability.py` (`to_utc`; naive clock no longer crashes or shifts by host offset) — regression-tested
 - [ ] AE-30: Continue with P4-01: Vulnerability Intelligence Interface (Agent 3)
 - [ ] AE-31: Continue with P4-02: Command Theater Interface
 - [ ] AE-32: Continue with P4-03: System Health/Operations Dashboard Interface
@@ -131,7 +137,7 @@
 
 ## Constraints Compliance (VERIFIED)
 - [x] Independent files created (no modification to models.py, main.py, migrations)
-- [x] Tests added for all modules (534 total tests, 534 passed, 0 warnings)
+- [x] Tests added for all modules (849 total tests, 849 passed, 0 warnings)
 - [x] Static checks added where the repository supports them (`test_package_integrity.py`, 141 tests, run through pytest since no linter config is shipped)
 - [x] Regression tests added for every confirmed defect (3 defects, all covered)
 - [x] No fake real data (EXPERIMENTAL_DEMO_DATA_ONLY labeling on every ingested record)
@@ -171,4 +177,4 @@ Branch: arena/28e50255-cicc
 PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 534/534 passed (0 warnings)
+Total Tests: 849/849 passed (0 warnings)

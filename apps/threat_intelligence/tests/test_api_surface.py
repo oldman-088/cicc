@@ -24,6 +24,7 @@ from apps.threat_intelligence.api_surface import (
     error_envelope,
     map_exception_to_envelope,
 )
+from apps.threat_intelligence.integration_contracts import HostMountStatus
 from apps.threat_intelligence.persistence import (
     ConflictRecord,
     PersistenceError,
@@ -145,14 +146,14 @@ class TestAuthorizationAndTenancy:
     def test_missing_scope_is_401(self, surface):
         _seed(surface._repo)
         res = surface.dispatch("GET", f"{API_PREFIX}/entities", _ctx(scopes=[]))
-        assert res.status == 401 and res.error_code == "unauthorized"
+        assert res.status == 401 and res.error.code == "unauthorized"
 
     def test_unresolved_tenant_is_403_not_500(self, surface):
         res = surface.dispatch(
             "GET", f"{API_PREFIX}/entities", _ctx(tenant=None, scopes=["threat_intel:read"])
         )
         assert res.status == 403
-        assert res.error_code == "tenant_resolution_required"
+        assert res.error.code == "tenant_resolution_required"
 
     def test_audit_route_requires_the_audit_scope(self, surface):
         _seed(surface._repo)
@@ -187,14 +188,14 @@ class TestValidationMapping:
     def test_invalid_path_entity_type_is_422_with_field(self, surface):
         res = surface.dispatch("GET", f"{API_PREFIX}/entities/not_a_type/X", _ctx())
         assert res.status == 422
-        assert res.error_code == "validation_error"
-        assert res.details["field"] == "entity_type"
+        assert res.error.code == "validation_error"
+        assert res.error.details["field"] == "entity_type"
 
     def test_invalid_query_entity_type_is_422(self, surface):
         res = surface.dispatch(
             "GET", f"{API_PREFIX}/entities", _ctx(), query={"entity_type": "nope"}
         )
-        assert res.status == 422 and res.error_code == "validation_error"
+        assert res.status == 422 and res.error.code == "validation_error"
 
     def test_out_of_range_limit_is_422(self, surface):
         res = surface.dispatch("GET", f"{API_PREFIX}/entities", _ctx(), query={"limit": 9999})
@@ -202,15 +203,15 @@ class TestValidationMapping:
 
     def test_unknown_route_is_404_route_not_found(self, surface):
         res = surface.dispatch("GET", f"{API_PREFIX}/nope", _ctx())
-        assert res.status == 404 and res.error_code == "route_not_found"
+        assert res.status == 404 and res.error.code == "route_not_found"
 
     def test_missing_entity_is_404_not_found(self, surface):
         res = surface.dispatch("GET", f"{API_PREFIX}/entities/indicator/NOPE", _ctx())
-        assert res.status == 404 and res.error_code == "not_found"
+        assert res.status == 404 and res.error.code == "not_found"
 
     def test_persistence_error_maps_to_400(self):
         env = map_exception_to_envelope(PersistenceError("bad cursor"))
-        assert env.status == 400 and env.error_code == "persistence_error"
+        assert env.status == 400 and env.error.code == "persistence_error"
 
     def test_tenant_error_maps_to_403(self):
         env = map_exception_to_envelope(TenantIsolationError("no tenant"))
@@ -219,8 +220,8 @@ class TestValidationMapping:
     def test_unexpected_error_is_500_without_leaking_detail(self):
         env = map_exception_to_envelope(RuntimeError("secret internal detail"))
         assert env.status == 500
-        assert env.error_code == "internal_error"
-        assert "secret internal detail" not in env.message
+        assert env.error.code == "internal_error"
+        assert "secret internal detail" not in env.error.message
 
     def test_error_envelope_rejects_non_error_status(self):
         with pytest.raises(ValidationError):
@@ -296,7 +297,7 @@ class TestFreshnessAndMountHonesty:
 
         _seed(surface._repo)
         res = surface.dispatch("GET", f"{API_PREFIX}/entities/indicator/IOC-1", _ctx())
-        assert res.freshness.host_mount_status == "not_mounted_pending_owner_approval"
+        assert res.freshness.host_mount_status is HostMountStatus.NOT_MOUNTED_PENDING_OWNER_APPROVAL
         assert res.freshness.verification_mode == "fixture_tested"
         assert res.freshness.origin == "EXPERIMENTAL_DEMO_DATA_ONLY"
 
@@ -313,7 +314,7 @@ class TestFreshnessAndMountHonesty:
 
         _seed(surface._repo)
         res = surface.dispatch("GET", f"{API_PREFIX}/entities/indicator/IOC-1", _ctx())
-        assert res.freshness.host_mount_status == "mounted"
+        assert res.freshness.host_mount_status is HostMountStatus.MOUNTED_BY_HOST
 
     def test_verification_mode_is_validated_at_construction(self, repo):
         with pytest.raises(ValueError):

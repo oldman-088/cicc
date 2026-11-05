@@ -5,7 +5,7 @@
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft - untouched)
 - Status: Stage 2 — P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (fixture-tested, none mounted)
-- Total Tests: 534/534 passed (0 warnings)
+- Total Tests: 849/849 passed (0 warnings)
 - Base: main @ ca8f82c
 - PR: #6 (OPEN, base main)
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
@@ -199,6 +199,72 @@ This review documents the security and integrity measures verified across all Th
 - **Coverage**: Enrichment layer, MITRE Ingestion Pipeline, CISA KEV Integration Connector, Vendor Security Advisories Framework
 - **Evidence**: 162/162 tests passed, 0 warnings
 
+### 16. Report layer cannot fabricate entities (VERIFIED — Stage 3)
+`ThreatIntelReportService._validate` rejects any report whose `relationship_refs` name an entity
+absent from `entity_refs`. A report may only reference entities it was actually given, so the
+reporting layer cannot introduce entity IDs that no ingestion path produced. Reports also require a
+non-empty `author_ref`, so every report is attributable.
+
+### 17. Inference is never laundered into fact (VERIFIED — Stage 3)
+Three independent guards:
+- `ReportRelationshipRef.inferred` survives revision and publication; `has_inferred_relationships()`
+  reports it after a report is published.
+- `RelationshipAssertion.is_inferred` is derived from origin, and an inferred assertion cannot clear
+  the `EXPERIMENTAL_DEMO_DATA_ONLY` label on a directly-sourced normalized record.
+- `PathResult.reliability_statement` returns `..._not_confirmed` for any path containing an inferred
+  edge. The hop is represented by the **strongest-origin** assertion, not an arbitrary one — the
+  previous alphabetical selection let an inferred edge stand in for a sourced one.
+
+### 18. Conflicting observations are preserved, not overwritten (VERIFIED — Stage 3)
+`ConflictResolutionService` keeps every `SourceClaim` for the life of the record. Resolution promotes
+one claim; it never deletes or edits the losers. Withdrawal sets a flag and records the reason in
+provenance rather than removing the row. An exact tie on every evidential tie-break is left
+`UNRESOLVED` with the conflict open, rather than silently choosing a winner. Manual resolution
+requires an attributable actor and a stated basis, and supersedes rather than edits the automated
+record.
+
+### 19. Contradiction detection is order-independent (VERIFIED — Stage 3)
+Mutual exclusivity is declared as unordered pairs and expanded in both directions. A
+one-directional table would flag `ATTRIBUTED_TO`-then-`TARGETS` while silently accepting
+`TARGETS`-then-`ATTRIBUTED_TO`. Regression-tested in both orders.
+
+### 20. Timestamps are host-timezone independent (VERIFIED — Stage 3, defect fixed)
+`source_reliability.to_utc()` interprets a naive datetime as UTC rather than host-local time.
+Previously `_iso()` called `astimezone()` on naive values, which silently shifted every stored
+timestamp by the host offset — recorded times depended on where the code ran. The same fix
+normalises both operands in `_recompute`, which previously raised `TypeError` for any caller
+passing a naive clock. Regression-tested; the frontend DTOs additionally **reject** naive
+timestamps outright (Backup Agent 4 amendment 2).
+
+### 21. Live network access is double-gated and credential-free (VERIFIED — Stage 3)
+`live_source_readiness.py` holds no network client (enforced by the static import check). Live
+execution requires **both** the `CICC_TI_ALLOW_LIVE_SOURCES` environment opt-in **and** a
+caller-supplied `allow_live=True`; missing either raises `LiveAccessRefusedError` rather than
+silently doing nothing. Policies carry a `credential_ref` *name* only — a value shaped like secret
+material is rejected at validation, so credentials cannot transit this layer. Payloads are
+validated before persistence and a rejection returns a status instead of raising, so a bad response
+cannot corrupt previously stored data.
+
+### 22. Frontend-facing envelopes carry no tenant identity (VERIFIED — Stage 3)
+Per Backup Agent 4 amendment 3, `tenant_id` was **removed** from `ThreatIntelListEnvelope` and
+`ThreatIntelDetailEnvelope` (both use `extra="forbid"`, so supplying it is a validation error).
+No UI can render or forward tenant identity as scoping proof.
+
+### 23. Error envelopes do not leak internals or imply retries (VERIFIED — Stage 3)
+`ThreatIntelErrorEnvelope` serialises as `{error: {code, message, correlation_id, details,
+retry_after_seconds}}`. A `model_validator` requires `retry_after_seconds` for 429/503 and forbids
+it elsewhere, so a client cannot be told to back off on a permanent error. The existing rule that a
+500 response never carries the underlying exception message is unchanged and still tested.
+
+### 24. Persistence limits are documented by test, not just prose (VERIFIED — Stage 3)
+`TestSqliteLimitations` asserts the layer exposes no server/listen surface, and
+`test_tenant_isolation_is_application_level_not_a_security_boundary` demonstrates that while the
+API cannot cross tenants, a caller holding the raw connection can read every tenant in the same
+file. **Tenant isolation here is query discipline, not a deployment security boundary, and must not
+be described as multi-tenant production isolation without a deployment-level review.**
+`TestMigrationSafety` asserts the schema contains only `CREATE ... IF NOT EXISTS` and no
+`DROP`/`TRUNCATE`/`ALTER`/`DELETE`, so re-initialisation cannot destroy data.
+
 ## Integration Security Contracts (DEFINED)
 
 ### Production Integration Preparation
@@ -289,18 +355,24 @@ This review documents the security and integrity measures verified across all Th
 ✅ P3-03 Collection workers: IMPLEMENTED by Agent 6 (40 tests), NO worker running
 ✅ Source reliability + evidence-gated verification: IMPLEMENTED by Agent 6 (47 tests)
 ✅ Contract registry: IMPLEMENTED by Agent 6 (36 tests), 5 proposed / 0 accepted
+✅ Domain B item 24 Threat Intelligence Reports: IMPLEMENTED by Agent 6 (43 tests), fixture-tested only
+✅ Relationship analysis: IMPLEMENTED by Agent 6 (73 tests)
+✅ Conflict resolution: IMPLEMENTED by Agent 6 (47 tests)
+✅ Domain observability: IMPLEMENTED by Agent 6 (36 tests), NO daemon running
+✅ Live-source readiness: IMPLEMENTED by Agent 6 (51 tests), NO live request made
+✅ Backup Agent 4 amendments 1-7: IMPLEMENTED by Agent 6 (33 tests), NOT accepted
 ✅ Static integrity checks: ADDED by Agent 6 (141 tests)
 ✅ PR #3 <-> PR #6 reconciliation: DOCUMENTED (docs/PR3_PR6_RECONCILIATION.md)
 ✅ Documentation: MAINTAINED (7 root files + 2 docs/ files)
 ✅ Branch: ACTIVE (arena/28e50255-cicc), PR #6 OPEN
 ✅ Handoff to Agent 2: READY (see DEVELOPMENT_LOG.md)
-✅ Security Review: PASSED (534/534 tests, all constraints met)
+✅ Security Review: PASSED (849/849 tests, all constraints met)
 
 # Last Updated
-2026-11-05 - Stage 2: persistence, API surface, collection workers, source reliability, contract registry and static checks added by Agent 6
+2026-11-05 - Stage 3: reports, relationship analysis, conflict resolution, domain observability, live-source readiness and frontend DTO amendments added by Agent 6; security items 12-20 added
 Agent: Arena.ai Agent Mode - Agent 6 (Full Threat Intelligence Backup Engineer)
 Branch: arena/28e50255-cicc
 PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 534/534 passed (0 warnings)
+Total Tests: 849/849 passed (0 warnings)

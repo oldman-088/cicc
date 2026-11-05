@@ -13,8 +13,9 @@ All adapters operate as pure, tested contract boundaries within `apps/threat_int
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 import re
 
 from apps.threat_intelligence.cisa_kev import CISAKEVIngestionService, EXPERIMENTAL_DEMO_DATA_ONLY
@@ -251,64 +252,264 @@ class ProvenanceSummaryDTO(BaseModel):
     corroboration_count: int = Field(0, ge=0, description="Count of distinct corroborating sources")
 
 
-# ============================================================================
-# 3. Agent 4 (Frontend) Typed Response & Error Envelopes (PR #3 Coordination)
-# ============================================================================
+class DataOrigin(str, Enum):
+    """Where the data came from (amendment 6: enum, not free string)."""
+
+    EXPERIMENTAL_DEMO = EXPERIMENTAL_DEMO_DATA_ONLY
+    LIVE_SOURCE = "live_source"
+
+
+class VerificationMode(str, Enum):
+    """Evidence level behind the data (amendment 6: enum, not free string)."""
+
+    FIXTURE_TESTED = "fixture_tested"
+    ORACLE_VERIFIED = "oracle_verified"
+    LIVE_VERIFIED = "live_verified"
+
+
+class HostMountStatus(str, Enum):
+    """
+    Whether a host has actually mounted these routes (amendment 6: enum, not free string).
+
+    The only honest default is NOT_MOUNTED_PENDING_OWNER_APPROVAL. Nothing in this package may set
+    MOUNTED_BY_HOST; that is a host-side fact a host must assert for itself.
+    """
+
+    NOT_MOUNTED_PENDING_OWNER_APPROVAL = "not_mounted_pending_owner_approval"
+    MOUNTED_BY_HOST = "mounted_by_host"
+
+
+class ThreatIntelEntityType(str, Enum):
+    """Entity discriminator (amendment 1: `type` is a closed enum, not a free string)."""
+
+    THREAT_ACTOR = "threat_actor"
+    CAMPAIGN = "campaign"
+    MALWARE = "malware"
+    SOFTWARE = "software"
+    INDICATOR = "indicator"
+    TTP = "ttp"
+    VULNERABILITY = "vulnerability"
+    ADVISORY = "advisory"
+    RELATIONSHIP = "relationship"
+    REPORT = "report"
+
 
 class FreshnessMetaDTO(BaseModel):
-    """Explicit freshness, verification, and experimental labeling metadata for UI display"""
+    """
+    Explicit freshness, verification and experimental labelling metadata for UI display.
+
+    Amendment 2: `collected_at` has NO default. A freshness field that silently defaults to "now"
+    would let a caller present unsourced data as freshly collected, so the caller must supply an
+    explicit timezone-aware value.
+    Amendment 6: enums instead of free strings, plus `age_seconds` / `stale_after_seconds` so the
+    UI can explain *why* something is stale rather than trusting a bare boolean.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    origin: str = Field(EXPERIMENTAL_DEMO_DATA_ONLY, description="EXPERIMENTAL_DEMO_DATA_ONLY | live_source")
-    verification_mode: str = Field("fixture_tested", description="fixture_tested | oracle_verified | live_verified")
-    host_mount_status: str = Field(
-        "not_mounted_pending_owner_approval",
-        description="Explicitly informs frontend that Threat Intel HTTP routes are package-level until mounted",
+    origin: DataOrigin = DataOrigin.EXPERIMENTAL_DEMO
+    verification_mode: VerificationMode = VerificationMode.FIXTURE_TESTED
+    host_mount_status: HostMountStatus = HostMountStatus.NOT_MOUNTED_PENDING_OWNER_APPROVAL
+    collected_at: datetime = Field(
+        ..., description="Explicit timezone-aware collection time; never defaulted"
     )
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
     last_successful_sync: Optional[datetime] = Field(None)
+    age_seconds: Optional[int] = Field(
+        None, ge=0, description="Data age at response time; None when unknown"
+    )
+    stale_after_seconds: Optional[int] = Field(None, ge=1, description="Declared staleness horizon")
     is_stale: bool = Field(False)
+
+    @field_validator("collected_at", "last_successful_sync")
+    @classmethod
+    def _require_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        """Amendment 2: reject naive timestamps rather than guessing their zone."""
+        if v is not None and v.tzinfo is None:
+            raise ValueError(
+                "timestamps must be timezone-aware ISO-8601; a naive datetime would be "
+                "interpreted against an unknown host zone"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _staleness_must_be_declared(self) -> "FreshnessMetaDTO":
+        """`is_stale` may only be True when a horizon was actually declared."""
+        if self.is_stale and self.stale_after_seconds is None:
+            raise ValueError("is_stale=True requires stale_after_seconds to be declared")
+        if (
+            self.is_stale
+            and self.stale_after_seconds is not None
+            and self.age_seconds is not None
+            and self.age_seconds <= self.stale_after_seconds
+        ):
+            raise ValueError("is_stale=True contradicts age_seconds <= stale_after_seconds")
+        return self
 
 
 class PaginationMetaDTO(BaseModel):
-    """Opaque cursor pagination metadata"""
+    """
+    Opaque cursor pagination metadata.
+
+    Amendment 5: `total_count` is nullable because totals are frequently unknown under cursoring.
+    `next_cursor is not None` is the single source of truth for "there is more"; `has_more` is a
+    derived convenience that can never contradict it.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     limit: int = Field(50, ge=1, le=500)
-    total_count: int = Field(0, ge=0)
-    next_cursor: Optional[str] = Field(None)
+    total_count: Optional[int] = Field(
+        None, ge=0, description="None when the total is unknown under cursoring"
+    )
+    next_cursor: Optional[str] = Field(
+        None, description="Non-null is the authoritative has_more signal"
+    )
+
+    @property
+    def has_more(self) -> bool:
+        return self.next_cursor is not None
+
+
+class ProvenanceRefDTO(BaseModel):
+    """Per-record provenance pointer (amendment 7: provenance on list items, not only on detail)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str = Field(..., min_length=1, max_length=256)
+    observation_count: int = Field(1, ge=0)
+    source_reference: Optional[str] = Field(None, max_length=512)
+    retrieved_at: Optional[datetime] = None
+
+
+class ConfidenceDTO(BaseModel):
+    """
+    Confidence kept separate from verification (amendment 1).
+
+    `score` is analytical confidence in the value. `verification_mode` is evidence about where the
+    data came from. Conflating them lets a low-evidence record masquerade as trustworthy.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    score: float = Field(0.0, ge=0.0, le=1.0)
+    verification_mode: VerificationMode = VerificationMode.FIXTURE_TESTED
+    corroborating_source_count: int = Field(0, ge=0)
+    conflict_open: bool = Field(
+        False, description="True when sources disagree and the disagreement is unresolved"
+    )
+
+
+class ThreatIntelEntityDTO(BaseModel):
+    """
+    Base typed entity DTO (amendment 1).
+
+    Every list and detail payload carries these fields instead of an opaque `Dict[str, Any]`, so
+    the frontend has a real schema to runtime-validate against.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(..., min_length=1, max_length=512)
+    type: ThreatIntelEntityType
+    name: Optional[str] = Field(
+        None, max_length=512, description="None when the entity has no display name"
+    )
+    confidence: ConfidenceDTO = Field(default_factory=ConfidenceDTO)
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    provenance: List[ProvenanceRefDTO] = Field(default_factory=list)
+    attributes: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Type-specific fields; the typed base above is always present",
+    )
+
+    @field_validator("first_seen", "last_seen")
+    @classmethod
+    def _require_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is not None and v.tzinfo is None:
+            raise ValueError("first_seen/last_seen must be timezone-aware ISO-8601")
+        return v
 
 
 class ThreatIntelListEnvelope(BaseModel):
-    """Typed list response envelope for Threat Intelligence entities"""
+    """
+    Typed list response envelope.
+
+    Amendment 1: `data` is a list of typed entity DTOs, not `List[Dict[str, Any]]`.
+    Amendment 3: `tenant_id` is deliberately absent. The frontend must never supply or trust
+    tenant identity, so it is not offered in a frontend-facing envelope at all.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    data: List[Dict[str, Any]] = Field(default_factory=list)
+    data: List[ThreatIntelEntityDTO] = Field(default_factory=list)
     page: PaginationMetaDTO = Field(default_factory=PaginationMetaDTO)
-    freshness: FreshnessMetaDTO = Field(default_factory=FreshnessMetaDTO)
-    tenant_id: Optional[str] = Field(None)
+    freshness: FreshnessMetaDTO = Field(...)
+    contract_version: str = Field("1.1.0-proposed", description="Bumped by the amendment set")
 
 
 class ThreatIntelDetailEnvelope(BaseModel):
-    """Typed detail response envelope for a single Threat Intelligence entity"""
+    """
+    Typed detail response envelope.
+
+    Amendment 3: no `tenant_id`.
+    Amendment 7: `provenance_summary` is nullable - an entity with no recorded provenance reports
+    None rather than being forced to fabricate one.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    data: Dict[str, Any] = Field(...)
-    provenance_summary: ProvenanceSummaryDTO = Field(...)
-    freshness: FreshnessMetaDTO = Field(default_factory=FreshnessMetaDTO)
-    tenant_id: Optional[str] = Field(None)
+    data: ThreatIntelEntityDTO = Field(...)
+    provenance_summary: Optional[ProvenanceSummaryDTO] = Field(
+        None, description="None when no provenance is recorded; never fabricated"
+    )
+    freshness: FreshnessMetaDTO = Field(...)
+    contract_version: str = Field("1.1.0-proposed")
+
+
+class ThreatIntelErrorBody(BaseModel):
+    """The nested `error` object, matching the CICC BFF `{error: {code}}` shape (amendment 4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(..., min_length=1, max_length=128, description="Stable machine-readable code")
+    message: str = Field(
+        ..., min_length=1, max_length=1000, description="Safe for display; no internal details"
+    )
+    correlation_id: Optional[str] = Field(
+        None, max_length=128, description="Ties a client report to server logs"
+    )
+    details: Optional[Dict[str, Any]] = Field(
+        None, description="Structured, safe-for-display field errors only"
+    )
+    retry_after_seconds: Optional[int] = Field(None, ge=0, description="Populated for 429 and 503")
 
 
 class ThreatIntelErrorEnvelope(BaseModel):
-    """Typed error envelope for Threat Intelligence API responses"""
+    """
+    Typed error envelope aligned with the CICC BFF error model (amendment 4).
+
+    Serialises as `{"error": {"code": ..., "message": ...}}` so one frontend error model works
+    across domains. Internal exception text must never reach `message`.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     status: int = Field(..., ge=400, le=599)
-    error_code: str = Field(...)
-    message: str = Field(...)
-    details: Optional[Dict[str, Any]] = Field(None)
+    error: ThreatIntelErrorBody = Field(...)
 
+    @model_validator(mode="after")
+    def _retry_after_consistency(self) -> "ThreatIntelErrorEnvelope":
+        """429/503 must tell the client how long to wait; other statuses must not imply it."""
+        if self.status in (429, 503) and self.error.retry_after_seconds is None:
+            raise ValueError(f"status {self.status} requires error.retry_after_seconds")
+        if self.status not in (429, 503) and self.error.retry_after_seconds is not None:
+            raise ValueError(f"retry_after_seconds is not meaningful for status {self.status}")
+        return self
 
+    def to_response_body(self) -> Dict[str, Any]:
+        """The exact JSON body a host should return."""
+        return {"error": self.error.model_dump(exclude_none=True)}
 # ============================================================================
 # 4. Cross-Domain Integration Bridge Service
 # ============================================================================

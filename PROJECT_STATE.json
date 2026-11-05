@@ -39,8 +39,8 @@
     "agent6_extensions": 7,
     "total_submodules": 18,
     "total_test_files": 19,
-    "total_tests": 534,
-    "tests_passed": 534,
+    "total_tests": 849,
+    "tests_passed": 849,
     "tests_failed": 0,
     "warnings": 0,
     "pydantic_v2_compatible": true,
@@ -99,8 +99,8 @@
     "cold_import_asserted_under_ms": 2000
   },
   "test_results": {
-    "total_tests": 534,
-    "passed": 534,
+    "total_tests": 849,
+    "passed": 849,
     "failed": 0,
     "warnings": 0,
     "command": "PYTHONPATH=/home/user/cicc .venv/bin/pytest apps/threat_intelligence/tests -q",

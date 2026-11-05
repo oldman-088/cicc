@@ -5,7 +5,7 @@
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft - untouched)
 - Status: Stage 2 — P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (fixture-tested, none mounted)
-- Total Tests: 534/534 passed (0 warnings)
+- Total Tests: 849/849 passed (0 warnings)
 - Base: main @ ca8f82c
 - PR: #6 (OPEN, base main)
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
@@ -38,26 +38,45 @@ apps/threat_intelligence/
 ├── api_surface.py            # P3-02 typed route registry + dispatcher (NOT mounted)
 ├── collection_workers.py     # P3-03 job lifecycle, retries, leases, circuit breaker (no worker runs)
 ├── source_reliability.py     # reliability / freshness / evidence-gated verification
+├── observability.py          # P3-04 domain health, freshness, worker/conflict rollups (no daemon)
+│
+│  --- P0 domain capabilities (Agent 6, Stage 3) ---
+├── reports.py                # Domain B item 24: Threat Intelligence Reports + append-only history
+├── relationship_analysis.py  # P2-01 typed semantics, contradictions, cycle-safe traversal
+├── conflict_resolution.py    # P2-04 source claims vs normalized conclusions, deterministic
+├── live_source_readiness.py  # P2 opt-in live-source gate, schema validation, no network client
 │
 │  --- cross-agent coordination (Agent 6) ---
-├── integration_contracts.py  # Agent 1 / Agent 3 / Agent 4 payload & DTO models
+├── integration_contracts.py  # Agent 1 / Agent 3 / Agent 4 payload & DTO models (1.1.0-proposed)
 ├── contract_registry.py      # proposed-vs-accepted registry with pinned commit provenance
 │
-└── tests/                    # 19 test files, 534 tests
+└── tests/                    # 24 test files, 849 tests
 ```
 
 ### Layer dependency direction (verified acyclic by `test_package_integrity.py`)
+Derived by AST from the actual `import` statements, not from documentation:
 ```
+observability ──> collection_workers
+      │     └──> conflict_resolution ──> cisa_kev
+      │     └──> relationship_analysis ──> relationships
+      │     └──> source_reliability
+      └────> cisa_kev
+
 api_surface ──> integration_contracts ──> cisa_kev
-     │                              └──> vendor_advisories
+     │                             └──> vendor_advisories
      └────────> persistence
+
+live_source_readiness ──> integration_contracts, cisa_kev
+reports               ──> cisa_kev
 
 collection_workers, source_reliability, osint_sources, mitre_ingestion,
 relationships, enrichment, collection, campaigns, malware, ttps,
 threat_actors, mitre_mapping  ──> (leaf modules, no intra-package imports)
 ```
-Cold package import measured at ~135 ms in a clean interpreter and asserted
-`< 2000 ms`. All 18 submodules import standalone.
+`observability` is the only module with five intra-package dependencies; it imports services but
+is imported by none, so it sits at the top of the graph and no cycle is possible through it.
+Cold package import measured at ~181 ms in a clean interpreter and asserted
+`< 2000 ms`. All 23 submodules import standalone.
 
 ### P3-01 Persistence (Agent 6)
 - `SQLiteThreatIntelRepository` on the standard library `sqlite3`. **No SQLAlchemy,
@@ -108,6 +127,76 @@ Cold package import measured at ~135 ms in a clean interpreter and asserted
   flips it, and placeholder actors or references are rejected.
 - `assert_load_bearing` raises `ContractNotAcceptedError` while a contract is
   still a proposal, naming the owner, commit and document.
+
+### Domain B item 24 — Threat Intelligence Reports (Agent 6, Stage 3)
+- `ThreatIntelReportService` — typed reports with stable IDs, classification
+  (`unclassified` / `internal` / `confidential` / `restricted`), lifecycle
+  (`draft` → `in_review` → `published` / `retracted`), and kind.
+- **Reports reference entities; they never re-represent them.** Every relationship endpoint must
+  appear in `entity_refs`, so a report cannot invent an entity ID.
+- `content_hash` covers the analytical content only (title, summary, body, kind, classification,
+  references), so identity and bookkeeping fields are excluded and byte-identical analysis
+  deduplicates while any analytical change produces a new hash.
+- History is append-only: revision replaces the record and chains
+  `previous_content_hash` → `content_hash`. Prior records are never mutated in place.
+- Inference is never laundered: `ReportRelationshipRef.inferred` survives revision and
+  publication, and `has_inferred_relationships()` reports it.
+
+### Relationship analysis (Agent 6, Stage 3)
+- An **analysis layer over `relationships.py`**, reusing `RelationshipModel` and
+  `RELATIONSHIP_TYPES`. There is no second relationship schema.
+- Semantics per type: direction, symmetry, inverse, `exclusive_with`, transitivity — derived from
+  the existing type registry so a new type gets an entry automatically.
+- `SourceClaim`-style separation: `RelationshipAssertion` is what a source claimed; the normalized
+  `RelationshipModel` is the conclusion. Corroboration raises confidence without duplicating the
+  normalized record, and an inferred assertion never launders a directly-sourced one.
+- Exclusivity is declared as **unordered pairs** and expanded both ways, so detection does not
+  depend on the order assertions arrive in.
+- Contradictions preserve both sides. Resolution requires an attributable actor and a stated
+  basis, and supersedes rather than edits the earlier record.
+- Traversal is depth-, fan-out- and cycle-bounded; a cycle counts only when an edge not already
+  walked is encountered.
+- `PathResult.reliability_statement` refuses to describe an inferred path as confirmed, and the
+  hop is represented by the **strongest-origin** assertion rather than an arbitrary one.
+
+### Conflict resolution (Agent 6, Stage 3)
+- `SourceClaim` (what a source said) is kept strictly separate from `ResolvedValue` (what the
+  system concluded). Nothing collapses one into the other.
+- Deterministic strategies: highest-confidence-then-newest, newest-then-highest-confidence,
+  source-priority-then-confidence, majority-then-confidence, manual.
+- Detection is **order-independent**; the evidential tie-break key excludes `claim_id` so a genuine
+  tie is detectable and left `UNRESOLVED` rather than guessed.
+- Repeated ingestion of the same value from the same source is **idempotent** — no second claim, no
+  confidence inflation. A changed value appends a new claim and withdraws the old one from
+  consideration without deleting it.
+- Manual resolution requires an attributable actor and a stated basis, and supersedes the automated
+  record so the earlier outcome stays auditable.
+
+### Domain observability (Agent 6, Stage 3)
+- `ThreatIntelObservabilityService` **composes** `SourceReliabilityService`, `CollectionWorker`,
+  `ConflictResolutionService` and (optionally) `RelationshipAnalysisService`. It duplicates no state.
+- Freshness is **recomputed** from `last_success_at` against the caller's clock; reading the frozen
+  `data_age_seconds` would keep a days-old source looking fresh.
+- Health precedence: open circuit → never succeeded → weak reliability tier → stale →
+  never collected → unscored → healthy.
+- Events and snapshots are bounded. `runtime_status` is `caller_invoked_no_daemon` and every
+  snapshot repeats that no worker process or event loop is running.
+- **Scope boundary:** this is domain observability only. `to_agent1_payload()` formats values for
+  Agent 1's *proposed* heartbeat and marks `contract_status: proposed_not_accepted`; it does not
+  redefine Agent 1's shared system-health contract.
+
+### Live-source readiness (Agent 6, Stage 3)
+- **No network client exists in this package** (enforced by static check). A transport is injected
+  by the host.
+- Live execution requires **both** an environment opt-in (`CICC_TI_ALLOW_LIVE_SOURCES`) **and** a
+  caller-supplied `allow_live=True`. No test in the normal suite can satisfy both.
+- Credentials never pass through this layer: policies carry a `credential_ref` *name*, and a value
+  that looks like secret material is rejected at validation.
+- Payloads are validated before persistence — schema, record keys, record-count bounds, size and
+  content type — and a rejection returns a status rather than raising, so previously stored data is
+  never corrupted by a bad response.
+- A rate-limit floor is enforced between fetches, and a retrying policy is refused unless it
+  declares one.
 
 ### P1-04 OSINT layer (Agent 6)
 - `OSINTIngestionService` — single entry point; `tenant_id` scoped; `max_payload_bytes` cap (1 MiB default).
@@ -359,4 +448,4 @@ Branch: arena/28e50255-cicc
 PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 534/534 passed (0 warnings)
+Total Tests: 849/849 passed (0 warnings)

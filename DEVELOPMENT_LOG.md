@@ -4,8 +4,8 @@
 - Repository: oldman-088/cicc
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft - untouched)
-- Status: P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (all fixture-tested, none mounted)
-- Total Tests: 534/534 passed (0 warnings)
+- Status: Stage 3 — Domain B reports, relationship analysis, conflict resolution, domain observability, live-source readiness, frontend DTO amendments (all fixture-tested, none mounted)
+- Total Tests: 849/849 passed (0 warnings)
 - Base: main @ ca8f82c
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 - Agent: Arena.ai Agent Mode - Agent 6
@@ -297,7 +297,7 @@ objects by test. **Neither source branch was modified.**
 `apps/threat_intelligence/tests/test_package_integrity.py` — the repository ships
 no linter configuration, so these run through pytest:
 
-- Intra-package import graph built by AST is **acyclic**; all 18 submodules import
+- Intra-package import graph built by AST is **acyclic**; all 23 submodules import
   standalone in a clean interpreter.
 - No module imports a networking client (`requests`, `httpx`, `urllib.request`,
   `socket`, `aiohttp`, …); importing the package opens no socket (asserted in a
@@ -354,6 +354,75 @@ in this repository, so the suite above is the verification evidence.
 No worker process is running. No source is live. Static checks assert all four of
 those properties rather than merely documenting them.
 
+## Stage 3 (2026-11-05) — Domain B completion, domain observability, live-source readiness
+
+Continued under the owner's Milestone 3 direction: substantial autonomous engineering on the
+Threat Intelligence domain, no reduction to observation or handover work.
+
+### New capabilities
+
+| Module | Tests | What it adds |
+|---|---|---|
+| `reports.py` | 43 | Domain B item 24 — Threat Intelligence Reports. Typed model, stable IDs, classification, entity/relationship/evidence references, confidence + freshness, append-only revision history, content-hash deduplication, search/filter. |
+| `relationship_analysis.py` | 73 | Analysis layer over the existing `RelationshipModel` (no second schema). Typed semantics per relationship type (direction, symmetry, inverse, exclusivity, transitivity), assertion-level provenance, temporal validity, duplicate grouping, contradiction detection that preserves both sides, cycle-safe bounded traversal, shortest path with an explicit reliability statement. |
+| `conflict_resolution.py` | 47 | `SourceClaim` (what a source said) kept distinct from `ResolvedValue` (what the system concluded). Deterministic strategies, order-independent detection, exact ties left unresolved rather than guessed, manual resolution requires an attributable actor and a stated basis, nothing overwritten or deleted. |
+| `observability.py` | 36 | Domain operational visibility composed from the existing services. Source health with recomputed freshness, collection/worker state, circuit-breaker status, conflict and relationship rollups, bounded events and snapshots. |
+| `live_source_readiness.py` | 51 | Controlled preparation for live verification. Injected transport only, double-gated opt-in, schema/size/content-type validation, rate-limit floor, bounded retries, provenance stamping. |
+
+### Defects found and fixed this stage
+
+1. **Timezone handling in `source_reliability.py` (latent, pre-existing).** `_iso()` called
+   `astimezone()` on naive datetimes, which interprets them as *host-local* time, so every stored
+   timestamp was silently shifted by the host offset; and `_recompute()` subtracted a `Z`-suffixed
+   aware datetime from a possibly naive clock, raising `TypeError`. Added `to_utc()` (naive is
+   UTC, deterministic regardless of host zone) and normalised both operands. The existing 47
+   tests all used aware datetimes, so neither path was ever exercised. Regression-tested.
+2. **One-directional exclusivity table in relationship semantics.** `{"ATTRIBUTED_TO": ("TARGETS",)}`
+   flagged ATTRIBUTED_TO-then-TARGETS as a contradiction but silently accepted the reverse order.
+   Now declared as unordered pairs and expanded both ways; contradiction detection no longer
+   depends on arrival order. Regression-tested.
+3. **Path provenance could be laundered.** `find_path` picked the alphabetically-first assertion
+   connecting two entities, so an inferred edge could stand in for a directly-sourced one (or
+   vice versa). Now ranked by origin then confidence, and the reliability statement is derived
+   from the chosen edges. Regression-tested.
+4. **Dead "refuse to guess" branch in conflict resolution.** `claim_id` was part of the tie-break
+   key, so no two claims ever tied and an arbitrary claim silently won. Split into an evidential
+   key plus a deterministic final tie-break; exact ties now stay unresolved. Regression-tested.
+5. **Cycle detection false positive in traversal.** Walking back over the edge just arrived on was
+   counted as a cycle, so every two-node chain reported one. Only an edge not already walked
+   counts now. Regression-tested.
+6. **Stale freshness in observability.** Reading `record.data_age_seconds` verbatim reported the
+   age frozen at the last outcome, so a days-old source looked fresh forever. Freshness is now
+   recomputed from `last_success_at` against the caller's clock. Regression-tested.
+7. **`ConflictRecord` name collision** between `persistence.py` and `conflict_resolution.py`,
+   caught by the package-integrity duplicate-export check. The newer module yields: renamed to
+   `ConflictResolutionRecord`.
+
+### Backup Agent 4 frontend amendments (PR #6 comment 6657783177)
+
+All seven implemented in `integration_contracts.py` (contract `1.1.0-proposed`, 33 tests):
+typed entity DTOs with a closed type enum and confidence/verification kept separate; mandatory
+timezone-aware `collected_at` with no default; `tenant_id` removed from frontend envelopes;
+`{error: {code}}` envelope with `correlation_id` and `retry_after_seconds`; nullable
+`total_count` with `next_cursor` as the authoritative `has_more`; enums plus
+`age_seconds`/`stale_after_seconds`; per-item provenance and nullable detail
+`provenance_summary`. **Not accepted** — awaiting frontend-owner confirmation and a mounted host
+endpoint, per their own condition 8.
+
+### Test results
+```
+PYTHONPATH=/home/user/cicc .venv/bin/pytest apps/threat_intelligence/tests -q
+849 passed in 6.83s
+```
+24 test files, 23 modules. Environment: Python 3.11.2, `pytest-9.2.0`, `pydantic-2.14.3`.
+No CI workflow exists in this repository, so the suite above is the verification evidence.
+
+### Verification honesty (re-asserted)
+**Fixture-tested only.** No outbound network request was made — `live_source_readiness.py` holds
+no network client and requires both an injected transport and a double opt-in. No API is mounted.
+No worker process is running. No source is live. No contract is accepted. Static checks assert
+these properties rather than merely documenting them.
+
 ## Completion Status Summary
 ✅ Phase 0: COMPLETED (41/41 tests passed, commit f8f2868)
 ✅ Extended Authorization: COMPLETED (57 new tests, 98/98 total passed, commit d639eee)
@@ -375,10 +444,10 @@ those properties rather than merely documenting them.
 ✅ Handoff to Agent 2: READY (see above)
 
 # Last Updated
-2026-11-05 - Stage 2: persistence, API surface, collection workers, source reliability, contract registry and static checks added by Agent 6
+2026-11-05 - Stage 3: Threat Intelligence reports (Domain B item 24), relationship analysis, conflict resolution, domain observability, live-source readiness and Backup Agent 4's seven frontend amendments added by Agent 6
 Agent: Arena.ai Agent Mode - Agent 6 (Full Threat Intelligence Backup Engineer)
 Branch: arena/28e50255-cicc
 PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 534/534 passed (0 warnings)
+Total Tests: 849/849 passed (0 warnings)

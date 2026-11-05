@@ -44,8 +44,22 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def to_utc(moment: datetime) -> datetime:
+    """
+    Normalise a datetime to aware UTC.
+
+    A naive datetime is interpreted as UTC, not as host-local time. `datetime.astimezone()` on a
+    naive value assumes the host's local zone, which would silently shift every stored timestamp
+    by the host offset and make recorded times depend on where the code ran. This function is
+    deterministic regardless of host timezone, and matches the ``Z`` suffix `_iso` emits.
+    """
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)
+
+
 def _iso(moment: datetime) -> str:
-    moment = moment.astimezone(timezone.utc)
+    moment = to_utc(moment)
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
@@ -408,7 +422,10 @@ class SourceReliabilityService:
             record.data_age_seconds = None
             record.freshness_state = FreshnessState.UNKNOWN
         else:
-            age = (moment - datetime.fromisoformat(reference)).total_seconds()
+            # `reference` always carries a Z suffix, so it parses to an aware datetime. Normalise
+            # `moment` too: subtracting aware from naive raises TypeError, which previously made
+            # record_outcome crash for any caller passing a naive clock.
+            age = (to_utc(moment) - datetime.fromisoformat(reference)).total_seconds()
             record.data_age_seconds = round(age, 3)
             record.freshness_state = self.freshness_policy.classify(age)
 

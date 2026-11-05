@@ -5,7 +5,7 @@
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft - untouched)
 - Status: Stage 2 — P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (fixture-tested, none mounted)
-- Total Tests: 534/534 passed (0 warnings)
+- Total Tests: 849/849 passed (0 warnings)
 - Base: main @ ca8f82c
 - PR: #6 (OPEN, base main)
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
@@ -260,4 +260,4 @@ Branch: arena/28e50255-cicc
 PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 534/534 passed (0 warnings)
+Total Tests: 849/849 passed (0 warnings)

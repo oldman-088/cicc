@@ -44,9 +44,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from apps.threat_intelligence.integration_contracts import (
     EXPERIMENTAL_DEMO_DATA_ONLY,
+    DataOrigin,
     FreshnessMetaDTO,
+    HostMountStatus,
     PaginationMetaDTO,
+    ThreatIntelErrorBody,
     ThreatIntelErrorEnvelope,
+    VerificationMode,
 )
 from apps.threat_intelligence.persistence import (
     PersistenceError,
@@ -207,7 +211,9 @@ class ApiResponse(BaseModel):
     status: int = Field(200, ge=100, le=599)
     data: Any = None
     page: Optional[PaginationMetaDTO] = None
-    freshness: FreshnessMetaDTO = Field(default_factory=FreshnessMetaDTO)
+    freshness: FreshnessMetaDTO = Field(
+        ..., description="Required: freshness may never default to 'now' (amendment 2)"
+    )
 
 
 # ============================================================================
@@ -303,12 +309,31 @@ ROUTES: Tuple[RouteSpec, ...] = (
 )
 
 
-def error_envelope(status: int, error_code: str, message: str, **details: Any) -> ThreatIntelErrorEnvelope:
+def error_envelope(
+    status: int,
+    error_code: str,
+    message: str,
+    correlation_id: Optional[str] = None,
+    retry_after_seconds: Optional[int] = None,
+    **details: Any,
+) -> ThreatIntelErrorEnvelope:
+    """
+    Build the amended `{error: {code, ...}}` envelope.
+
+    Amendment 4 alignment: the body is nested under `error`, carries a `correlation_id`, and
+    populates `retry_after_seconds` only where it is meaningful (429/503).
+    """
     return ThreatIntelErrorEnvelope(
         status=status,
-        error_code=error_code,
-        message=message,
-        details=details or None,
+        error=ThreatIntelErrorBody(
+            code=error_code,
+            message=message,
+            correlation_id=correlation_id,
+            details=details or None,
+            retry_after_seconds=(
+                retry_after_seconds if status in (429, 503) else None
+            ),
+        ),
     )
 
 
@@ -467,13 +492,24 @@ class ThreatIntelApiSurface:
 
     # -------------------------------------------------------------- handlers
 
-    def _freshness(self) -> FreshnessMetaDTO:
+    def _freshness(self, *, collected_at: Optional[datetime] = None) -> FreshnessMetaDTO:
+        """
+        Build response freshness metadata.
+
+        `collected_at` is taken from the surface's own clock rather than defaulted, and
+        `age_seconds`/`stale_after_seconds` are left unset because this package cannot truthfully
+        assert a staleness horizon for data it has not collected.
+        """
+        moment = collected_at or datetime.now(timezone.utc)
         return FreshnessMetaDTO(
-            origin=EXPERIMENTAL_DEMO_DATA_ONLY,
-            verification_mode=self._verification_mode,
+            origin=DataOrigin.EXPERIMENTAL_DEMO,
+            verification_mode=VerificationMode(self._verification_mode),
             host_mount_status=(
-                "mounted" if self._mounted else "not_mounted_pending_owner_approval"
+                HostMountStatus.MOUNTED_BY_HOST
+                if self._mounted
+                else HostMountStatus.NOT_MOUNTED_PENDING_OWNER_APPROVAL
             ),
+            collected_at=moment,
         )
 
     def _invoke(

@@ -358,3 +358,307 @@ class TestFileBackedAndUrlFactory:
             r.upsert_entity(_entity(), actor="tester")
         with pytest.raises(sqlite3.ProgrammingError):
             r._conn.execute("SELECT 1")
+
+
+# ============================================================================
+# P1 hardening: transactions, concurrency, reopen behaviour, migration safety
+# ============================================================================
+
+
+class TestTransactionRollback:
+    """A failed write must leave prior data intact, never half-applied."""
+
+    def test_failed_insert_leaves_existing_rows_untouched(self, repo):
+        repo.upsert_entity(_entity(), actor="tester")
+        repo.append_observation(_observation())
+        before = len(repo.list_observations("t1", "indicator", "IOC-1"))
+
+        with pytest.raises((sqlite3.IntegrityError, sqlite3.OperationalError)):
+            repo._conn.execute(
+                "INSERT INTO ti_observations (tenant_id, entity_type, entity_id, source_id,"
+                " observed_value, confidence, verification_mode, provenance, observed_at,"
+                " recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                # NULL tenant_id violates the NOT NULL constraint mid-statement.
+                (None, "indicator", "IOC-1", "source-a", "v", 0.5,
+                 "fixture_tested", "p", utcnow_iso(), utcnow_iso()),
+            )
+
+        assert len(repo.list_observations("t1", "indicator", "IOC-1")) == before
+        assert repo.get_entity("t1", "indicator", "IOC-1") is not None
+
+    def test_explicit_rollback_discards_pending_rows(self, repo):
+        repo.upsert_entity(_entity(), actor="tester")
+        repo._conn.execute("BEGIN")
+        try:
+            repo._conn.execute(
+                "INSERT INTO ti_observations (tenant_id, entity_type, entity_id, source_id,"
+                " observed_value, confidence, verification_mode, provenance, observed_at,"
+                " recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("t1", "indicator", "IOC-9", "source-a", "rollback-me", 0.5,
+                 "fixture_tested", "p", utcnow_iso(), utcnow_iso()),
+            )
+        finally:
+            repo._conn.execute("ROLLBACK")
+
+        assert repo.list_observations("t1", "indicator", "IOC-9") == []
+
+    def test_append_only_trigger_abort_does_not_corrupt_other_tables(self, repo):
+        repo.upsert_entity(_entity(), actor="tester")
+        repo.append_observation(_observation())
+        repo.audit(AuditRecord(
+            tenant_id="t1", action="test", actor="tester", detail="before abort",
+            logged_at=utcnow_iso(),
+        ))
+        audit_before = len(repo.list_audit("t1"))
+
+        with pytest.raises((sqlite3.IntegrityError, sqlite3.OperationalError)):
+            repo._conn.execute("DELETE FROM ti_observations WHERE tenant_id = ?", ("t1",))
+
+        assert len(repo.list_observations("t1", "indicator", "IOC-1")) == 1
+        assert len(repo.list_audit("t1")) == audit_before
+        assert repo.get_entity("t1", "indicator", "IOC-1") is not None
+
+
+class TestConcurrentAccess:
+    """
+    SQLite is single-writer. These tests assert that the repository's internal lock
+    serialises writers correctly rather than claiming multi-process production safety.
+    """
+
+    def test_concurrent_writers_are_serialised_without_loss(self):
+        import threading as _threading
+
+        repo = SQLiteThreatIntelRepository(":memory:")
+        try:
+            errors = []
+
+            def writer(worker_id):
+                try:
+                    for i in range(25):
+                        repo.append_observation(
+                            _observation(entity_id=f"IOC-{worker_id}", source=f"src-{worker_id}-{i}")
+                        )
+                except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
+                    errors.append((worker_id, repr(exc)))
+
+            threads = [_threading.Thread(target=writer, args=(w,)) for w in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert errors == []
+            for w in range(4):
+                assert len(repo.list_observations("t1", "indicator", f"IOC-{w}")) == 25
+        finally:
+            repo.close()
+
+    def test_concurrent_upserts_do_not_lose_the_entity(self):
+        import threading as _threading
+
+        repo = SQLiteThreatIntelRepository(":memory:")
+        try:
+            errors = []
+
+            def upserter(worker_id):
+                try:
+                    for _ in range(10):
+                        repo.upsert_entity(
+                            _entity(confidence=0.5 + worker_id * 0.01), actor=f"worker-{worker_id}"
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(repr(exc))
+
+            threads = [_threading.Thread(target=upserter, args=(w,)) for w in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert errors == []
+            entity = repo.get_entity("t1", "indicator", "IOC-1")
+            assert entity is not None
+            assert 0.0 <= entity.confidence <= 1.0
+        finally:
+            repo.close()
+
+    def test_concurrent_readers_see_a_consistent_snapshot(self):
+        import threading as _threading
+
+        repo = SQLiteThreatIntelRepository(":memory:")
+        try:
+            repo.upsert_entity(_entity(), actor="tester")
+            for i in range(10):
+                repo.append_observation(_observation(source=f"src-{i}"))
+
+            observed_counts = []
+            barrier = _threading.Barrier(4)
+
+            def reader():
+                barrier.wait()
+                observed_counts.append(len(repo.list_observations("t1", "indicator", "IOC-1")))
+
+            threads = [_threading.Thread(target=reader) for _ in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert observed_counts == [10, 10, 10, 10]
+        finally:
+            repo.close()
+
+
+class TestReopenBehaviour:
+    """Append-only guarantees must survive closing and reopening a populated database."""
+
+    def test_reopening_a_populated_database_still_enforces_append_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ti.db")
+            r1 = SQLiteThreatIntelRepository(path)
+            r1.upsert_entity(_entity(), actor="tester")
+            r1.append_observation(_observation())
+            r1.close()
+
+            r2 = SQLiteThreatIntelRepository(path)
+            try:
+                assert len(r2.list_observations("t1", "indicator", "IOC-1")) == 1
+                with pytest.raises((sqlite3.IntegrityError, sqlite3.OperationalError)):
+                    r2._conn.execute("DELETE FROM ti_observations WHERE tenant_id = ?", ("t1",))
+                assert len(r2.list_observations("t1", "indicator", "IOC-1")) == 1
+            finally:
+                r2.close()
+
+    def test_self_check_consumes_no_autoincrement_id_across_reopens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ti.db")
+            r1 = SQLiteThreatIntelRepository(path)
+            r1.append_observation(_observation())
+            first_id = r1.list_observations("t1", "indicator", "IOC-1")[0].observation_id
+            r1.close()
+
+            r2 = SQLiteThreatIntelRepository(path)
+            try:
+                r2.append_observation(_observation(source="source-b"))
+                second_id = [
+                    o for o in r2.list_observations("t1", "indicator", "IOC-1")
+                    if o.source_id == "source-b"
+                ][0].observation_id
+                assert second_id == first_id + 1
+            finally:
+                r2.close()
+
+    def test_self_check_leaves_no_probe_rows_behind_after_reopen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ti.db")
+            r1 = SQLiteThreatIntelRepository(path)
+            r1.append_observation(_observation())
+            r1.close()
+
+            for _ in range(3):
+                r = SQLiteThreatIntelRepository(path)
+                try:
+                    probe_rows = r._conn.execute(
+                        "SELECT COUNT(*) AS c FROM ti_observations WHERE tenant_id = ?",
+                        ("__append_only_self_check__",),
+                    ).fetchone()["c"]
+                    assert probe_rows == 0
+                finally:
+                    r.close()
+
+    def test_triggers_survive_reopen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ti.db")
+            SQLiteThreatIntelRepository(path).close()
+            r = SQLiteThreatIntelRepository(path)
+            try:
+                triggers = {
+                    row["name"]
+                    for row in r._conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+                    ).fetchall()
+                }
+                assert len(triggers) >= 2 * len(APPEND_ONLY_TABLES)
+            finally:
+                r.close()
+
+
+class TestMigrationSafety:
+    """
+    The schema is created with IF NOT EXISTS semantics: reopening never drops or
+    recreates a table, so no existing row can be destroyed by re-initialisation.
+    """
+
+    def test_schema_creation_is_non_destructive_on_reopen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ti.db")
+            r1 = SQLiteThreatIntelRepository(path)
+            r1.upsert_entity(_entity(), actor="tester")
+            r1.append_observation(_observation())
+            r1.audit(AuditRecord(
+                tenant_id="t1", action="create", actor="tester",
+                detail="kept", logged_at=utcnow_iso(),
+            ))
+            r1.close()
+
+            r2 = SQLiteThreatIntelRepository(path)
+            try:
+                assert r2.get_entity("t1", "indicator", "IOC-1") is not None
+                assert len(r2.list_observations("t1", "indicator", "IOC-1")) == 1
+                assert len(r2.list_audit("t1")) >= 1
+            finally:
+                r2.close()
+
+    def test_schema_uses_create_if_not_exists_only(self):
+        from apps.threat_intelligence.persistence import SCHEMA_SQL
+
+        statements = [
+            s.strip() for s in SCHEMA_SQL.split(";") if s.strip() and not s.strip().startswith("--")
+        ]
+        create_statements = [s for s in statements if s.upper().startswith("CREATE")]
+        assert create_statements, "schema should contain CREATE statements"
+        for statement in create_statements:
+            assert "IF NOT EXISTS" in statement.upper(), (
+                f"destructive or non-idempotent DDL found: {statement[:80]}"
+            )
+        for forbidden in ("DROP TABLE", "DROP INDEX", "TRUNCATE", "ALTER TABLE", "DELETE FROM"):
+            assert forbidden not in SCHEMA_SQL.upper(), f"schema contains {forbidden}"
+
+    def test_verify_append_only_can_be_disabled_without_losing_protection(self):
+        """Disabling the self-check must not disable the triggers themselves."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ti.db")
+            r = SQLiteThreatIntelRepository(path, verify_append_only=False)
+            try:
+                r.append_observation(_observation())
+                with pytest.raises((sqlite3.IntegrityError, sqlite3.OperationalError)):
+                    r._conn.execute("DELETE FROM ti_observations WHERE tenant_id = ?", ("t1",))
+            finally:
+                r.close()
+
+
+class TestSqliteLimitations:
+    """Explicit documentation-by-test of what this layer does NOT provide."""
+
+    def test_repository_is_in_process_and_not_a_server(self, repo):
+        # No listening socket, no server object: the repository is a file handle.
+        assert not hasattr(repo, "serve")
+        assert not hasattr(repo, "listen")
+        assert repo.database_path == ":memory:"
+
+    def test_tenant_isolation_is_application_level_not_a_security_boundary(self, repo):
+        """
+        Both tenants live in the same SQLite file with the same connection privileges.
+        Isolation is enforced by query discipline, so it is NOT a multi-tenant production
+        security boundary and requires a deployment-level review before such a claim.
+        """
+        repo.upsert_entity(_entity(tenant="t1"), actor="tester")
+        repo.upsert_entity(_entity(tenant="t2", entity_id="IOC-2"), actor="tester")
+
+        # Through the API, tenants cannot see each other.
+        assert repo.get_entity("t1", "indicator", "IOC-2") is None
+        assert repo.get_entity("t2", "indicator", "IOC-1") is None
+
+        # But a caller holding the raw connection can read both: same file, same privileges.
+        rows = repo._conn.execute("SELECT DISTINCT tenant_id FROM ti_entities").fetchall()
+        assert {row["tenant_id"] for row in rows} == {"t1", "t2"}

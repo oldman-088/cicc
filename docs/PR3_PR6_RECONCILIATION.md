@@ -271,3 +271,101 @@ git cat-file -t 933b29f956ea0092aed56745020a4919fe1ffcd6
 git cat-file -t 805cd2b17eda826de8ec7b982dc9377315352327
 comm -23 <(git show 1a46f70:<file> | sort -u) <(git show a221003:<file> | sort -u)
 ```
+
+---
+
+## 10. Review-ready reconciliation recommendation for the repository owner
+
+*Added 2026-11-05 at the owner's Milestone 3 request: a precise, decision-ready recommendation.
+The merge-order decision itself remains the owner's — Agent 6 will not make it.*
+
+### 10.1 What is actually true right now (re-verified before writing this)
+
+```bash
+$ git ls-remote origin refs/heads/main
+ca8f82c0500637e22851d7128cddf99081ef3c08      refs/heads/main
+
+$ git ls-tree -r --name-only 1a46f70 -- apps/
+apps/threat_intelligence/cisa_kev.py
+apps/threat_intelligence/tests/test_cisa_kev.py
+apps/threat_intelligence/tests/test_vendor_advisories.py
+apps/threat_intelligence/vendor_advisories.py
+```
+
+- `main` is still at `ca8f82c`; **neither PR is merged.**
+- PR #3's `apps/` tree is **4 files**. The other 9 recovered modules and 9 test files exist
+  only on this branch.
+- File-set comparison at Stage 3: **0 files only in PR #3, 12 in both, 49 only in PR #6.**
+  `README.md` is byte-identical, so the **7 root docs are the only real conflicts.**
+
+### 10.2 Recommendation
+
+**Land PR #3 first, then rebase `arena/28e50255-cicc` onto the new `main`.**
+
+Rationale, in order of weight:
+
+1. **PR #3 is the primary owner's work.** Agent 2 owns Threat Intelligence; landing their PR
+   first keeps the ownership record honest and avoids the appearance of a backup agent
+   pre-empting the owner.
+2. **PR #3 is a strict subset.** Every file it touches also exists here, and no PR #3 method or
+   test was removed. Merging it first destroys nothing.
+3. **The conflict surface is small and non-code.** After PR #3 lands, the only conflicts are the
+   7 root docs (`PROJECT_STATE.json`, `DEVELOPMENT_LOG.md`, `BACKLOG.md`,
+   `MASTER_TASK_QUEUE.md`, `PROJECT_ARCHITECTURE.md`, `INTEGRATION_PREPARATION_REPORT.md`,
+   `SECURITY_REVIEW.md`). All are cumulative logs, so the resolution is to keep this branch's
+   newer text and re-add any Agent 2 entry that is not already reflected.
+4. **`cisa_kev.py` and `vendor_advisories.py` will not textually conflict** once PR #3 lands: this
+   branch's versions are supersets of PR #3's (verified method-by-method in §3). Git may still
+   report them as modified-by-both, in which case this branch's version is the correct resolution
+   *provided* the §3.3 confidence-defect regressions are kept.
+
+### 10.3 Exact sequence to run (once the owner approves)
+
+```bash
+# 1. Land PR #3 (owner action; Agent 6 will not do this).
+gh pr merge 3 --merge
+
+# 2. On this branch only:
+git fetch origin
+git rebase origin/main
+#    Conflicts expected in the 7 root docs only.
+#    For each: keep this branch's Stage-3 text, then re-add any Agent 2 entry
+#    that this branch does not already reflect.
+#    For cisa_kev.py / vendor_advisories.py if reported: take this branch's
+#    version, then confirm the two confidence regressions still pass.
+
+# 3. Prove nothing was lost:
+PYTHONPATH=/home/user/cicc .venv/bin/pytest apps/threat_intelligence/tests -q
+#    Expect 849 passed. A lower count means a regression test was dropped.
+
+# 4. Push the rebased branch and let PR #6 update.
+git push --force-with-lease origin arena/28e50255-cicc
+```
+
+`--force-with-lease`, never `--force`: it refuses to overwrite a remote ref that moved since the
+last fetch.
+
+### 10.4 Acceptance criteria for whoever performs the merge
+
+- [ ] `main` advances and contains PR #3's 4 `apps/` files.
+- [ ] Full suite is **849 passed, 0 warnings** after the rebase.
+- [ ] `git diff --exit-code ca8f82c HEAD -- README.md` still passes (Master Prompt untouched).
+- [ ] `git cat-file -t 933b29f…` and `805cd2b…` both still return `commit`.
+- [ ] Both confidence-defect regression tests still present and passing.
+- [ ] PR #6 remains open and points at the rebased head.
+
+### 10.5 If the owner prefers the alternative order
+
+Merging PR #6 first is *technically* safe — PR #3 contributes no file this branch lacks, and no
+PR #3 method or test would be lost, because §3 shows this branch already contains supersets of
+both. The cost is purely procedural: it inverts the ownership record, and Agent 2 would then have
+to rebase. If the owner chooses this, PR #3 should be rebased by Agent 2 (or with their explicit
+consent), never by Agent 6.
+
+### 10.6 Standing constraints Agent 6 will not cross
+
+- Will not merge or close PR #3, rebase it, or rewrite its history.
+- Will not push to `main`.
+- Will not force-push any branch other than `arena/28e50255-cicc`, and only with `--force-with-lease`.
+- Will not resolve PR #3's conflicts on Agent 2's behalf.
+- Will not delete working implementation to shrink a diff.
