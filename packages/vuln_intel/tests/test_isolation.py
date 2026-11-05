@@ -43,8 +43,19 @@ def test_no_shared_module_is_imported() -> None:
 
 
 def test_no_web_or_orm_framework_dependency() -> None:
-    """Keeps the package adoptable without new pins in the API container."""
-    heavy = {"fastapi", "starlette", "sqlalchemy", "alembic", "psycopg", "pydantic"}
+    """Keeps the package adoptable without new pins in the API container.
+
+    `jsonschema` and `referencing` are here for the same reason as the web and ORM
+    frameworks: they are **test-only**. The CTIS interop adapter emits documents that
+    are validated against a real schema, but the validation happens in the test suite,
+    never at runtime. If this package ever imported jsonschema to emit a document, it
+    would have taken on a dependency it does not need, in the one container that
+    promised not to grow one.
+    """
+    heavy = {
+        "fastapi", "starlette", "sqlalchemy", "alembic", "psycopg", "pydantic",
+        "jsonschema", "referencing",
+    }
     offenders: dict[str, set[str]] = {}
     for path in PACKAGE_DIR.rglob("*.py"):
         hits = {name for name in _module_imports(path) if name.split(".")[0] in heavy}
