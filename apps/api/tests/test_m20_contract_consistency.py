@@ -68,6 +68,8 @@ def test_dto_fields_match_pydantic_models(client):
         "DecisionIn": r.DecisionIn, "AgentRegisterIn": r.AgentRegisterIn,
     }
     for name, fields in d.items():
+        if name not in models_map:  # output DTOs (e.g. AgentDTO) are pinned separately
+            continue
         actual = set(models_map[name].model_fields.keys())
         documented = {f.rstrip("?") for f in fields}
         assert documented == actual, f"{name}: documented {sorted(documented)} != actual {sorted(actual)}"
@@ -145,3 +147,13 @@ def test_duplicate_webhook_idempotent_repeatedly(client):
     assert all(c["duplicate"] for c in codes[1:])
     tasks = client.get("/api/v1/coordination/tasks?kind=pr_opened", headers=R).json()["tasks"]
     assert [t["task_id"] for t in tasks].count("gh-m20-dup") == 1
+
+
+def test_agent_dto_matches_documented_fields(client):
+    """M21: pin the GET /agents wire fields to the documented AgentDTO
+    (Agent 4's PR #2 flagged a doc/wire mismatch — keep them aligned)."""
+    from app.coordination import contract as cd
+    client.post("/api/v1/coordination/agents/register", json={"agent": "dto-pin"}, headers=W)
+    a = client.get("/api/v1/coordination/agents", headers=R).json()["agents"][0]
+    documented = set(cd.contract_v1()["dtos"]["AgentDTO (GET /agents)"])
+    assert set(a.keys()) == documented, f"wire {sorted(a.keys())} != documented {sorted(documented)}"

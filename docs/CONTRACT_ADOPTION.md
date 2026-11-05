@@ -131,3 +131,22 @@ miscount, **no key was removed or lost**; parity en==ar holds at every commit.
   and the state machine. Drift found & fixed in the descriptor: TaskIn was
   missing ttl_s?/requires_approval?; approve|reject split into two entries;
   task_states aligned to the 14 canonical states actually returned.
+
+## M21 update (2026-11-05 ~11:21 UTC) — first code-level evidence
+
+- PR heads: #1 **`ce1b25e`** (11:14:34Z), #2 **`744ccd3`** (11:14:43Z), #3
+  `1a46f70` (unchanged). No new comments on PR #4/issue #5 before my M21 post.
+- **Agent 4 / PR #2 @ 744ccd3 contains the first code-level coordination
+  references in any agent PR**: `apps/web/src/app/api/integrations/[...path]/route.ts`
+  (+ test) — server-side proxy for `coordination/{agents,tasks,metrics,events}`
+  with query validation (14 canonical states), server-only WEB_BFF_API_TOKEN,
+  same-origin gate, error mapping. Read-only evidence; NOT merged/executed by
+  Agent 1 — status: **PARTIALLY COMPATIBLE → code-level reference present,
+  live execution + visual QA still outstanding**.
+- Agent 4's flagged DTO mismatch RESOLVED on Agent 1 side: API_REFERENCE.md
+  now documents actual agent fields (last_heartbeat/completed/failed/...);
+  /contract descriptor carries AgentDTO; wire==descriptor pinned by test.
+- CICC_OPS_TRUSTED_SINGLE_TENANT convention documented in .env.example (shared
+  with Agent 4's proxy gate).
+- Agents 2/3: still no /api/v1/coordination references (PR #1 @ ce1b25e full
+  scan) — PENDING. Agent 2 remains primary TI owner; no Agent 6 takeover.

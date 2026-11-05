@@ -75,3 +75,9 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   tests: approval expiry 410, TTL expiry via sweep, stale-agent heartbeat
   recovery, repeated duplicate-webhook idempotency). Whole product still
   ~25–35%; DoD §17 unmet -> not production-ready.
+
+## M21 re-confirmation (2026-11-05 ~11:21 UTC)
+- `main` still `ca8f82c`; `README.md` (v1.0) unchanged, unmodified. Agent 1
+  scope still ~90%; whole product estimate moves slightly up to ~30–40% now
+  that PR #2 @744ccd3 carries a code-level BFF proxy for coordination reads
+  (still unverified live). DoD §17 unmet -> not production-ready.

@@ -36,7 +36,7 @@ Env: `CICC_OPS_READ_TOKEN`, `CICC_OPS_WRITE_TOKEN`, `CICC_GH_WEBHOOK_SECRET`
 
 ## Coordination GET DTOs (dashboard reads)
 
-- `GET /api/v1/coordination/agents` → `{agents: [{agent, specialization, capabilities[], status, stale, last_seen, active_tasks, completed_tasks, failed_tasks, ...}]}` — `stale` computed vs `CICC_AGENT_STALE_S` (300s).
+- `GET /api/v1/coordination/agents` → `{agents: [{agent, specialization, capabilities[], status, stale, version, meta, last_heartbeat, registered_at, active_tasks, completed, failed, retries, by_state{}}]}` — `stale` computed vs `CICC_AGENT_STALE_S` (300s). (M21: corrected field names to the actual wire format — previously documented as last_seen/completed_tasks/failed_tasks; see PR #4.)
 - `GET /api/v1/coordination/tasks?state=&agent=&kind=&dead_letter=&limit=` → `{tasks: [{task_id, event_id, source, kind, agent, state, priority, repo, pr_ref, branch_ref, title, attempts, result, owner, depends_on[], timeout_s, expires_at, dead_letter, routing_explanation, progress, next_retry_at, payload, handoff, created_at, updated_at}]}` — `state` is one of the 14 canonical states.
 - `GET /api/v1/coordination/tasks/dag?limit=` → `{nodes: [{task_id, kind, state, agent, priority}], edges: [{from, to}], known_ids[]}`.
 - `GET /api/v1/coordination/metrics` → `{tasks_total, by_state{}, by_kind{}, active_by_agent{}, avg_progress_active, dead_lettered, deliveries_total, deliveries_by_outcome{}, approvals_pending, agents_registered, agents_online}` — honest DB counts; no fabrication.

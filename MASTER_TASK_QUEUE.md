@@ -135,6 +135,20 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
   code-level adoption yet.
 
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

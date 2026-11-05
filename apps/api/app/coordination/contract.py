@@ -65,7 +65,7 @@ def contract_v1() -> dict:
             "approvals": "additionally require approver principal (CICC_OPS_APPROVERS)",
             "webhook": "X-Hub-Signature-256 HMAC-SHA256 with CICC_GH_WEBHOOK_SECRET (no bearer token)",
             "bff": "browser clients never hold tokens; apps/web BFF proxies server-side",
-            "tenant": "PENDING owner decision — single-tenant now; no tenant header required or accepted",
+            "tenant": "PENDING owner decision — single-tenant now; no tenant header required or accepted. BFF deployments that gate on a single-tenant declaration should set CICC_OPS_TRUSTED_SINGLE_TENANT=true (see .env.example)",
         },
         "endpoints": ENDPOINTS,
         "task_states": TASK_STATES,
@@ -75,6 +75,7 @@ def contract_v1() -> dict:
             "ProgressIn": ["percent", "note?"],
             "DecisionIn": ["decided_by", "note?"],
             "AgentRegisterIn": ["agent", "specialization?", "capabilities?", "version?", "meta?"],
+            "AgentDTO (GET /agents)": ["agent", "specialization", "capabilities", "status", "stale", "version", "meta", "last_heartbeat", "registered_at", "active_tasks", "completed", "failed", "retries", "by_state"],
         },
         "error_codes": ERROR_CODES,
         "idempotency": {

@@ -251,6 +251,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
 
+## Done — Milestone 21 (PR #4 update)
+
+- M21-1: first code-level coordination reference detected in an agent PR
+  (PR #2 @744ccd3 integrations route.ts) — recorded as read-only evidence;
+  adoption still requires Agent 4's live run + QA. DTO mismatch they flagged
+  resolved (docs aligned to wire; descriptor AgentDTO; pinned by test).
+- M21-4: AgentDTO wire==descriptor test; .env.example BFF conventions.
+- M21-6: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -441,6 +452,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M20-5 master prompt re-verified README.md@main@ca8f82c v1.0 (diff empty).
 - Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
+
+## Done — Milestone 21 (PR #4 update)
+
+- M21-1: first code-level coordination reference detected in an agent PR
+  (PR #2 @744ccd3 integrations route.ts) — recorded as read-only evidence;
+  adoption still requires Agent 4's live run + QA. DTO mismatch they flagged
+  resolved (docs aligned to wire; descriptor AgentDTO; pinned by test).
+- M21-4: AgentDTO wire==descriptor test; .env.example BFF conventions.
+- M21-6: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
 
 ## Next (backlog, priority order)
 
@@ -636,6 +658,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
 
+## Done — Milestone 21 (PR #4 update)
+
+- M21-1: first code-level coordination reference detected in an agent PR
+  (PR #2 @744ccd3 integrations route.ts) — recorded as read-only evidence;
+  adoption still requires Agent 4's live run + QA. DTO mismatch they flagged
+  resolved (docs aligned to wire; descriptor AgentDTO; pinned by test).
+- M21-4: AgentDTO wire==descriptor test; .env.example BFF conventions.
+- M21-6: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -823,6 +856,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
 
+## Done — Milestone 21 (PR #4 update)
+
+- M21-1: first code-level coordination reference detected in an agent PR
+  (PR #2 @744ccd3 integrations route.ts) — recorded as read-only evidence;
+  adoption still requires Agent 4's live run + QA. DTO mismatch they flagged
+  resolved (docs aligned to wire; descriptor AgentDTO; pinned by test).
+- M21-4: AgentDTO wire==descriptor test; .env.example BFF conventions.
+- M21-6: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -1007,6 +1051,17 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M20-5 master prompt re-verified README.md@main@ca8f82c v1.0 (diff empty).
 - Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
+
+## Done — Milestone 21 (PR #4 update)
+
+- M21-1: first code-level coordination reference detected in an agent PR
+  (PR #2 @744ccd3 integrations route.ts) — recorded as read-only evidence;
+  adoption still requires Agent 4's live run + QA. DTO mismatch they flagged
+  resolved (docs aligned to wire; descriptor AgentDTO; pinned by test).
+- M21-4: AgentDTO wire==descriptor test; .env.example BFF conventions.
+- M21-6: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
 
 ## Next (backlog, priority order)
 

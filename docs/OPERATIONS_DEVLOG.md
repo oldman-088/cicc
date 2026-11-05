@@ -234,3 +234,19 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - Live: contract_check 27/27 @11:12:05Z, E2E 22/22 @11:12:08Z; API 173/173
   (7 real-PG + 1 live-GitHub); web 23/23 + tsc. PR heads unchanged
   (f56447c/3462a8b/1a46f70); master prompt README.md@main@ca8f82c unchanged.
+
+## 2026-11-05 — Milestone 21 (branch arena/961971ed-cicc, PR #4)
+
+- First code-level integration evidence: PR #2 @744ccd3 (Agent 4) adds
+  apps/web/src/app/api/integrations/[...path]/route.ts — server-side proxy for
+  coordination/{agents,tasks,metrics,events} w/ server-only token, same-origin
+  gate, validated queries, error mapping. Recorded read-only; live execution
+  by Agent 4 still outstanding.
+- Agent-4-flagged DTO mismatch fixed on Agent 1 side: API_REFERENCE.md agent
+  fields corrected (last_heartbeat/completed/failed/active_tasks/retries/
+  by_state); contract descriptor AgentDTO added; test pins wire == descriptor.
+- .env.example: WEB_BFF_API_TOKEN, WEB_BFF_ENFORCE_SAME_ORIGIN,
+  CICC_OPS_TRUSTED_SINGLE_TENANT documented.
+- PR #1 advanced to ce1b25e (still no coordination refs); PR #3 1a46f70.
+  Agents 2/3 PENDING. API 174/174 (7 real-PG + 1 live-GitHub); web 23/23+tsc;
+  contract_check 27/27 @11:21:17Z; E2E 22/22 @11:21:23Z.
