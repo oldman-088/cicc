@@ -45,9 +45,18 @@ test("failure states: coordination and intelligence pages are honestly unavailab
 
 test("cross-workspace journey: shell navigation reaches investigations and settings", async ({ page }) => {
   await page.goto("/", { waitUntil: "networkidle" });
-  await page.getByRole("link", { name: "Investigations" }).first().click();
+  const investigationsLink = page.getByRole("link", { name: "Investigations" }).first();
+  if (!(await investigationsLink.isVisible())) {
+    // Mobile layouts collapse navigation behind a toggle; open it like a user would.
+    await page.getByRole("button", { name: /Open workspace navigation/ }).click();
+  }
+  await investigationsLink.click();
   await expect(page).toHaveURL(/\/investigations$/);
   await expect(page.getByRole("heading", { name: "Investigations", level: 1 })).toBeVisible();
-  await page.getByRole("link", { name: "Settings" }).first().click();
+  const settingsLink = page.getByRole("link", { name: "Settings" }).first();
+  if (!(await settingsLink.isVisible())) {
+    await page.getByRole("button", { name: /Open workspace navigation/ }).click();
+  }
+  await settingsLink.click();
   await expect(page).toHaveURL(/\/settings$/);
 });
