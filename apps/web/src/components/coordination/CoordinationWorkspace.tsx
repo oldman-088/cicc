@@ -8,9 +8,13 @@ import {
   parseCoordinationAgents,
   parseCoordinationEvents,
   parseCoordinationMetrics,
+  parseCoordinationTaskEvents,
+  coordinationTaskEventsEndpoint,
+  readIntegrationResource,
   parseCoordinationTasks,
   type CoordinationAgent,
   type CoordinationEvent,
+  type CoordinationTaskEvent,
   type CoordinationMetrics,
   type CoordinationTask,
 } from "../../lib/integration-api";
@@ -57,6 +61,12 @@ type Messages = {
   created: string;
   updated: string;
   deadLetter: string;
+  viewEvents: string;
+  hideEvents: string;
+  loadingEvents: string;
+  noEvents: string;
+  eventsError: string;
+  correlationKey: string;
   stale: string;
   health: string;
   agentStatus: string;
@@ -115,6 +125,12 @@ const copy: Record<Locale, Messages> = {
     created: "Created at",
     updated: "Updated at",
     deadLetter: "Dead letter",
+    viewEvents: "View lifecycle events",
+    hideEvents: "Hide lifecycle events",
+    loadingEvents: "Loading task events…",
+    noEvents: "The provider returned no lifecycle events for this task.",
+    eventsError: "Task events could not be loaded from the provider.",
+    correlationKey: "Correlation (idempotency) key",
     stale: "Stale per provider",
     health: "Provider health",
     agentStatus: "Provider-reported status",
@@ -171,6 +187,12 @@ const copy: Record<Locale, Messages> = {
     created: "وقت الإنشاء",
     updated: "وقت التحديث",
     deadLetter: "قائمة العزل",
+    viewEvents: "عرض أحداث دورة الحياة",
+    hideEvents: "إخفاء أحداث دورة الحياة",
+    loadingEvents: "جارٍ تحميل أحداث المهمة…",
+    noEvents: "لم يُرجع المزوّد أحداثاً لدورة حياة هذه المهمة.",
+    eventsError: "تعذّر تحميل أحداث المهمة من المزوّد.",
+    correlationKey: "مفتاح الارتباط (عدم التكرار)",
     stale: "قديم بحسب المزوّد",
     health: "صحة الوكيل بحسب المزوّد",
     agentStatus: "الحالة كما أبلغ عنها المزوّد",
@@ -227,6 +249,12 @@ const copy: Record<Locale, Messages> = {
     created: "زمان ایجاد",
     updated: "زمان به‌روزرسانی",
     deadLetter: "صف مرده",
+    viewEvents: "مشاهدهٔ رویدادهای چرخهٔ حیات",
+    hideEvents: "پنهان‌کردن رویدادهای چرخهٔ حیات",
+    loadingEvents: "در حال بارگذاری رویدادهای وظیفه…",
+    noEvents: "منبع برای این وظیفه رویداد چرخهٔ حیاتی برنگرداند.",
+    eventsError: "بارگذاری رویدادهای وظیفه از منبع ممکن نشد.",
+    correlationKey: "کلید هم‌بستگی (یکتایی)",
     stale: "طبق منبع قدیمی است",
     health: "سلامت عامل طبق منبع",
     agentStatus: "وضعیت گزارش‌شده از منبع",
@@ -405,12 +433,42 @@ function TaskContent({
                   <div><dt>{messages.branch}</dt><dd>{task.branch_ref ? <bdi dir="ltr">{task.branch_ref}</bdi> : messages.noValue}</dd></div>
                   <div><dt>{messages.created}</dt><dd>{formatTimestamp(task.created_at, locale, messages.noTimestamp)}</dd></div>
                   <div><dt>{messages.updated}</dt><dd>{formatTimestamp(task.updated_at, locale, messages.noTimestamp)}</dd></div>
+                  {task.idempotency_key && <div><dt>{messages.correlationKey}</dt><dd><code><bdi dir="ltr">{task.idempotency_key}</bdi></code></dd></div>}
                 </dl>
+                <TaskEvents taskId={task.task_id} locale={locale} messages={messages} />
               </details>
             </li>
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function TaskEvents({ taskId, locale, messages }: { taskId: string; locale: Locale; messages: Messages }) {
+  const [state, setState] = useState<{ phase: "idle" | "loading" | "ready" | "error"; events?: CoordinationTaskEvent[] }>({ phase: "idle" });
+  const load = () => {
+    if (state.phase === "loading") return;
+    if (state.phase === "ready") { setState({ phase: "idle" }); return; }
+    setState({ phase: "loading" });
+    void readIntegrationResource(coordinationTaskEventsEndpoint(taskId), parseCoordinationTaskEvents, new AbortController().signal)
+      .then((data) => setState({ phase: "ready", events: data.events }))
+      .catch(() => setState({ phase: "error" }));
+  };
+  return (
+    <div>
+      <button type="button" onClick={load} aria-expanded={state.phase === "ready"}>
+        {state.phase === "ready" ? messages.hideEvents : messages.viewEvents}
+      </button>
+      <div aria-live="polite">
+        {state.phase === "loading" && <p>{messages.loadingEvents}</p>}
+        {state.phase === "error" && <p role="alert">{messages.eventsError}</p>}
+        {state.phase === "ready" && (state.events && state.events.length > 0 ? (
+          <ol>{state.events.map((event, index) => (
+            <li key={index}><bdi dir="ltr">{event.kind}</bdi>{event.at && <> · {formatTimestamp(event.at, locale, messages.noTimestamp)}</>}{event.detail && <><br /><bdi dir="auto">{event.detail}</bdi></>}</li>
+          ))}</ol>
+        ) : <p>{messages.noEvents}</p>)}
+      </div>
     </div>
   );
 }

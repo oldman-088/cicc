@@ -135,7 +135,12 @@ export type CoordinationTask = {
   created_at: string | null;
   updated_at: string | null;
   dead_letter: boolean;
+  /** Correlation key persisted on the task (Agent 1 M27: serialized on reads). */
+  idempotency_key: string | null;
 };
+
+export type CoordinationTaskEvent = { at: string | null; kind: string; detail: string | null };
+export type CoordinationTaskEvents = { task_id: string; events: CoordinationTaskEvent[] };
 
 export type CoordinationMetrics = {
   tasks_total: number;
@@ -175,6 +180,10 @@ export const integrationEndpoints = {
   coordinationMetrics: "/api/integrations/coordination/metrics",
   coordinationEvents: "/api/integrations/coordination/events",
 } as const;
+
+export function coordinationTaskEventsEndpoint(taskId: string): string {
+  return `/api/integrations/coordination/tasks/${encodeURIComponent(taskId)}/events`;
+}
 
 function fail(message: string): never {
   throw new Error(`Invalid integration response: ${message}`);
@@ -397,6 +406,27 @@ function parseCoordinationTask(value: unknown, index: number): CoordinationTask 
     created_at: nullableString(item.created_at, `tasks[${index}].created_at`),
     updated_at: nullableString(item.updated_at, `tasks[${index}].updated_at`),
     dead_letter: optionalBoolean(item.dead_letter, `tasks[${index}].dead_letter`, false),
+    idempotency_key: nullableString(item.idempotency_key, `tasks[${index}].idempotency_key`),
+  };
+}
+
+export function parseCoordinationTaskDetail(value: unknown): CoordinationTask {
+  return parseCoordinationTask(value, 0);
+}
+
+export function parseCoordinationTaskEvents(value: unknown): CoordinationTaskEvents {
+  const root = object(value, "task events response");
+  if (!Array.isArray(root.events)) return fail("events must be an array");
+  return {
+    task_id: nonEmptyString(root.task_id, "task_id"),
+    events: root.events.map((event, index) => {
+      const item = object(event, `events[${index}]`);
+      return {
+        at: nullableString(item.at, `events[${index}].at`),
+        kind: string(item.kind, `events[${index}].kind`),
+        detail: nullableString(item.detail, `events[${index}].detail`),
+      };
+    }),
   };
 }
 

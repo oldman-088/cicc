@@ -3,6 +3,7 @@ import {
   IntegrationApiError,
   parseCoordinationAgents,
   parseCoordinationMetrics,
+  parseCoordinationTaskEvents,
   parseCoordinationTasks,
   parseOpsOverview,
   readIntegrationResource,
@@ -187,5 +188,11 @@ describe("same-origin integration client", () => {
       parseOpsOverview,
       new AbortController().signal,
     )).rejects.toMatchObject<Partial<IntegrationApiError>>({ kind: "invalid_response" });
+  });
+
+  it("decodes per-task lifecycle events and the M27 idempotency correlation key", () => {
+    expect(parseCoordinationTaskEvents({ task_id: "api-1", events: [{ at: "2026-11-05T12:00:00Z", kind: "created", detail: "kind=frontend_e2e" }] }))
+      .toEqual({ task_id: "api-1", events: [{ at: "2026-11-05T12:00:00Z", kind: "created", detail: "kind=frontend_e2e" }] });
+    expect(() => parseCoordinationTaskEvents({ task_id: "api-1", events: "created" })).toThrow(/events/);
   });
 });

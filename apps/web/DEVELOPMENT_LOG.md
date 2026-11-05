@@ -129,3 +129,10 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - **TaskSubmissionPanel** added to the Coordination workspace (EN/AR/FA): pending/accepted/rejected states, duplicate-submit prevention, correlation key display. It honestly surfaces server refusals (e.g. `write_not_enabled`) in unconfigured deployments.
 - **Vulnerability adapter prepared (not bound):** `src/lib/vuln-intel-api.ts` decoders (canonical CVE pattern, tri-state KEV/EPSS nulls preserved, provenance) + fail-closed presentation guard. PR #1 contract remains unmounted.
 - **Browser QA:** CI workflow `.github/workflows/web-ci.yml` added (typecheck/unit/build + Playwright Chromium install + `test:e2e` with artifact upload) — status **CI_CONFIGURED**, not EXECUTED (no CI run has occurred; sandbox still cannot download Chromium). 22 tests DISCOVERED, 0 EXECUTED, 0 PASSED claimed.
+
+
+## 2026-11-05 — Milestone 7: task lifecycle events, intelligence workspace foundations
+
+- Agent 1 M27 serialized `idempotency_key` on task reads (additive). Frontend `CoordinationTask` now decodes it and the Coordination UI displays it as the correlation key in task details.
+- Added `parseCoordinationTaskEvents`/`parseCoordinationTaskDetail` decoders and a per-task lifecycle-events viewer in the Coordination workspace (loading/error/empty states, EN/AR/FA, on-demand — no polling loops).
+- Threat and Vulnerability pages now render a dedicated `IntelligenceWorkspace` foundation (localized headers, disabled search/filter structure, detail/provenance placeholder, planned scope) while remaining honestly not-connected; adapters stay unbound until contracts are accepted and mounted. The previous generic unconfigured page remains for other modules.
