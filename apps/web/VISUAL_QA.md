@@ -38,3 +38,6 @@ Suite grew to **36 tests** (+local cross-data search journey). Run **42038523984
 
 ## Update — shared health panel + AR journey (2026-11-05)
 Suite grew to **38 tests** (+Arabic RTL investigation journey). Run **42039917035: full success (38/38)**, typecheck + 115 unit tests + build green.
+
+## Update — diagnostics + delete journeys (2026-11-05)
+Suite grew to **40 tests** (+investigation delete journey). Run **42041423416: full success (40/40)**, typecheck + 116 unit tests + build green.
