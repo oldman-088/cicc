@@ -148,3 +148,39 @@ class TestEndToEnd:
         clusters = correlate(merged)
         assert len(clusters) == 1
         assert clusters[0].merged.conflicts  # disagreement is structured data
+
+
+class TestVendorRecordsReachTheApi:
+    """The merged vendor evidence must survive ingest -> store -> API unchanged."""
+
+    def test_merged_records_list_and_get(self):
+        from vuln_intel.integration.api import (
+            GetVulnerabilityRequest,
+            ListVulnerabilitiesRequest,
+            VulnerabilityApi,
+        )
+        from vuln_intel.integration.service import IngestionPolicy, IngestionService
+        from vuln_intel.integration.store import InMemoryVulnerabilityStore
+
+        deb_s = debian_snap(DEBIAN_DOC, fetched_at=NOW, origin=Origin.FIXTURE, transport="unaudited")
+        usn = usn_snap(USN_DOC, fetched_at=NOW, origin=Origin.FIXTURE, transport="unaudited")
+        ghsa = ghsa_snap(GHSA_DOC, fetched_at=NOW, origin=Origin.FIXTURE, transport="unaudited")
+        records = [*debian_records(deb_s), *usn_records(usn), *ghsa_records(ghsa)]
+        merged_records, _xref = merge_debian_evidence(records, deb_s)
+        clusters = correlate(merged_records, extra_aliases={"CVE-2021-44228": ["USN-6000-1", "GHSA-jfh8-c2jp-5v3q"]})
+        merged = [c.merged for c in clusters]
+        store = InMemoryVulnerabilityStore(allow_fixture=True)
+        IngestionService(store=store, policy=IngestionPolicy(allow_fixture=True, dry_run=False)
+                          ).import_records(list(merged), tenant_id="t", collected_at=NOW)
+        api = VulnerabilityApi(store)
+        listing = api.list(ListVulnerabilitiesRequest(tenant_id="t", limit=50), now=NOW).body
+        assert listing["data"], "merged vendor records must be listable"
+        cves = {r["cve"] for r in listing["data"]}
+        assert "CVE-2021-44228" in cves
+        for row in listing["data"]:
+            assert row["origin"] == "fixture"
+            assert row["freshness_view"]["state"] != "current"
+            assert "TEMP-1" not in row["cve"]
+        detail = api.get(GetVulnerabilityRequest(tenant_id="t", cve="CVE-2021-44228"), now=NOW).body["data"]
+        assert detail["cve"] == "CVE-2021-44228"
+        assert set(detail["sources"]) >= {"debian-security-tracker", "ubuntu-usn", "github-advisories"}
