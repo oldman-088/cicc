@@ -66,6 +66,7 @@ def test_dto_fields_match_pydantic_models(client):
     models_map = {
         "TaskIn": r.TaskIn, "ReportIn": r.ReportIn, "ProgressIn": r.ProgressIn,
         "DecisionIn": r.DecisionIn, "AgentRegisterIn": r.AgentRegisterIn,
+        "AgentHeartbeatIn": r.AgentHeartbeatIn,
     }
     for name, fields in d.items():
         if name not in models_map:  # output DTOs (e.g. AgentDTO) are pinned separately
@@ -157,3 +158,16 @@ def test_agent_dto_matches_documented_fields(client):
     a = client.get("/api/v1/coordination/agents", headers=R).json()["agents"][0]
     documented = set(cd.contract_v1()["dtos"]["AgentDTO (GET /agents)"])
     assert set(a.keys()) == documented, f"wire {sorted(a.keys())} != documented {sorted(documented)}"
+
+
+def test_heartbeat_documented_fields_persisted(client):
+    """M22: heartbeat accepts and persists the documented active_tasks/meta
+    (INTEGRATION_CONTRACTS.md #2) — previously silently dropped."""
+    client.post("/api/v1/coordination/agents/register", json={"agent": "hb-pin", "meta": {"v": 1}}, headers=W)
+    r = client.post("/api/v1/coordination/agents/hb-pin/heartbeat",
+                    json={"status": "busy", "active_tasks": 3, "meta": {"note": "scanning"}}, headers=W)
+    assert r.status_code == 200 and r.json()["status"] == "busy"
+    a = [x for x in client.get("/api/v1/coordination/agents", headers=R).json()["agents"] if x["agent"] == "hb-pin"][0]
+    assert a["meta"]["heartbeat"]["active_tasks"] == 3
+    assert a["meta"]["heartbeat"]["meta"] == {"note": "scanning"}
+    assert a["meta"]["v"] == 1  # registration meta preserved

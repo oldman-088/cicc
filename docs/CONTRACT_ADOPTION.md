@@ -150,3 +150,18 @@ miscount, **no key was removed or lost**; parity en==ar holds at every commit.
   with Agent 4's proxy gate).
 - Agents 2/3: still no /api/v1/coordination references (PR #1 @ ce1b25e full
   scan) — PENDING. Agent 2 remains primary TI owner; no Agent 6 takeover.
+
+## M22 update (2026-11-05 ~11:34 UTC)
+
+- **PR #1 head reconciled**: live head = **`8629c8f`** (11:18:04Z; M21's
+  ce1b25e was stale, backup report's 8629c8f was current). PR #2 `744ccd3`,
+  PR #3 `1a46f70`. Scan of PR #1 @8629c8f: still no /api/v1/coordination refs.
+- Agent 4 proxy surface (PR #2 @744ccd3 declared reads: /agents,
+  /tasks?limit&state&agent&kind&dead_letter, /metrics, /events?limit=100)
+  verified LIVE 200 + DTO shape by contract_check.py A4-proxy checks (31/31
+  @11:34:10Z) — contract compatibility VERIFIED; actual execution by Agent 4
+  still UNVERIFIED. Status: PARTIALLY COMPATIBLE (code-level reference +
+  verified-compatible surface; live run + QA outstanding).
+- Heartbeat DTO mismatch fixed: active_tasks?/meta? now accepted + persisted
+  (meta.heartbeat), descriptor + consistency test updated.
+- Agents 2/3: PENDING. Agent 2 remains primary TI owner (no Agent 6 takeover).

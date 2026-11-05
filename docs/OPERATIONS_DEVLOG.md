@@ -250,3 +250,17 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - PR #1 advanced to ce1b25e (still no coordination refs); PR #3 1a46f70.
   Agents 2/3 PENDING. API 174/174 (7 real-PG + 1 live-GitHub); web 23/23+tsc;
   contract_check 27/27 @11:21:17Z; E2E 22/22 @11:21:23Z.
+
+## 2026-11-05 — Milestone 22 (branch arena/961971ed-cicc, PR #4)
+
+- PR evidence reconciled live: PR#1 = 8629c8f (M21's ce1b25e stale), PR#2
+  744ccd3, PR#3 1a46f70; no coordination refs in PR#1/#3; no new comments.
+- Agent 4's declared proxy surface (PR#2) verified against the live API:
+  contract_check.py A4-proxy checks (4) — 31/31 PASS @11:34:10Z. Fixture
+  reads only; Agent-4 execution remains UNVERIFIED.
+- Contract mismatch fixed: heartbeat active_tasks?/meta? (documented in
+  INTEGRATION_CONTRACTS.md #2) were silently dropped — now accepted and
+  persisted under meta.heartbeat; AgentHeartbeatIn extended; descriptor +
+  DTO consistency updated; regression test added.
+- API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E 22/22
+  @11:34:17Z. Master prompt README.md@main@ca8f82c v1.0 unchanged.

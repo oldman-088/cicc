@@ -159,6 +159,17 @@ def main():
     c, m = req("GET", "/metrics")
     check("metrics consistent with tasks created", c == 200 and m.get("tasks_total", 0) >= 5, f"tasks_total={m.get('tasks_total')}")
 
+    # --- Agent 4 proxy surface (PR #2 @744ccd3 declares these reads) ---
+    # verified against the LIVE API here; still fixture reads, not Agent 4 execution
+    c, p = req("GET", "/agents")
+    check("A4-proxy: GET /agents", c == 200 and isinstance(p.get("agents"), list))
+    c, p = req("GET", "/tasks?limit=100&state=QUEUED&agent=none&kind=contract_check&dead_letter=false")
+    check("A4-proxy: GET /tasks w/ validated query params", c == 200 and isinstance(p.get("tasks"), list), f"-> {c}")
+    c, p = req("GET", "/events?limit=100")
+    check("A4-proxy: GET /events?limit=100", c == 200 and "events" in p, f"-> {c}")
+    c, p = req("GET", "/metrics")
+    check("A4-proxy: GET /metrics", c == 200 and "tasks_total" in p, f"-> {c}")
+
     print(f"\ncontract_check finished {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}: "
           f"{sum(results)}/{len(results)} PASS")
     sys.exit(0 if all(results) and results else 1)

@@ -20,3 +20,4 @@
 - 2026-11-05 M19 (7de2742+): contract_check 27 checks 27/27 live; deps-gate-on-complete defect fixed; m19 operational tests; PR#1 head f56447c; API 165/165
 - 2026-11-05 M20 (f0589f3+): descriptor-vs-implementation consistency tests (8) + drift fixes; reliability edge tests (approval expiry, TTL sweep, stale revive, dup webhook); API 173/173; live 27/27 + 22/22
 - 2026-11-05 M21 (43c9025+): first agent code-level evidence (PR#2 744ccd3 BFF proxy for coordination reads); AgentDTO doc drift fixed + pinned; BFF env convention in .env.example; API 174/174
+- 2026-11-05 M22 (e96c38f+): PR#1 head reconciled 8629c8f; A4 proxy surface verified live (31/31); heartbeat active_tasks/meta implemented + pinned; API 175/175

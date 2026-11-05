@@ -81,3 +81,10 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   scope still ~90%; whole product estimate moves slightly up to ~30–40% now
   that PR #2 @744ccd3 carries a code-level BFF proxy for coordination reads
   (still unverified live). DoD §17 unmet -> not production-ready.
+
+## M22 re-confirmation (2026-11-05 ~11:34 UTC)
+- `main` still `ca8f82c`; `README.md` (v1.0) unchanged/unmodified. Agent 1
+  scope still ~90% (M22: heartbeat documented fields implemented + pinned;
+  Agent-4 proxy surface verified compatible live). Whole product ~30-40%;
+  first real cross-agent execution still NOT occurred (only fixture reads and
+  read-only code review of PR #2). DoD §17 unmet -> not production-ready.

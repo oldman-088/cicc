@@ -262,6 +262,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
 
+## Done — Milestone 22 (PR #4 update)
+
+- M22-2/6: PR heads reconciled live (PR#1 8629c8f); Agent-4 proxy surface
+  verified live (A4-proxy checks, contract_check 31/31) — compatibility
+  VERIFIED, execution UNVERIFIED; heartbeat DTO mismatch fixed + pinned.
+- M22-4: heartbeat active_tasks/meta persisted; regression test.
+- M22-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -463,6 +473,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M21-6: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
+
+## Done — Milestone 22 (PR #4 update)
+
+- M22-2/6: PR heads reconciled live (PR#1 8629c8f); Agent-4 proxy surface
+  verified live (A4-proxy checks, contract_check 31/31) — compatibility
+  VERIFIED, execution UNVERIFIED; heartbeat DTO mismatch fixed + pinned.
+- M22-4: heartbeat active_tasks/meta persisted; regression test.
+- M22-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
 
 ## Next (backlog, priority order)
 
@@ -669,6 +689,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
 
+## Done — Milestone 22 (PR #4 update)
+
+- M22-2/6: PR heads reconciled live (PR#1 8629c8f); Agent-4 proxy surface
+  verified live (A4-proxy checks, contract_check 31/31) — compatibility
+  VERIFIED, execution UNVERIFIED; heartbeat DTO mismatch fixed + pinned.
+- M22-4: heartbeat active_tasks/meta persisted; regression test.
+- M22-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -867,6 +897,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
 
+## Done — Milestone 22 (PR #4 update)
+
+- M22-2/6: PR heads reconciled live (PR#1 8629c8f); Agent-4 proxy surface
+  verified live (A4-proxy checks, contract_check 31/31) — compatibility
+  VERIFIED, execution UNVERIFIED; heartbeat DTO mismatch fixed + pinned.
+- M22-4: heartbeat active_tasks/meta persisted; regression test.
+- M22-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -1062,6 +1102,16 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M21-6: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 174/174 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 27/27 @2026-11-05T11:21:17Z; E2E 22/22 @11:21:23Z.
+
+## Done — Milestone 22 (PR #4 update)
+
+- M22-2/6: PR heads reconciled live (PR#1 8629c8f); Agent-4 proxy surface
+  verified live (A4-proxy checks, contract_check 31/31) — compatibility
+  VERIFIED, execution UNVERIFIED; heartbeat DTO mismatch fixed + pinned.
+- M22-4: heartbeat active_tasks/meta persisted; regression test.
+- M22-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 175/175 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T11:34:10Z; E2E 22/22 @11:34:17Z.
 
 ## Next (backlog, priority order)
 

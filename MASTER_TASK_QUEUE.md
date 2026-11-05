@@ -149,6 +149,17 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
 - API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
 
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

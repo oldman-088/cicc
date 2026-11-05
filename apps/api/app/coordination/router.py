@@ -80,6 +80,8 @@ class AgentRegisterIn(BaseModel):
 
 class AgentHeartbeatIn(BaseModel):
     status: str | None = Field(default=None, pattern="^(available|busy|draining|offline)$")
+    active_tasks: int | None = Field(default=None, ge=0, le=100000)
+    meta: dict | None = None
 
 
 def _get_task(s, task_id: str):
@@ -411,7 +413,7 @@ def agent_heartbeat(agent: str, body: AgentHeartbeatIn, request: Request,
     require_write_token(authorization)
     write_rate_limit_dependency(request, authorization)
     with ops.SessionLocal() as s:
-        r = agent_registry.heartbeat(s, agent, body.status)
+        r = agent_registry.heartbeat(s, agent, body.status, body.active_tasks, body.meta)
         s.commit()
         if r is None:
             raise HTTPException(status_code=404, detail="agent_not_registered")

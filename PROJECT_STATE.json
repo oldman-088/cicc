@@ -19,7 +19,7 @@
         "DAG",
         "sweep"
       ],
-      "tests": "API 174/174 (7 real-PG + 1 live-GitHub); contract_check 27/27 live; E2E 22/22 live"
+      "tests": "API 175/175 (7 real-PG + 1 live-GitHub); contract_check 31/31 live; E2E 22/22 live"
     },
     "ops": {
       "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,7 +43,7 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M21"
+    "M1..M22"
   ],
   "contracts": {
     "version": "v1.0",
@@ -85,14 +85,16 @@
   },
   "i18n": "en/ar parity 187/187 at every commit since M11 (M14 '188' was a report miscount; no key lost)",
   "pr_heads_checked": {
-    "1": "ce1b25e",
+    "1": "8629c8f",
     "2": "744ccd3",
     "3": "1a46f70",
-    "checked": "2026-11-05T11:21Z"
+    "checked": "2026-11-05T11:34Z",
+    "note": "M21's ce1b25e was stale; 8629c8f confirmed live"
   },
   "adoption": {
     "agent2": "PENDING",
-    "agent3": "PENDING (no coordination refs in PR#1 @ce1b25e)",
-    "agent4": "code-level BFF proxy present in PR#2 @744ccd3 (read-only evidence); live execution + visual QA outstanding"
-  }
+    "agent3": "PENDING (PR#1 @8629c8f, no coordination refs)",
+    "agent4": "PARTIALLY COMPATIBLE \u2014 proxy code in PR#2 @744ccd3 + live-verified compatible surface; actual execution UNVERIFIED"
+  },
+  "cross_agent_execution": "NONE \u2014 fixtures and read-only review only"
 }

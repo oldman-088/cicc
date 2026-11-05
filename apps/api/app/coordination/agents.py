@@ -50,13 +50,28 @@ def register(s, agent: str, specialization: str | None = None, capabilities: lis
     return {"agent": agent, "created": created, "status": row.status}
 
 
-def heartbeat(s, agent: str, status: str | None = None) -> dict | None:
+def heartbeat(s, agent: str, status: str | None = None, active_tasks: int | None = None,
+              meta: dict | None = None) -> dict | None:
     row = s.get(models.CoordinationAgent, agent)
     if row is None:
         return None
     row.last_heartbeat = _utcnow()
     if status in AGENT_STATUSES:
         row.status = status
+    # M22: honor the documented heartbeat fields (INTEGRATION_CONTRACTS.md #2);
+    # persist them inside the free-form meta JSON — no schema change
+    if active_tasks is not None or meta is not None:
+        try:
+            m = json.loads(row.meta) if row.meta else {}
+        except Exception:
+            m = {}
+        hb = m.get("heartbeat") if isinstance(m.get("heartbeat"), dict) else {}
+        if active_tasks is not None:
+            hb["active_tasks"] = active_tasks
+        if meta is not None:
+            hb["meta"] = meta
+        m["heartbeat"] = hb
+        row.meta = json.dumps(m)
     s.flush()
     return {"agent": agent, "status": row.status, "last_heartbeat": row.last_heartbeat.isoformat()}
 
