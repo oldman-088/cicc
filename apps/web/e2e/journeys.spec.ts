@@ -77,7 +77,7 @@ test("malformed import journey: invalid file is rejected visibly and local state
     mimeType: "application/json",
     buffer: Buffer.from("{not json"),
   });
-  await expect(page.getByRole("alert")).toContainText(/Import failed/);
+  await expect(page.getByRole("alert").filter({ hasText: /Import failed/ }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Import guard case", level: 3 })).toBeVisible();
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Import guard case", level: 3 })).toBeVisible();

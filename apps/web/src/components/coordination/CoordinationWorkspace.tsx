@@ -578,7 +578,6 @@ function HealthContent({ data, locale, messages }: { data: CoordinationHealth; l
         </span>
         {data.at && <> · {messages.healthCheckedAt}: {formatTimestamp(data.at, locale, messages.noTimestamp)}</>}
       </p>
-      <p className={styles.scopeNote}>{messages.healthOnDemandNote}</p>
       <ul className={styles.agentList}>
         {data.components.map((component) => (
           <li key={component.key} className={styles.recordCard}>
@@ -749,9 +748,12 @@ export function CoordinationWorkspace() {
           {(data) => <MetricContent data={data} locale={locale} messages={text} />}
         </ResourcePanel>
 
-        <ResourcePanel title={text.coordHealth} state={health.state} onRefresh={health.refresh}>
-          {(data) => <HealthContent data={data} locale={locale} messages={text} />}
-        </ResourcePanel>
+        <div>
+          <ResourcePanel title={text.coordHealth} state={health.state} onRefresh={health.refresh}>
+            {(data) => <HealthContent data={data} locale={locale} messages={text} />}
+          </ResourcePanel>
+          <p className={styles.scopeNote}>{text.healthOnDemandNote}</p>
+        </div>
 
         <ResourcePanel
           title={text.agents}
