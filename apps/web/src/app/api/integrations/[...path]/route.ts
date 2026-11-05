@@ -184,7 +184,13 @@ export async function GET(
   context: { params: Promise<{ path: string[] }> },
 ): Promise<Response> {
   const { path } = await context.params;
-  const spec = routes[path.join("/")];
+  // Canonical per-task reads confirmed by Agent 1 (PR #4 M26):
+  // GET /api/v1/coordination/tasks/{id} and /tasks/{id}/events.
+  let spec = routes[path.join("/")];
+  if (!spec && path[0] === "coordination" && path[1] === "tasks" && (path.length === 3 || (path.length === 4 && path[3] === "events"))) {
+    if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(path[2])) return problem("invalid_request", 400);
+    spec = { path: `api/v1/coordination/tasks/${encodeURIComponent(path[2])}${path.length === 4 ? "/events" : ""}` };
+  }
   if (!spec) return problem("not_found", 404);
   if (!sameOriginAllowed(request)) return problem("cross_site_forbidden", 403);
 
@@ -239,6 +245,98 @@ export async function GET(
     const parsed = await readJsonWithinLimit(upstream);
     if (!parsed.ok) return problem("invalid_upstream_response", 502);
     return json(parsed.value, 200);
+  } catch {
+    return problem("upstream_unavailable", 503);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Approved write path (Agent 1 ACCEPT, PR #4 M26). Exactly one fixed route:
+// POST coordination/tasks -> POST api/v1/coordination/tasks. Everything else
+// stays GET-only. Server-only write token, server-generated idempotency key
+// (the correlation key persisted on the task), strict DTO allowlist.
+// ---------------------------------------------------------------------------
+
+const WRITE_FIELDS = new Set(["kind", "title", "priority", "payload", "depends_on", "timeout_s", "ttl_s", "requires_approval", "repo", "branch_ref", "agent", "idempotency_key"]);
+const TASK_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function validateCoordTaskBody(body: unknown): { ok: true; value: Record<string, unknown> } | { ok: false } {
+  if (!isPlainObject(body)) return { ok: false };
+  for (const key of Object.keys(body)) if (!WRITE_FIELDS.has(key)) return { ok: false };
+  const kind = body.kind;
+  if (typeof kind !== "string" || !/^[a-z0-9_]{1,64}$/.test(kind)) return { ok: false };
+  const title = body.title;
+  if (typeof title !== "string" || title.trim().length === 0 || title.length > 500) return { ok: false };
+  const priority = body.priority ?? 5;
+  if (typeof priority !== "number" || !Number.isSafeInteger(priority) || priority < 1 || priority > 10) return { ok: false };
+  const payload = body.payload ?? {};
+  if (!isPlainObject(payload)) return { ok: false };
+  const dependsOn = body.depends_on ?? [];
+  if (!Array.isArray(dependsOn) || dependsOn.length > 50 || dependsOn.some((d) => typeof d !== "string" || !TASK_ID_PATTERN.test(d))) return { ok: false };
+  for (const key of ["timeout_s", "ttl_s"] as const) {
+    const v = body[key];
+    if (v !== undefined && (typeof v !== "number" || !Number.isSafeInteger(v) || v < 1 || v > 2_592_000)) return { ok: false };
+  }
+  if (body.requires_approval !== undefined && typeof body.requires_approval !== "boolean") return { ok: false };
+  for (const key of ["repo", "branch_ref", "agent"] as const) {
+    const v = body[key];
+    if (v !== undefined && (typeof v !== "string" || v.length === 0 || v.length > 256)) return { ok: false };
+  }
+  const suppliedKey = body.idempotency_key;
+  const validKey = typeof suppliedKey === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(suppliedKey);
+  return { ok: true, value: { ...body, priority, payload, depends_on: dependsOn, idempotency_key: validKey ? suppliedKey : `bff-${crypto.randomUUID()}` } };
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ path: string[] }> },
+): Promise<Response> {
+  const { path } = await context.params;
+  if (path.join("/") !== "coordination/tasks") return problem("method_not_allowed_via_bff", 403);
+  if (!sameOriginAllowed(request)) return problem("cross_site_forbidden", 403);
+  if (process.env.WEB_BFF_ALLOW_COORD_WRITE !== "1") return problem("write_not_enabled", 403);
+
+  const base = getUpstreamBase();
+  const writeToken = process.env.WEB_BFF_WRITE_TOKEN?.trim();
+  if (!base || process.env.CICC_OPS_TRUSTED_SINGLE_TENANT !== "true" || !writeToken || /[\r\n]/.test(writeToken)) {
+    return problem("provider_not_configured", 503);
+  }
+
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > 256 * 1024) return problem("payload_too_large", 413);
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return problem("invalid_request", 422); }
+  const validated = validateCoordTaskBody(parsed);
+  if (!validated.ok) return problem("invalid_request", 422);
+  const idempotencyKey = validated.value.idempotency_key as string;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const upstream = await fetch(new URL("api/v1/coordination/tasks", base), {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${writeToken}` },
+      body: JSON.stringify(validated.value),
+      cache: "no-store",
+      redirect: "error",
+      signal: controller.signal,
+    });
+    if (!upstream.ok) {
+      void upstream.body?.cancel().catch(() => undefined);
+      const mapped = mapUpstreamFailure(upstream.status);
+      const retryAfter = upstream.headers.get("retry-after");
+      const safeRetryAfter = retryAfter && /^\d{1,5}$/.test(retryAfter) ? retryAfter : undefined;
+      return problem(mapped.code, mapped.status, mapped.code === "rate_limited" && safeRetryAfter ? { "Retry-After": safeRetryAfter } : {});
+    }
+    const body = await readJsonWithinLimit(upstream);
+    if (!body.ok) return problem("invalid_upstream_response", 502);
+    return json(body.value, upstream.status, { "x-cicc-idempotency-key": idempotencyKey });
   } catch {
     return problem("upstream_unavailable", 503);
   } finally {

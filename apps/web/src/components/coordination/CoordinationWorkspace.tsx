@@ -15,6 +15,7 @@ import {
   type CoordinationTask,
 } from "../../lib/integration-api";
 import { ResourcePanel } from "../integrations/ResourcePanel";
+import { TaskSubmissionPanel } from "./TaskSubmissionPanel";
 import { useIntegrationResource } from "../integrations/useIntegrationResource";
 import styles from "./CoordinationWorkspace.module.css";
 
@@ -498,6 +499,7 @@ export function CoordinationWorkspace() {
           >
             {(data) => <EventContent events={data.events} locale={locale} messages={text} />}
           </ResourcePanel>
+        <TaskSubmissionPanel />
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GET, HEAD } from "./route";
+import { GET, HEAD, POST } from "./route";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -76,7 +76,7 @@ describe("server-side integration adapter", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const invalidPath = await get(["coordination", "tasks", "deliver"]);
+    const invalidPath = await get(["coordination", "unknown-resource"]);
     expect(invalidPath.status).toBe(404);
     expect(fetchMock).not.toHaveBeenCalled();
 
@@ -88,6 +88,13 @@ describe("server-side integration adapter", () => {
     expect(valid.status).toBe(200);
     const [url] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(url.toString()).toBe("https://api.example.test/api/v1/coordination/tasks?state=RUNNING&kind=threat-intel&limit=100");
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ task_id: "api-123" }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const invalidTaskId = await get(["coordination", "tasks", "bad id!"]);
+    expect(invalidTaskId.status).toBe(400);
+    const taskById = await get(["coordination", "tasks", "api-123"]);
+    expect(taskById.status).toBe(200);
+    const taskEvents = await get(["coordination", "tasks", "api-123", "events"]);
+    expect(taskEvents.status).toBe(200);
   });
 
   it("sanitizes upstream rate-limit errors and preserves a safe Retry-After", async () => {
@@ -172,5 +179,50 @@ describe("server-side integration adapter", () => {
     const text = await response.text();
     expect(text).toContain("unauthorized");
     expect(text).not.toContain("read token");
+  });
+
+  it("write path: rejects non-tasks POSTs and disabled writes", async () => {
+    const res = await POST(new Request("http://cicc.test/api/integrations/ops/overview", { method: "POST" }), { params: Promise.resolve({ path: ["ops", "overview"] }) });
+    expect(res.status).toBe(403);
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    vi.stubEnv("WEB_BFF_WRITE_TOKEN", "write-secret");
+    const disabled = await POST(new Request("http://cicc.test/api/integrations/coordination/tasks", { method: "POST", body: "{}" }), { params: Promise.resolve({ path: ["coordination", "tasks"] }) });
+    expect(disabled.status).toBe(403);
+    expect(await disabled.text()).toContain("write_not_enabled");
+  });
+
+  it("write path: injects server write token, generates idempotency key, strips browser auth", async () => {
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    vi.stubEnv("WEB_BFF_WRITE_TOKEN", "write-secret");
+    vi.stubEnv("WEB_BFF_ALLOW_COORD_WRITE", "1");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ task_id: "api-1", state: "CREATED", kind: "frontend_e2e" }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await POST(new Request("http://cicc.test/api/integrations/coordination/tasks", {
+      method: "POST", headers: { Authorization: "Bearer browser-token", Cookie: "session=x", "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "frontend_e2e", title: "Verify me" }),
+    }), { params: Promise.resolve({ path: ["coordination", "tasks"] }) });
+    expect(res.status).toBe(201);
+    expect(res.headers.get("x-cicc-idempotency-key")).toMatch(/^bff-/);
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe("https://api.example.test/api/v1/coordination/tasks");
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer write-secret");
+    const sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(sent.idempotency_key).toMatch(/^bff-/);
+    expect(JSON.stringify(sent)).not.toContain("browser-token");
+  });
+
+  it("write path: unknown fields and bad kind are 422 without calling upstream", async () => {
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    vi.stubEnv("WEB_BFF_WRITE_TOKEN", "write-secret");
+    vi.stubEnv("WEB_BFF_ALLOW_COORD_WRITE", "1");
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    for (const body of [{ kind: "frontend_e2e", title: "x", evil: 1 }, { kind: "Bad Kind!", title: "x" }, { kind: "ok_kind", title: "" }]) {
+      const res = await POST(new Request("http://cicc.test/api/integrations/coordination/tasks", { method: "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ path: ["coordination", "tasks"] }) });
+      expect(res.status).toBe(422);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
