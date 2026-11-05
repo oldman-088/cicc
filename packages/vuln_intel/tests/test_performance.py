@@ -23,6 +23,8 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+
 from vuln_intel.integration.observations import digest_payload, to_observations
 from vuln_intel.normalization import normalize_sources
 from vuln_intel.priorities import rank_vulnerabilities
@@ -308,3 +310,49 @@ class TestCachedPropertiesCannotGoStale:
         raise AssertionError(
             "NormalizedVulnerability is mutable; cached properties are now unsafe"
         )
+
+
+class TestBenchmarkNormalisation:
+    """The harness must divide by the work it actually did.
+
+    A benchmark that reports 5.3 ms for an operation taking 10 us is worse than no
+    benchmark: it invites an optimisation project against a number that is wrong by
+    two orders of magnitude. Both defects here were found by noticing that the
+    reported figures were absurd, not by any test — so these tests exist now.
+    """
+
+    def test_items_per_call_divides_the_elapsed_time(self) -> None:
+        from vuln_intel.benchmark import Benchmark
+
+        calls = []
+
+        def work():
+            calls.append(1)
+            return
+
+        single = Benchmark("single", "item", 12, work).measure()
+        batch = Benchmark("batch", "item", 12, work, items_per_call=10).measure()
+        # Same work per call, so the per-item figure must be ten times smaller.
+        assert batch["median_ms"] < single["median_ms"]
+        assert single["median_ms"] / batch["median_ms"] == pytest.approx(10, rel=0.4)
+
+    def test_items_per_call_is_reported(self) -> None:
+        from vuln_intel.benchmark import Benchmark
+
+        result = Benchmark("x", "item", 2, lambda: None, items_per_call=7).measure()
+        assert result["items_per_call"] == 7
+
+    def test_derived_throughput_is_not_double_divided(self) -> None:
+        """`median_ms` is already per record; dividing again gave 84M records/s."""
+        from vuln_intel.benchmark import _derived
+
+        derived = _derived([{"name": "rank_prebuilt_5000", "median_ms": 0.01}])
+        assert derived["rank_records_per_second"] == pytest.approx(100_000, rel=0.01)
+        assert derived["rank_ms_per_record"] == pytest.approx(0.01, rel=0.01)
+
+    def test_end_to_end_benchmark_is_not_used_for_throughput(self) -> None:
+        """It builds its own records, so it measures construction, not ranking."""
+        from vuln_intel.benchmark import _derived
+
+        derived = _derived([{"name": "build_and_rank_5000", "median_ms": 121.0}])
+        assert derived == {}

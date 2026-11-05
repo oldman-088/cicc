@@ -63,6 +63,13 @@ class Benchmark:
     function: Callable[[], object]
     repeat: int = 3
     samples: list[float] = field(default_factory=list)
+    #: How many items one call to ``function`` processes.  The harness divides the
+    #: elapsed time by ``iterations * items_per_call`` so a benchmark over a 500-item
+    #: batch reports a per-item figure rather than a per-batch one.  Getting this
+    #: wrong is not a rounding error: ``score_vulnerability`` claimed 5.3 ms/record
+    #: when the real cost was 10.5 us because each call scored 500 records and the
+    #: division ignored them.
+    items_per_call: int = 1
 
     def measure(self) -> dict[str, Any]:
         self.samples.clear()
@@ -73,13 +80,21 @@ class Benchmark:
             started = time.perf_counter()
             for _ in range(self.iterations):
                 self.function()
-            self.samples.append((time.perf_counter() - started) / self.iterations)
+            self.samples.append(
+                (time.perf_counter() - started)
+                / (self.iterations * self.items_per_call)
+            )
         median = statistics.median(self.samples)
         return {
             "name": self.name,
             "unit": self.unit,
             "iterations": self.iterations,
-            "median_ms": round(median * 1000, 4),
+            "items_per_call": self.items_per_call,
+            # Six decimal places, not four: 4 dp of a millisecond cannot represent
+            # sub-10-us work, so fast benchmarks rounded to 0.0 ms and their
+            # reported throughput became infinite. The rounding was concealing the
+            # very measurements this harness exists to take.
+            "median_ms": round(median * 1000, 6),
             "per_second": round(1.0 / median, 1) if median else None,
             "spread_pct": (
                 round(
@@ -138,18 +153,34 @@ def run_all() -> dict[str, Any]:
         Benchmark("cvss_v4_score", "vector", 2_000, lambda: score_vector_v4(v4)),
         Benchmark("cvss_v3_score", "vector", 2_000, lambda: score_vector(v3)),
         Benchmark("shape_record", "record", 20_000, lambda: shape_record(row)),
-        Benchmark("score_vulnerability", "record", 200, lambda: _score_many(small)),
-        Benchmark("rank_500", "batch", 5, lambda: rank_vulnerabilities(small)),
-        Benchmark("rank_2000", "batch", 3, lambda: rank_vulnerabilities(medium)),
+        Benchmark(
+            "score_vulnerability", "record", 200, lambda: _score_many(small),
+            items_per_call=len(small),
+        ),
+        Benchmark(
+            "rank_500", "batch", 5, lambda: rank_vulnerabilities(small),
+            items_per_call=len(small),
+        ),
+        Benchmark(
+            "rank_2000", "batch", 3, lambda: rank_vulnerabilities(medium),
+            items_per_call=len(medium),
+        ),
         # Prebuilt list: measures ranking only, not record construction.
         Benchmark(
-            "rank_prebuilt_5000", "record", 1, lambda: _rank_prebuilt(large), repeat=5
+            "rank_prebuilt_5000", "record", 1, lambda: _rank_prebuilt(large),
+            repeat=5, items_per_call=len(large),
         ),
         # Kept for visibility: includes building 5,000 records per iteration, so it
         # is an end-to-end ingest-style figure, not a ranking throughput number.
         Benchmark("build_and_rank_5000", "batch", 3, lambda: _build_and_rank(5_000)),
-        Benchmark("correlate_500", "batch", 5, lambda: correlate(small)),
-        Benchmark("correlate_5000", "batch", 3, lambda: correlate(large)),
+        Benchmark(
+            "correlate_500", "batch", 5, lambda: correlate(small),
+            items_per_call=len(small),
+        ),
+        Benchmark(
+            "correlate_5000", "batch", 3, lambda: correlate(large),
+            items_per_call=len(large),
+        ),
     ]
 
     results = [benchmark.measure() for benchmark in benchmarks]
@@ -186,17 +217,24 @@ def _score_many(records):
 def _derived(results: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-record figures that operators plan with.
 
-    Deliberately *not* computed from ``rank_5000``: those lambdas build five
+    Deliberately *not* computed from ``build_and_rank_5000``: that lambda builds five
     thousand record objects on every iteration, so dividing by 5,000 would report
     object construction as ranking throughput. The throughput figure comes from the
-    prebuilt-list benchmark instead.
+    prebuilt-list benchmark, whose ``median_ms`` is **already** per record.
+
+    An earlier version divided again by the batch size, which reported 84 million
+    records per second — a figure no single-threaded Python does anything at. The
+    absurdity is the only reason the bug was visible, so the arithmetic is stated
+    here and asserted by a test.
     """
     by_name = {item["name"]: item for item in results}
     out: dict[str, Any] = {}
     per_record_ms = by_name.get("rank_prebuilt_5000", {}).get("median_ms")
     if per_record_ms:
-        out["rank_records_per_second"] = round(1_000_000.0 / per_record_ms, 1)
-        out["rank_microseconds_per_record"] = round(per_record_ms, 3)
+        # median_ms is per record (items_per_call normalisation), so throughput is a
+        # single inversion of milliseconds.
+        out["rank_records_per_second"] = round(1_000.0 / per_record_ms, 1)
+        out["rank_ms_per_record"] = round(per_record_ms, 6)
     return out
 
 
@@ -221,8 +259,14 @@ def main(argv: list[str] | None = None) -> int:
     derived = report["derived"]
     if derived:
         print()
-        print(f"  ranking throughput: {derived['rank_records_per_second']:,.1f} records/s "
-              f"({derived['rank_microseconds_per_record']} us per record, prebuilt input)")
+        # The stored figure is milliseconds per record; labelling it "us" (as an
+        # earlier version did) overstated speed by 1,000x in the human-readable
+        # output while the JSON was correct - the worst kind of mismatch, since a
+        # reader of the console has no reason to doubt it.
+        print(
+            f"  ranking throughput: {derived['rank_records_per_second']:,.1f} records/s "
+            f"({derived['rank_ms_per_record'] * 1000:.2f} us per record, prebuilt input)"
+        )
     print()
     print(f"  methodology: {report['methodology']['timing']}; "
           f"{report['methodology']['reported']}")
