@@ -96,3 +96,12 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - The page search is a useful local navigation filter only, not a substitute for global entity search.
 - At that earlier checkpoint, build, package audit, route smoke requests, and `git diff --check` still needed to be rerun after the then-current batch; the later 2026-11-05 Ops/Coordination entry above records those completed checks. The Next dev server on port 3000 is intentionally kept running. HTTP smoke checks do not count as visual QA.
 - Real browser/device/assistive-technology verification remains outstanding; the next task queue is in `MASTER_TASK_QUEUE.md`.
+
+
+## 2026-11-05 — Backup Agent 4 takeover: canonical AgentDTO adoption + local live BFF verification
+
+- Owner explicitly authorized Backup Agent 4 takeover of Agent 4's frontend role. Work is based on PR #2 head `744ccd3` merged into the takeover branch; Agent 4's branch was not modified.
+- **P0 canonical DTO:** `parseCoordinationAgents` now accepts only the canonical PR #4 AgentDTO (M21 wire fields + M23 `health`), rejects obsolete aliases (`last_seen`/`completed_tasks`/`failed_tasks`), missing/null/malformed/numeric-string values, and unknown `health` values. Types use wire names (`last_heartbeat`, `completed`, `failed`, `retries`, `by_state`, `health`, `version`, `meta`, `registered_at`). Coordination UI shows backend `health` plus the provider `stale` tag. Tests: canonical acceptance + obsolete/missing/null/malformed/numeric-string rejection.
+- **Verification:** `npm run typecheck` passed; `npm test` — 85 tests / 17 files passed; `npm run build` passed (7 routes + dynamic BFF route).
+- **Live local integration (not production):** ran PR #4's API (`2c6af20`) locally with sqlite and server-side read/write tokens, registered a clearly-labeled fixture agent (`backup-agent4-localtest`), and verified through the Next BFF (configured via server-only env): `coordination/agents`, `coordination/metrics`, and `ops/overview` returned real upstream DTOs; unauthenticated upstream returns 401 at the API; unconfigured BFF returns `503 provider_not_configured`; POST returns 405; no token string appears in page HTML. This is local fixture evidence only — no production/deployed upstream, user auth, or tenant isolation is claimed.
+- **Visual QA:** still **not performed** — no browser binary is available in this environment (no Chromium/Playwright). HTTP 200 smoke for all seven routes was re-verified but is not visual QA.

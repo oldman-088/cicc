@@ -100,17 +100,27 @@ export type OpsWorkers = {
   }>;
 };
 
+/** Canonical AgentDTO from PR #4 (M21/M23): wire field names are used verbatim. */
+export const AGENT_HEALTH_VALUES = ["ACTIVE", "STALE", "UNAVAILABLE", "UNKNOWN"] as const;
+export type AgentHealth = (typeof AGENT_HEALTH_VALUES)[number];
+
 export type CoordinationAgent = {
   agent: string;
   specialization: string | null;
   capabilities: string[];
   status: string;
   stale: boolean;
-  last_seen: string | null;
-  last_seen_field: "last_seen" | "last_heartbeat" | null;
+  /** Backend-derived health (M23); `stale` remains the provider boolean it is derived with. */
+  health: AgentHealth;
+  version: string | null;
+  meta: Record<string, unknown>;
+  last_heartbeat: string | null;
+  registered_at: string | null;
   active_tasks: number;
-  completed_tasks: number;
-  failed_tasks: number;
+  completed: number;
+  failed: number;
+  retries: number;
+  by_state: Record<string, number>;
 };
 
 export type CoordinationTask = {
@@ -328,49 +338,43 @@ export function parseOpsWorkers(value: unknown): OpsWorkers {
   };
 }
 
-function integerAlias(
-  item: Record<string, unknown>,
-  documentedKey: string,
-  implementationKey: string,
-  label: string,
-): number {
-  const candidates = [documentedKey, implementationKey]
-    .filter((key) => item[key] !== undefined)
-    .map((key) => nonNegativeInteger(item[key], `${label}.${key}`));
-  if (candidates.length === 0) return fail(`${label}.${documentedKey} or ${implementationKey} is required`);
-  if (candidates.some((candidate) => candidate !== candidates[0])) {
-    return fail(`${label}.${documentedKey} and ${implementationKey} conflict`);
+const OBSOLETE_AGENT_KEYS = ["last_seen", "completed_tasks", "failed_tasks"] as const;
+
+function rejectObsoleteAgentKeys(item: Record<string, unknown>, label: string): void {
+  for (const key of OBSOLETE_AGENT_KEYS) {
+    if (item[key] !== undefined) {
+      fail(`${label}.${key} is an obsolete alias; canonical AgentDTO fields are last_heartbeat, completed, failed`);
+    }
   }
-  return candidates[0];
 }
 
-function timestampAlias(
-  item: Record<string, unknown>,
-  label: string,
-): { value: string | null; field: "last_seen" | "last_heartbeat" | null } {
-  const keys = (["last_seen", "last_heartbeat"] as const).filter((key) => item[key] !== undefined);
-  const candidates = keys.map((key) => ({ key, value: nullableString(item[key], `${label}.${key}`) }));
-  if (candidates.length > 1 && candidates.some((candidate) => candidate.value !== candidates[0].value)) {
-    return fail(`${label}.last_seen and last_heartbeat conflict`);
+function agentHealth(value: unknown, label: string): AgentHealth {
+  const result = string(value, label);
+  if (!(AGENT_HEALTH_VALUES as readonly string[]).includes(result)) {
+    return fail(`${label} must be one of ${AGENT_HEALTH_VALUES.join(", ")}`);
   }
-  const selected = candidates[0];
-  return selected ? { value: selected.value, field: selected.key } : { value: null, field: null };
+  return result as AgentHealth;
 }
 
 function parseCoordinationAgent(value: unknown, index: number): CoordinationAgent {
   const item = object(value, `agents[${index}]`);
-  const reportedTimestamp = timestampAlias(item, `agents[${index}]`);
+  rejectObsoleteAgentKeys(item, `agents[${index}]`);
   return {
     agent: nonEmptyString(item.agent, `agents[${index}].agent`),
     specialization: nullableString(item.specialization, `agents[${index}].specialization`),
     capabilities: stringArray(item.capabilities, `agents[${index}].capabilities`),
     status: string(item.status, `agents[${index}].status`),
     stale: boolean(item.stale, `agents[${index}].stale`),
-    last_seen: reportedTimestamp.value,
-    last_seen_field: reportedTimestamp.field,
+    health: agentHealth(item.health, `agents[${index}].health`),
+    version: nullableString(item.version, `agents[${index}].version`),
+    meta: item.meta === undefined ? {} : object(item.meta, `agents[${index}].meta`),
+    last_heartbeat: nullableString(item.last_heartbeat, `agents[${index}].last_heartbeat`),
+    registered_at: nullableString(item.registered_at, `agents[${index}].registered_at`),
     active_tasks: nonNegativeInteger(item.active_tasks, `agents[${index}].active_tasks`),
-    completed_tasks: integerAlias(item, "completed_tasks", "completed", `agents[${index}]`),
-    failed_tasks: integerAlias(item, "failed_tasks", "failed", `agents[${index}]`),
+    completed: nonNegativeInteger(item.completed, `agents[${index}].completed`),
+    failed: nonNegativeInteger(item.failed, `agents[${index}].failed`),
+    retries: nonNegativeInteger(item.retries, `agents[${index}].retries`),
+    by_state: numberMap(item.by_state, `agents[${index}].by_state`),
   };
 }
 

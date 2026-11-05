@@ -57,6 +57,7 @@ type Messages = {
   updated: string;
   deadLetter: string;
   stale: string;
+  health: string;
   agentStatus: string;
   specialization: string;
   capabilities: string;
@@ -114,6 +115,7 @@ const copy: Record<Locale, Messages> = {
     updated: "Updated at",
     deadLetter: "Dead letter",
     stale: "Stale per provider",
+    health: "Provider health",
     agentStatus: "Provider-reported status",
     specialization: "Specialization",
     capabilities: "Capabilities",
@@ -169,6 +171,7 @@ const copy: Record<Locale, Messages> = {
     updated: "وقت التحديث",
     deadLetter: "قائمة العزل",
     stale: "قديم بحسب المزوّد",
+    health: "صحة الوكيل بحسب المزوّد",
     agentStatus: "الحالة كما أبلغ عنها المزوّد",
     specialization: "التخصص",
     capabilities: "الإمكانات",
@@ -224,6 +227,7 @@ const copy: Record<Locale, Messages> = {
     updated: "زمان به‌روزرسانی",
     deadLetter: "صف مرده",
     stale: "طبق منبع قدیمی است",
+    health: "سلامت عامل طبق منبع",
     agentStatus: "وضعیت گزارش‌شده از منبع",
     specialization: "تخصص",
     capabilities: "قابلیت‌ها",
@@ -318,15 +322,17 @@ function AgentContent({ agents, locale, messages }: { agents: CoordinationAgent[
             </div>
             <div className={styles.badges}>
               <span className={styles.statusTag}><bdi dir="auto">{agent.status}</bdi></span>
+              <span className={styles.statusTag}><bdi dir="ltr">{agent.health}</bdi></span>
               {agent.stale && <span className={`${styles.statusTag} ${styles.warningTag}`}>{messages.stale}</span>}
             </div>
           </div>
           <dl className={styles.smallMeta}>
             <div><dt>{messages.agentStatus}</dt><dd><bdi dir="auto">{agent.status}</bdi></dd></div>
-            <div><dt>{messages.lastSeen}{agent.last_seen_field && <> · <code><bdi dir="ltr">{agent.last_seen_field}</bdi></code></>}</dt><dd>{formatTimestamp(agent.last_seen, locale, messages.noTimestamp)}</dd></div>
+            <div><dt>{messages.health}</dt><dd><bdi dir="ltr">{agent.health}</bdi></dd></div>
+            <div><dt>{messages.lastSeen} · <code><bdi dir="ltr">last_heartbeat</bdi></code></dt><dd>{formatTimestamp(agent.last_heartbeat, locale, messages.noTimestamp)}</dd></div>
             <div><dt>{messages.activeTasks}</dt><dd>{formatNumber(agent.active_tasks, locale)}</dd></div>
-            <div><dt>{messages.completedTasks}</dt><dd>{formatNumber(agent.completed_tasks, locale)}</dd></div>
-            <div><dt>{messages.failedTasks}</dt><dd>{formatNumber(agent.failed_tasks, locale)}</dd></div>
+            <div><dt>{messages.completedTasks}</dt><dd>{formatNumber(agent.completed, locale)}</dd></div>
+            <div><dt>{messages.failedTasks}</dt><dd>{formatNumber(agent.failed, locale)}</dd></div>
           </dl>
           {agent.capabilities.length > 0 && (
             <div className={styles.capabilities}>

@@ -47,62 +47,47 @@ describe("owner-provided API response decoders", () => {
     expect(() => parseOpsOverview({ ...overviewPayload, metrics: { ...overviewPayload.metrics, entities: -1 } })).toThrow(/Invalid integration response/);
   });
 
-  it("accepts the two explicitly observed agent DTO spellings and exposes the timestamp field", () => {
-    const implemented = parseCoordinationAgents({ agents: [{
+  it("accepts only the canonical AgentDTO (PR #4 M21/M23) and rejects obsolete aliases", () => {
+    const base = {
       agent: "agent_a",
       specialization: null,
       capabilities: ["triage"],
       status: "available",
       stale: false,
+      health: "ACTIVE",
+      version: "1.0",
+      meta: {},
       last_heartbeat: "2026-11-05T09:55:00Z",
+      registered_at: "2026-11-05T09:00:00Z",
       active_tasks: 1,
       completed: 3,
       failed: 0,
-    }] }).agents[0];
-    expect(implemented).toMatchObject({
-      last_seen: "2026-11-05T09:55:00Z",
-      last_seen_field: "last_heartbeat",
-      completed_tasks: 3,
-      failed_tasks: 0,
-    });
-
-    const documented = parseCoordinationAgents({ agents: [{
-      agent: "agent_b",
-      specialization: null,
-      capabilities: [],
-      status: "offline",
-      stale: true,
-      last_seen: null,
-      active_tasks: 0,
-      completed_tasks: 2,
-      failed_tasks: 1,
-    }] }).agents[0];
-    expect(documented).toMatchObject({ last_seen_field: "last_seen", completed_tasks: 2, failed_tasks: 1 });
-
-    expect(() => parseCoordinationAgents({ agents: [{
-      agent: "agent_c",
-      capabilities: [],
-      status: "offline",
-      stale: true,
-      active_tasks: 0,
-      completed_tasks: 1,
-      completed: 2,
-      failed_tasks: 0,
-      failed: 0,
-    }] })).toThrow(/conflict/);
-
-    expect(() => parseCoordinationAgents({ agents: [{
-      agent: "agent_d",
-      specialization: null,
-      capabilities: [],
-      status: "offline",
-      stale: false,
-      last_seen: null,
+      retries: 1,
+      by_state: { COMPLETED: 3 },
+    };
+    expect(parseCoordinationAgents({ agents: [base] }).agents[0]).toMatchObject({
       last_heartbeat: "2026-11-05T09:55:00Z",
-      active_tasks: 0,
-      completed_tasks: 0,
-      failed_tasks: 0,
-    }] })).toThrow(/last_seen and last_heartbeat conflict/);
+      health: "ACTIVE",
+      completed: 3,
+      failed: 0,
+      retries: 1,
+      by_state: { COMPLETED: 3 },
+    });
+    // Obsolete documented aliases are rejected even when values agree with canonical fields.
+    for (const obsolete of [{ last_seen: null }, { completed_tasks: 3 }, { failed_tasks: 0 }]) {
+      expect(() => parseCoordinationAgents({ agents: [{ ...base, ...obsolete }] })).toThrow(/obsolete alias/);
+    }
+    // Missing, null, malformed, and numeric-string canonical fields are rejected.
+    const { completed: _c, ...missingCompleted } = base;
+    expect(() => parseCoordinationAgents({ agents: [missingCompleted] })).toThrow(/completed/);
+    expect(() => parseCoordinationAgents({ agents: [{ ...base, completed: null }] })).toThrow(/completed/);
+    expect(() => parseCoordinationAgents({ agents: [{ ...base, completed: "3" }] })).toThrow(/completed/);
+    expect(() => parseCoordinationAgents({ agents: [{ ...base, completed: -1 }] })).toThrow(/completed/);
+    expect(() => parseCoordinationAgents({ agents: [{ ...base, last_heartbeat: 42 }] })).toThrow(/last_heartbeat/);
+    expect(() => parseCoordinationAgents({ agents: [{ ...base, health: "healthy" }] })).toThrow(/health/);
+    expect(() => parseCoordinationAgents({ agents: [{ ...base, by_state: { COMPLETED: "3" } }] })).toThrow(/by_state/);
+    const { health: _h, ...missingHealth } = base;
+    expect(() => parseCoordinationAgents({ agents: [missingHealth] })).toThrow(/health/);
   });
 
   it("validates coordination counts and task identity fields", () => {

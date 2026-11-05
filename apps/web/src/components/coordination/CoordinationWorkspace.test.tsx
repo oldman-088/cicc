@@ -33,10 +33,16 @@ function stubProvider() {
       capabilities: ["triage"],
       status: "online",
       stale: false,
+      health: "ACTIVE",
+      version: null,
+      meta: {},
       last_heartbeat: "2026-11-05T09:55:00Z",
+      registered_at: "2026-11-05T09:00:00Z",
       active_tasks: 1,
       completed: 3,
       failed: 0,
+      retries: 0,
+      by_state: { COMPLETED: 3 },
     }] },
     tasks: { tasks: [
       {
@@ -151,10 +157,16 @@ describe("Agent Coordination workspace", () => {
           capabilities: [],
           status: "busy",
           stale: true,
-          last_seen: null,
+          health: "STALE",
+          version: null,
+          meta: {},
+          last_heartbeat: null,
+          registered_at: null,
           active_tasks: 0,
-          completed_tasks: 0,
-          failed_tasks: 0,
+          completed: 0,
+          failed: 0,
+          retries: 0,
+          by_state: {},
         }] });
       }
       return new Response("", { status: 404 });
