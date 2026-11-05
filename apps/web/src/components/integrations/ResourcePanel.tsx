@@ -14,6 +14,8 @@ type CommonMessages = {
   stale: string;
   lastSuccess: string;
   empty: string;
+  retrying: (seconds: number, attempt: number, max: number) => string;
+  retryGuidance: string;
   errors: Record<IntegrationFailureKind, string>;
 };
 
@@ -25,6 +27,8 @@ const messages: Record<Locale, CommonMessages> = {
     stale: "Refresh failed; the data below is the last successful response, not a current provider check.",
     lastSuccess: "Last successful response received by this browser",
     empty: "The provider returned no records for this section.",
+    retrying: (seconds, attempt, max) => `Retrying automatically in ${seconds}s (attempt ${attempt} of ${max}). You can also refresh manually.`,
+    retryGuidance: "If this persists, wait and use Refresh. Do not repeatedly reload the page.",
     errors: {
       not_configured: "The server-side provider is not configured in this deployment.",
       unauthorized: "The provider rejected the server-side read credential. Check its deployment configuration.",
@@ -47,6 +51,8 @@ const messages: Record<Locale, CommonMessages> = {
     stale: "فشل التحديث؛ البيانات أدناه هي آخر استجابة ناجحة وليست فحصاً حالياً للمزوّد.",
     lastSuccess: "وقت استلام هذا المتصفح لآخر استجابة ناجحة",
     empty: "لم يُرجع المزوّد سجلات لهذا القسم.",
+    retrying: (seconds, attempt, max) => `ستتم إعادة المحاولة تلقائياً بعد ${seconds} ثانية (المحاولة ${attempt} من ${max}). يمكنك أيضاً التحديث يدوياً.`,
+    retryGuidance: "إذا استمر ذلك، انتظر واستخدم التحديث. لا تُعد تحميل الصفحة مراراً.",
     errors: {
       not_configured: "لم يُضبط المزوّد من جهة الخادم في هذا النشر.",
       unauthorized: "رفض المزوّد بيانات القراءة الخادمية. تحقّق من إعدادات النشر.",
@@ -69,6 +75,8 @@ const messages: Record<Locale, CommonMessages> = {
     stale: "تازه‌سازی ناموفق بود؛ دادهٔ زیر آخرین پاسخ موفق است و بررسی فعلی منبع نیست.",
     lastSuccess: "زمان دریافت آخرین پاسخ معتبر در این مرورگر",
     empty: "منبع برای این بخش رکوردی برنگرداند.",
+    retrying: (seconds, attempt, max) => `تلاش خودکار پس از ${seconds} ثانیه (تلاش ${attempt} از ${max}). می‌توانید دستی نیز تازه‌سازی کنید.`,
+    retryGuidance: "اگر ادامه یافت، صبر کنید و از تازه‌سازی استفاده کنید. صفحه را پی‌درپی بارگذاری نکنید.",
     errors: {
       not_configured: "منبع سمت سرور در این استقرار پیکربندی نشده است.",
       unauthorized: "منبع اعتبارنامهٔ خواندن سمت سرور را نپذیرفت. تنظیمات استقرار را بررسی کنید.",
@@ -130,6 +138,12 @@ export function ResourcePanel<T>({
         {isLoading && hasData && <p className={styles.notice} role="status">{copy.refreshing}</p>}
         {state.status === "error" && state.error && (
           <p className={styles.error} role="alert">{copy.errors[state.error.kind]}</p>
+        )}
+        {state.status === "error" && state.retry && (
+          <p className={styles.notice} role="status">{copy.retrying(state.retry.nextRetryInSeconds, state.retry.attempt, state.retry.maxAttempts)}</p>
+        )}
+        {state.status === "error" && !state.retry && state.error && (state.error.kind === "rate_limited" || state.error.kind === "unavailable") && (
+          <p className={styles.notice}>{copy.retryGuidance}</p>
         )}
         {state.status === "error" && hasData && (
           <p className={styles.staleNote}>{copy.stale}</p>
