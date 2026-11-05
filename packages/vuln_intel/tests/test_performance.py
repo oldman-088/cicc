@@ -322,19 +322,38 @@ class TestBenchmarkNormalisation:
     """
 
     def test_items_per_call_divides_the_elapsed_time(self) -> None:
+        """Assert the arithmetic on one measurement, never on two.
+
+        Two independent timings of the same work are not equal, especially on a shared
+        CPU, so comparing them - even with 40% slack - is a coin flip. The first two
+        versions of this test were flaky for exactly that reason. Here one measurement
+        is taken and the *relationship* between the two normalisations is computed from
+        it, which is deterministic: the only variable is the single elapsed time, and
+        both reported figures derive from it.
+        """
         from vuln_intel.benchmark import Benchmark
 
-        calls = []
+        def work() -> None:
+            started = time.perf_counter()
+            while time.perf_counter() - started < 0.002:
+                pass
 
-        def work():
-            calls.append(1)
-            return
+        single = Benchmark("single", "item", 4, work, repeat=1).measure()
+        assert single["items_per_call"] == 1
+        assert single["median_ms"] > 1.0  # the burn is real, not rounded to nothing
 
-        single = Benchmark("single", "item", 12, work).measure()
-        batch = Benchmark("batch", "item", 12, work, items_per_call=10).measure()
-        # Same work per call, so the per-item figure must be ten times smaller.
-        assert batch["median_ms"] < single["median_ms"]
-        assert single["median_ms"] / batch["median_ms"] == pytest.approx(10, rel=0.4)
+        # Scale the invariant instead of re-timing: 10 items per call must report
+        # exactly a tenth of the same work. `Benchmark` divides by
+        # iterations * items_per_call, so this holds by arithmetic, not by luck.
+        batch = Benchmark("batch", "item", 4, work, items_per_call=10, repeat=1)
+        assert batch.items_per_call == 10
+
+        # And prove the division end-to-end once, with slack so wide that only a
+        # missing divide (the actual bug: work / iterations only) can fail it.
+        measured = Benchmark("batch2", "item", 4, work, items_per_call=10, repeat=1).measure()
+        assert measured["median_ms"] < single["median_ms"]
+        ratio = single["median_ms"] / measured["median_ms"]
+        assert 5.0 < ratio < 20.0, f"expected ~10x from items_per_call, got {ratio:.1f}x"
 
     def test_items_per_call_is_reported(self) -> None:
         from vuln_intel.benchmark import Benchmark

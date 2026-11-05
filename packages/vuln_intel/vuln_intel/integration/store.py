@@ -156,6 +156,19 @@ class InMemoryVulnerabilityStore:
         payload = {"origin": (enrichment or {}).get("origin", "live"), "cve": cve}
         assert_persistable(payload, allow_fixture=self.allow_fixture)
 
+        if dry_run:
+            # The service previews before it ever calls this, so this branch is a
+            # second line of defence - but the port *takes* the flag, and a host
+            # adapter that forwards it would otherwise write on a dry run. Accepting
+            # a flag and ignoring it is worse than not having it: the caller believes
+            # it asked for no writes and gets writes.
+            existing_row = self.rows.get((tenant_id, cve))
+            return UpsertResult(
+                UpsertOutcome.PREVIEWED,
+                entity_id=existing_row.entity_id if existing_row else None,
+                reason="dry run: nothing was written",
+            )
+
         key = (tenant_id, cve)
         incoming = _aware(collected_at)
         existing = self.rows.get(key)

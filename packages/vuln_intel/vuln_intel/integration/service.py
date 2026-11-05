@@ -121,7 +121,7 @@ class IngestionService:
                 assert isinstance(preview, dict)  # payload is always a mapping
                 report.payloads.append(preview)
                 report.outcomes.append(
-                    RecordOutcome(cve=str(record.cve), outcome="previewed")
+                    RecordOutcome(cve=str(record.cve), outcome=UpsertOutcome.PREVIEWED)
                 )
                 continue
 

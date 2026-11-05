@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
 __all__ = [
     "AuditPort",
@@ -22,6 +22,7 @@ __all__ = [
     "UpsertOutcome",
     "UpsertResult",
     "VulnerabilityStore",
+    "verify_port",
 ]
 
 
@@ -32,6 +33,10 @@ class UpsertOutcome(str):
     UPDATED = "updated"
     UNCHANGED = "unchanged"
     SKIPPED = "skipped"
+    #: A dry run described what it *would* do. The service used this string as a
+    #: literal for a while, which meant a dry-run report counted it in none of its
+    #: totals: created+updated+unchanged+failed summed to zero for N records.
+    PREVIEWED = "previewed"
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,7 @@ class UpsertResult:
         }
 
 
+@runtime_checkable
 class VulnerabilityStore(Protocol):
     """Persistence port.
 
@@ -102,6 +108,7 @@ class VulnerabilityStore(Protocol):
         """Persist one observation atomically with its provenance event."""
 
 
+@runtime_checkable
 class AuditPort(Protocol):
     """Audit sink. Kept separate from the store so audit failures are visible."""
 
@@ -116,6 +123,32 @@ class AuditPort(Protocol):
         details: Mapping[str, Any],
     ) -> None:
         """Append one audit event. Never silently swallow failures."""
+
+
+def verify_port(candidate: object, port: type = VulnerabilityStore) -> tuple[str, ...]:
+    """Return the names of the methods ``candidate`` is missing to satisfy ``port``.
+
+    ``isinstance(candidate, VulnerabilityStore)`` works now that the protocol is
+    ``runtime_checkable``, but it raises ``TypeError`` on a port that is not, and it
+    answers with a bare boolean. A host wiring a SQL adapter gets far more from
+    "your adapter is missing: upsert" than from "False", so the boolean is available
+    *and* the diagnosis is.
+
+    Deliberately shallow: ``runtime_checkable`` checks that a method of that name
+    exists, not that its signature matches. Signature conformance is mypy's job, and
+    pretending otherwise here would imply a guarantee this cannot make.
+    """
+    if not isinstance(port, type) or not getattr(port, "_is_protocol", False):
+        # `issubclass(int, Protocol)` is True, so that is not a usable guard. A
+        # protocol is marked by `_is_protocol`, and anything else would produce a
+        # list of stdlib method names presented as "your adapter is missing these".
+        raise TypeError("port must be a Protocol subclass")
+    missing = [
+        name
+        for name in getattr(port, "__protocol_attrs__", dir(port))
+        if not name.startswith("_") and not hasattr(candidate, name)
+    ]
+    return tuple(sorted(missing))
 
 
 @dataclass(frozen=True)
@@ -158,6 +191,10 @@ class ImportReport:
         return sum(1 for o in self.outcomes if o.outcome == UpsertOutcome.UNCHANGED)
 
     @property
+    def previewed(self) -> int:
+        return sum(1 for o in self.outcomes if o.outcome == UpsertOutcome.PREVIEWED)
+
+    @property
     def failed(self) -> int:
         return sum(1 for o in self.outcomes if o.outcome == UpsertOutcome.SKIPPED) + len(
             self.rejected
@@ -171,6 +208,7 @@ class ImportReport:
             "created": self.created,
             "updated": self.updated,
             "unchanged": self.unchanged,
+            "previewed": self.previewed,
             "failed": self.failed,
             "outcomes": [o.as_dict() for o in self.outcomes],
             "rejected": list(self.rejected),
