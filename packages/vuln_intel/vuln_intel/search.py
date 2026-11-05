@@ -55,7 +55,9 @@ class SearchHit:
 def _tokens(text: str | None) -> set[str]:
     if not text:
         return set()
-    return {t.lower() for t in _TOKEN.findall(text)}
+    # lowercase BEFORE tokenizing: the pattern is lowercase-only, so mixed-case
+    # words would otherwise split at capitals ("Log4Shell" -> "og4","hell").
+    return set(_TOKEN.findall(text.lower()))
 
 
 def search_records(
