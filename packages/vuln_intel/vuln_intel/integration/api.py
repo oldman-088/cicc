@@ -190,22 +190,64 @@ def _iso(value: object) -> str | None:
 def shape_record(row: Mapping[str, Any]) -> dict[str, Any]:
     """One stored row → the documented API object.
 
-    ``enrichment`` is passed through as stored. Missing values stay missing: the
-    response never fills an unconsulted KEV lookup with ``false``, because
-    ``false`` would assert the catalogue was checked and the CVE is absent from it.
+    Missing values stay missing: the response never fills an unconsulted KEV lookup
+    with ``false``, because ``false`` would assert the catalogue was checked and the
+    CVE is absent from it.
+
+    **Two payload families are read.** Ingest writes the full normalized fields into
+    ``details`` (``severity``, ``cvss``, ``sources``, ``kev``, ``epss``) and a
+    narrower cross-source block into ``details.cicc_enrichment`` (``best_cvss``,
+    ``contributing_sources``). An earlier version of this function read the
+    enrichment names for the detail-level fields, so a fully populated stored record
+    came back with ``severity: null``, ``cvss: null`` and ``sources: []``. Every API
+    test passed because they all supplied hand-built rows using the *enrichment*
+    spelling — the tests agreed with the bug.
+
+    A compatibility fallback is kept so stored rows predating the fix still render,
+    and so a host that only fills the enrichment block does not get blank fields.
     """
     details = row.get("details") or {}
     enrichment = details.get("cicc_enrichment") or {}
+
+    def pick(detail_key: str, enrichment_key: str | None = None, *, empty: Any = None):
+        """The detail-level value if present, else the enrichment-level one."""
+        value = details.get(detail_key)
+        if value is None or value == [] or value == {}:
+            value = enrichment.get(enrichment_key or detail_key)
+        return empty if value is None else value
+
+    sources = pick("sources", "contributing_sources", empty=[])
+
+    # `best_cvss` is *the model's* answer and is preferred over re-deriving one here.
+    # `NormalizedVulnerability.best_cvss` prefers the newest specification, not the
+    # highest score; an earlier version of this function picked the highest, so a
+    # record with a v4.0 9.3 and a v3.1 9.8 reported 9.8 through the API and 9.3
+    # everywhere else. Two definitions of "best" in two layers is exactly the kind of
+    # divergence that makes a UI disagree with a report about the same record.
+    cvss = enrichment.get("best_cvss")
+    if not cvss:
+        stored = details.get("cvss")
+        if isinstance(stored, list) and stored:
+            assessed = [s for s in stored if isinstance(s, dict) and s.get("base_score") is not None]
+            if assessed:
+                # Same rule as the model: newest specification first, then score.
+                cvss = max(
+                    assessed,
+                    key=lambda s: (str(s.get("version")), s.get("base_score") or -1),
+                )
+        if not cvss:
+            cvss = None
+
     return {
         "cve": row.get("cve"),
         "entity_id": row.get("entity_id"),
         "origin": row.get("origin"),
         "collected_at": _iso(row.get("collected_at")),
-        "severity": enrichment.get("severity"),
-        "cvss": enrichment.get("cvss"),
-        "kev": enrichment.get("kev"),
-        "epss": enrichment.get("epss"),
-        "sources": enrichment.get("sources") or [],
+        "severity": pick("severity"),
+        "cvss": cvss,
+        "kev": pick("kev"),
+        "epss": pick("epss"),
+        "sources": sources,
         "summary": details.get("summary"),
         "affected": details.get("affected") or [],
         "references": details.get("references") or [],

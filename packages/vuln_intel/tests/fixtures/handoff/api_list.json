@@ -1,0 +1,216 @@
+{
+  "data": [
+    {
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "fixed": "2.4.1",
+          "introduced": "0",
+          "name": "acme-router",
+          "purl": null,
+          "versions": []
+        }
+      ],
+      "collected_at": "2026-11-04T09:00:00+00:00",
+      "conflicts": [],
+      "cve": "CVE-2026-1001",
+      "cvss": {
+        "assessed": true,
+        "base_score": 9.3,
+        "severity": "critical",
+        "source": "nvd",
+        "vector": "CVSS:4.0/AV:N/AC:L/AT:N",
+        "version": "4.0"
+      },
+      "entity_id": "entity-tenant-d-CVE-2026-1001",
+      "epss": {
+        "model_date": "2026-11-03",
+        "percentile": 0.998,
+        "score": 0.94
+      },
+      "freshness": null,
+      "kev": true,
+      "origin": "fixture",
+      "policy": null,
+      "record_status": "published",
+      "references": [
+        {
+          "kind": "advisory",
+          "url": "https://example.invalid/advisory/1001"
+        }
+      ],
+      "severity": "critical",
+      "sources": [
+        "nvd",
+        "ghsa",
+        "cisa-kev"
+      ],
+      "ssvc": {
+        "automatable": "yes",
+        "exploitation": "active",
+        "technical_impact": "total"
+      },
+      "summary": "Remote code execution in acme-router before 2.4.1",
+      "withdrawn": null
+    },
+    {
+      "affected": [
+        {
+          "ecosystem": "pypi",
+          "fixed": "1.4.2",
+          "introduced": "1.0.0",
+          "name": "acme-auth",
+          "purl": null,
+          "versions": []
+        }
+      ],
+      "collected_at": "2026-11-04T09:00:00+00:00",
+      "conflicts": [
+        {
+          "discarded": [
+            "critical"
+          ],
+          "dissenters": [
+            "osv"
+          ],
+          "field": "severity",
+          "kept": "high"
+        }
+      ],
+      "cve": "CVE-2026-1002",
+      "cvss": {
+        "assessed": true,
+        "base_score": 7.5,
+        "severity": "high",
+        "source": "nvd",
+        "vector": "AV:N/AC:L/PR:N/UI:N",
+        "version": "3.1"
+      },
+      "entity_id": "entity-tenant-d-CVE-2026-1002",
+      "epss": {
+        "model_date": null,
+        "percentile": 0.91,
+        "score": 0.31
+      },
+      "freshness": null,
+      "kev": false,
+      "origin": "fixture",
+      "policy": null,
+      "record_status": "disputed",
+      "references": [],
+      "severity": "high",
+      "sources": [
+        "nvd",
+        "osv"
+      ],
+      "ssvc": {},
+      "summary": "Authentication bypass in acme-auth",
+      "withdrawn": null
+    },
+    {
+      "affected": [],
+      "collected_at": "2026-11-04T09:00:00+00:00",
+      "conflicts": [],
+      "cve": "CVE-2026-1003",
+      "cvss": null,
+      "entity_id": "entity-tenant-d-CVE-2026-1003",
+      "epss": {
+        "model_date": null,
+        "percentile": null,
+        "score": null
+      },
+      "freshness": null,
+      "kev": false,
+      "origin": "fixture",
+      "policy": null,
+      "record_status": "rejected",
+      "references": [],
+      "severity": "medium",
+      "sources": [
+        "osv"
+      ],
+      "ssvc": {},
+      "summary": "Withdrawn: alleged denial of service in acme-utils",
+      "withdrawn": "2026-10-30T09:00:00+00:00"
+    },
+    {
+      "affected": [],
+      "collected_at": "2026-11-04T09:00:00+00:00",
+      "conflicts": [],
+      "cve": "CVE-2026-1004",
+      "cvss": null,
+      "entity_id": "entity-tenant-d-CVE-2026-1004",
+      "epss": {
+        "model_date": null,
+        "percentile": null,
+        "score": null
+      },
+      "freshness": null,
+      "kev": null,
+      "origin": "fixture",
+      "policy": null,
+      "record_status": "undergoing_analysis",
+      "references": [],
+      "severity": "unknown",
+      "sources": [
+        "nvd"
+      ],
+      "ssvc": {},
+      "summary": null,
+      "withdrawn": null
+    },
+    {
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "fixed": "3.2.0",
+          "introduced": "3.0.0",
+          "name": "acme-ui",
+          "purl": null,
+          "versions": []
+        }
+      ],
+      "collected_at": "2026-11-04T09:00:00+00:00",
+      "conflicts": [],
+      "cve": "CVE-2026-1005",
+      "cvss": {
+        "assessed": true,
+        "base_score": 8.1,
+        "severity": "high",
+        "source": "nvd",
+        "vector": "AV:N/AC:L/PR:L/UI:N",
+        "version": "3.1"
+      },
+      "entity_id": "entity-tenant-d-CVE-2026-1005",
+      "epss": {
+        "model_date": null,
+        "percentile": 0.8,
+        "score": 0.12
+      },
+      "freshness": null,
+      "kev": false,
+      "origin": "fixture",
+      "policy": null,
+      "record_status": "published",
+      "references": [],
+      "severity": "high",
+      "sources": [
+        "nvd",
+        "osv"
+      ],
+      "ssvc": {},
+      "summary": "Prototype pollution in acme-ui",
+      "withdrawn": null
+    }
+  ],
+  "filters": {
+    "kev_only": false,
+    "order": "cve",
+    "severity": null
+  },
+  "page": {
+    "has_more": false,
+    "limit": 50,
+    "next_cursor": null
+  }
+}

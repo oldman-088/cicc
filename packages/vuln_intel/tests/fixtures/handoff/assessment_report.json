@@ -1,0 +1,401 @@
+{
+  "conflicts": {
+    "by_field": {
+      "severity": 1
+    },
+    "disputed_standing": [
+      {
+        "cve": "CVE-2026-1002",
+        "sources": [
+          "nvd",
+          "osv"
+        ],
+        "status": "disputed"
+      },
+      {
+        "cve": "CVE-2026-1003",
+        "sources": [
+          "osv"
+        ],
+        "status": "rejected"
+      },
+      {
+        "cve": "CVE-2026-1004",
+        "sources": [
+          "nvd"
+        ],
+        "status": "undergoing_analysis"
+      }
+    ],
+    "records": 1
+  },
+  "exposure": {
+    "advisories_considered": 5,
+    "affected": 2,
+    "assets_at_risk": [
+      "web-frontend"
+    ],
+    "clean": false,
+    "matches": [
+      {
+        "asset": "web-frontend",
+        "cve": "CVE-2026-1001",
+        "direct": true,
+        "ecosystem": "npm",
+        "fixed_version": "2.4.1",
+        "package": "acme-router",
+        "reasons": [
+          "2.3.0 falls in any version < 2.4.1"
+        ],
+        "remediation": "upgrade acme-router to 2.4.1 or later",
+        "sources": [
+          "nvd",
+          "ghsa",
+          "cisa-kev"
+        ],
+        "verdict": "affected",
+        "version": "2.3.0"
+      },
+      {
+        "asset": "web-frontend",
+        "cve": "CVE-2026-1005",
+        "direct": true,
+        "ecosystem": "npm",
+        "fixed_version": "3.2.0",
+        "package": "acme-ui",
+        "reasons": [
+          "3.0.5 falls in >= 3.0.0 < 3.2.0"
+        ],
+        "remediation": "upgrade acme-ui to 3.2.0 or later",
+        "sources": [
+          "nvd",
+          "osv"
+        ],
+        "verdict": "affected",
+        "version": "3.0.5"
+      }
+    ],
+    "unexplorable": [
+      "CVE-2026-1003",
+      "CVE-2026-1004"
+    ],
+    "unverified": 0
+  },
+  "live_verified": false,
+  "notice": "Assessment derived from the sources listed in this report. Ranking and remediation are computed, not approved policy; exploitation status is unknown wherever KEV was not consulted.",
+  "origin": "fixture",
+  "ranking": [
+    {
+      "band": "critical",
+      "components": {
+        "business": 0.0,
+        "confidence": 5.0,
+        "exploitation": 30.0,
+        "exposure": 4.0,
+        "recency": 4.92,
+        "severity": 37.2
+      },
+      "cve": "CVE-2026-1001",
+      "epss": 0.94,
+      "exploitation_unknown": false,
+      "freshness": "fresh",
+      "kev": true,
+      "max_components": {
+        "business": 10,
+        "confidence": 5,
+        "exploitation": 30,
+        "exposure": 10,
+        "recency": 5,
+        "severity": 40
+      },
+      "origin": "fixture",
+      "policy": "provisional-40/30/10/10/5/5",
+      "policy_approved": false,
+      "reasons": [
+        "severity 37.2/40: CVSS 4.0 base 9.3 (critical)",
+        "exploitation 30/30: listed in CISA KEV, confirmed exploitation in the wild",
+        "confidence 5/5: corroborated by 3 sources",
+        "recency 4.9/5: last updated 2d ago (fresh)",
+        "asset exposure not assessed: component excluded (max unchanged)",
+        "business criticality not assessed: component excluded",
+        "CISA SSVC range Attend..Act (active/yes/total; mission & well-being is stakeholder-specific and was not supplied)"
+      ],
+      "score": 81.12,
+      "severity": "critical",
+      "warnings": [
+        "ranking policy 'provisional-40/30/10/10/5/5' is PROVISIONAL, not approved organizational policy",
+        "origin is 'fixture': this ranking is not production intelligence"
+      ]
+    },
+    {
+      "band": "elevated",
+      "components": {
+        "business": 0.0,
+        "confidence": 3.5,
+        "exploitation": 8.2,
+        "exposure": 0.0,
+        "recency": 4.92,
+        "severity": 30.0
+      },
+      "cve": "CVE-2026-1002",
+      "epss": 0.31,
+      "exploitation_unknown": false,
+      "freshness": "fresh",
+      "kev": false,
+      "max_components": {
+        "business": 10,
+        "confidence": 5,
+        "exploitation": 30,
+        "exposure": 10,
+        "recency": 5,
+        "severity": 40
+      },
+      "origin": "fixture",
+      "policy": "provisional-40/30/10/10/5/5",
+      "policy_approved": false,
+      "reasons": [
+        "severity 30.0/40: CVSS 3.1 base 7.5 (high)",
+        "exploitation 8.2/30: EPSS forecast 0.310 (prediction, not proof), plus 2.0 for a confirmed absence from CISA KEV",
+        "confidence 3.5/5: corroborated by 2 sources",
+        "recency 4.9/5: last updated 2d ago (fresh)",
+        "asset exposure not assessed: component excluded (max unchanged)",
+        "business criticality not assessed: component excluded",
+        "record standing 'disputed': the claim is not settled"
+      ],
+      "score": 46.62,
+      "severity": "high",
+      "warnings": [
+        "ranking policy 'provisional-40/30/10/10/5/5' is PROVISIONAL, not approved organizational policy",
+        "origin is 'fixture': this ranking is not production intelligence",
+        "source disagreements present: severity disagreement across sources: critical, high (highest kept: high)"
+      ]
+    },
+    {
+      "band": "elevated",
+      "components": {
+        "business": 0.0,
+        "confidence": 3.5,
+        "exploitation": 4.4,
+        "exposure": 0.0,
+        "recency": 4.92,
+        "severity": 32.4
+      },
+      "cve": "CVE-2026-1005",
+      "epss": 0.12,
+      "exploitation_unknown": false,
+      "freshness": "fresh",
+      "kev": false,
+      "max_components": {
+        "business": 10,
+        "confidence": 5,
+        "exploitation": 30,
+        "exposure": 10,
+        "recency": 5,
+        "severity": 40
+      },
+      "origin": "fixture",
+      "policy": "provisional-40/30/10/10/5/5",
+      "policy_approved": false,
+      "reasons": [
+        "severity 32.4/40: CVSS 3.1 base 8.1 (high)",
+        "exploitation 4.4/30: EPSS forecast 0.120 (prediction, not proof), plus 2.0 for a confirmed absence from CISA KEV",
+        "confidence 3.5/5: corroborated by 2 sources",
+        "recency 4.9/5: last updated 2d ago (fresh)",
+        "asset exposure not assessed: component excluded (max unchanged)",
+        "business criticality not assessed: component excluded"
+      ],
+      "score": 45.22,
+      "severity": "high",
+      "warnings": [
+        "ranking policy 'provisional-40/30/10/10/5/5' is PROVISIONAL, not approved organizational policy",
+        "origin is 'fixture': this ranking is not production intelligence"
+      ]
+    },
+    {
+      "band": "moderate",
+      "components": {
+        "business": 0.0,
+        "confidence": 1.5,
+        "exploitation": 12.0,
+        "exposure": 0.0,
+        "recency": 4.92,
+        "severity": 22.0
+      },
+      "cve": "CVE-2026-1003",
+      "epss": null,
+      "exploitation_unknown": false,
+      "freshness": "fresh",
+      "kev": false,
+      "max_components": {
+        "business": 10,
+        "confidence": 5,
+        "exploitation": 30,
+        "exposure": 10,
+        "recency": 5,
+        "severity": 40
+      },
+      "origin": "fixture",
+      "policy": "provisional-40/30/10/10/5/5",
+      "policy_approved": false,
+      "reasons": [
+        "severity 22.0/40: source-stated severity medium (no vector)",
+        "exploitation 12.0/30: not in CISA KEV and no EPSS score, exploitation unlikely but unproven",
+        "confidence 1.5/5: single source (osv)",
+        "recency 4.9/5: last updated 2d ago (fresh)",
+        "asset exposure not assessed: component excluded (max unchanged)",
+        "business criticality not assessed: component excluded",
+        "record standing 'rejected': the advisory is not a live claim, so no remediation is implied"
+      ],
+      "score": 40.42,
+      "severity": "medium",
+      "warnings": [
+        "no CVSS vector/score; severity 'medium' mapped to 5.5/10",
+        "exploitation 12.0/30: not in CISA KEV and no EPSS score, exploitation unlikely but unproven",
+        "ranking policy 'provisional-40/30/10/10/5/5' is PROVISIONAL, not approved organizational policy",
+        "origin is 'fixture': this ranking is not production intelligence",
+        "ranking a withdrawn/rejected advisory: it is reported for completeness, not as work to do",
+        "source disagreements present: record withdrawn by OSV at 2026-10-30T09:00:00+00:00"
+      ]
+    },
+    {
+      "band": "low",
+      "components": {
+        "business": 0.0,
+        "confidence": 1.5,
+        "exploitation": 10.0,
+        "exposure": 0.0,
+        "recency": 4.92,
+        "severity": 0.0
+      },
+      "cve": "CVE-2026-1004",
+      "epss": null,
+      "exploitation_unknown": true,
+      "freshness": "fresh",
+      "kev": null,
+      "max_components": {
+        "business": 10,
+        "confidence": 5,
+        "exploitation": 30,
+        "exposure": 10,
+        "recency": 5,
+        "severity": 40
+      },
+      "origin": "fixture",
+      "policy": "provisional-40/30/10/10/5/5",
+      "policy_approved": false,
+      "reasons": [
+        "severity 0.0/40: severity unavailable",
+        "exploitation 10.0/30: status unknown (KEV not consulted, no EPSS), neutral score assigned",
+        "confidence 1.5/5: single source (nvd)",
+        "recency 4.9/5: last updated 2d ago (fresh)",
+        "asset exposure not assessed: component excluded (max unchanged)",
+        "business criticality not assessed: component excluded",
+        "record standing 'undergoing_analysis': the claim is not settled"
+      ],
+      "score": 16.42,
+      "severity": "unknown",
+      "warnings": [
+        "no CVSS data and no stated severity: severity component is 0",
+        "exploitation 10.0/30: status unknown (KEV not consulted, no EPSS), neutral score assigned",
+        "ranking policy 'provisional-40/30/10/10/5/5' is PROVISIONAL, not approved organizational policy",
+        "origin is 'fixture': this ranking is not production intelligence"
+      ]
+    }
+  ],
+  "remediation_summary": {
+    "actionable": 2,
+    "by_action": {
+      "emergency_patch": 1,
+      "patch": 1
+    },
+    "by_cost": {
+      "minor": 2
+    },
+    "emergency": 1,
+    "overdue": 0,
+    "total": 2,
+    "unverifiable": 0
+  },
+  "run_at": "2026-11-04T09:00:00+00:00",
+  "source_errors": [],
+  "summary": {
+    "actionable": 2,
+    "assets_at_risk": [
+      "web-frontend"
+    ],
+    "clusters": 5,
+    "contested": 1,
+    "disputed": 3,
+    "incomplete": false,
+    "mitre_consulted": false,
+    "mitre_mapped": 0,
+    "overdue": 0,
+    "ranked": 5
+  },
+  "threat_intel": {
+    "consulted": false,
+    "techniques": [],
+    "total_cves": 5
+  },
+  "top_risks": [
+    {
+      "action": "emergency_patch",
+      "cve": "CVE-2026-1001",
+      "days_remaining": null,
+      "due_date": null,
+      "ecosystem": "npm",
+      "evidence": [
+        "sources: nvd, ghsa, cisa-kev",
+        "2.3.0 falls in any version < 2.4.1",
+        "severity: critical"
+      ],
+      "installed_version": "2.3.0",
+      "instruction": "emergency upgrade acme-router to 2.4.1",
+      "mitigations": [
+        "limit network reachability: the CVSS vector is AV:N (network)",
+        "CISA confirms exploitation in the wild: review logs for prior exploitation",
+        "monitor the advisory for a fixed release",
+        "reduce exposure until a fix is published"
+      ],
+      "overdue": false,
+      "package": "acme-router",
+      "priority": "critical",
+      "reasons": [
+        "fixed release published: 2.4.1",
+        "listed in CISA KEV: exploitation confirmed in the wild"
+      ],
+      "target_version": "2.4.1",
+      "upgrade_cost": "minor",
+      "warnings": []
+    },
+    {
+      "action": "patch",
+      "cve": "CVE-2026-1005",
+      "days_remaining": null,
+      "due_date": null,
+      "ecosystem": "npm",
+      "evidence": [
+        "sources: nvd, osv",
+        "3.0.5 falls in >= 3.0.0 < 3.2.0"
+      ],
+      "installed_version": "3.0.5",
+      "instruction": "upgrade acme-ui to 3.2.0",
+      "mitigations": [],
+      "overdue": false,
+      "package": "acme-ui",
+      "priority": "elevated",
+      "reasons": [
+        "fixed release published: 3.2.0"
+      ],
+      "target_version": "3.2.0",
+      "upgrade_cost": "minor",
+      "warnings": []
+    }
+  ],
+  "warnings": [
+    "3 record(s) are not settled claims (1 disputed, 1 rejected, 1 undergoing_analysis); they remain in the report for completeness",
+    "1 record(s) have source disagreements; see report.conflicts.by_field",
+    "2 advisory/advisories carry no affected data and could not be matched to the inventory",
+    "origin is 'fixture': this report is not production intelligence"
+  ]
+}

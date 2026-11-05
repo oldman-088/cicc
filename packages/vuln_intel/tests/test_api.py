@@ -502,3 +502,128 @@ class TestStandingAndConflictsReachTheApi:
         details = to_source_details(record)
         assert details["cicc_enrichment"]["conflict_notes"] == ["severity disagreement"]
         assert details["conflict_notes"] == ["severity disagreement"]
+
+class TestFullRecordRoundTrip:
+    """A fully populated record must survive ingest → store → read intact.
+
+    Every pre-existing API test built its rows by hand, using the *enrichment*
+    spelling of each field. Ingest writes the detail-level spelling. The tests agreed
+    with the bug: `shape_record` read `enrichment["severity"]` while the store held
+    `details["severity"]`, so a real record came back with `severity: null`,
+    `cvss: null` and `sources: []` and nothing failed.
+
+    These tests go through the real service and the real store, which is the only way
+    to catch a disagreement between two halves of the same pipeline.
+    """
+
+    @staticmethod
+    def _pipeline(records):
+        from vuln_intel.integration.service import IngestionPolicy, IngestionService
+        from vuln_intel.integration.store import InMemoryVulnerabilityStore
+
+        store = InMemoryVulnerabilityStore(allow_fixture=True)
+        service = IngestionService(
+            store=store, policy=IngestionPolicy(allow_fixture=True, dry_run=False)
+        )
+        service.import_records(records, tenant_id="tenant-a")
+        return VulnerabilityApi(store)
+
+    @staticmethod
+    def _record(**kwargs):
+        from vuln_intel.schema import (
+            CveId,
+            CvssScore,
+            NormalizedVulnerability,
+            Origin,
+            Severity,
+        )
+
+        base = dict(
+            cve=CveId.parse("CVE-2026-0100"),
+            origin=Origin.FIXTURE,
+            sources=("nvd", "osv"),
+            summary="round trip",
+            severity=Severity.HIGH,
+            cvss=(
+                CvssScore(version="3.1", base_score=8.1, severity=Severity.HIGH,
+                          source="nvd"),
+            ),
+            kev=True,
+            epss_score=0.5,
+            epss_percentile=0.95,
+        )
+        base.update(kwargs)
+        return NormalizedVulnerability(**base)
+
+    def test_severity_survives(self) -> None:
+        api = self._pipeline([self._record()])
+        data = api.get(
+            GetVulnerabilityRequest(tenant_id="tenant-a", cve="CVE-2026-0100")
+        ).body["data"]
+        assert data["severity"] == "high"
+
+    def test_cvss_survives(self) -> None:
+        api = self._pipeline([self._record()])
+        data = api.get(
+            GetVulnerabilityRequest(tenant_id="tenant-a", cve="CVE-2026-0100")
+        ).body["data"]
+        assert data["cvss"]["base_score"] == 8.1
+
+    def test_sources_survive(self) -> None:
+        api = self._pipeline([self._record()])
+        data = api.get(
+            GetVulnerabilityRequest(tenant_id="tenant-a", cve="CVE-2026-0100")
+        ).body["data"]
+        assert data["sources"] == ["nvd", "osv"]
+
+    def test_kev_and_epss_survive(self) -> None:
+        api = self._pipeline([self._record()])
+        data = api.get(
+            GetVulnerabilityRequest(tenant_id="tenant-a", cve="CVE-2026-0100")
+        ).body["data"]
+        assert data["kev"] is True
+        assert data["epss"]["score"] == 0.5
+
+    def test_the_api_and_the_model_agree_on_best_cvss(self) -> None:
+        """Two definitions of "best" in two layers makes a UI contradict a report.
+
+        The model prefers the *newest specification* (v4.0 9.3 over v3.1 9.8); an
+        earlier version of `shape_record` preferred the *highest score* and reported
+        9.8 for the same record.
+        """
+        from vuln_intel.schema import CvssScore, Severity
+
+        record = self._record(
+            cvss=(
+                CvssScore(version="4.0", base_score=9.3, severity=Severity.CRITICAL,
+                          source="nvd"),
+                CvssScore(version="3.1", base_score=9.8, severity=Severity.CRITICAL,
+                          source="ghsa"),
+            )
+        )
+        api = self._pipeline([record])
+        data = api.get(
+            GetVulnerabilityRequest(tenant_id="tenant-a", cve="CVE-2026-0100")
+        ).body["data"]
+        assert data["cvss"]["base_score"] == record.best_cvss.base_score
+        assert data["cvss"]["version"] == record.best_cvss.version
+
+    def test_legacy_enrichment_only_rows_still_render(self) -> None:
+        """Rows written before the fix put everything under the enrichment key."""
+        row = {
+            "cve": "CVE-2026-0101",
+            "origin": "live",
+            "details": {
+                "cicc_enrichment": {
+                    "severity": "high",
+                    "best_cvss": {"base_score": 7.0, "version": "3.1"},
+                    "contributing_sources": ["nvd"],
+                    "kev": True,
+                    "epss": {"score": 0.1},
+                }
+            },
+        }
+        shaped = shape_record(row)
+        assert shaped["severity"] == "high"
+        assert shaped["sources"] == ["nvd"]
+        assert shaped["cvss"]["base_score"] == 7.0

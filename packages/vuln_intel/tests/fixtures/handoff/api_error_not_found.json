@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": {
+      "code": "not_found",
+      "message": "CVE-2026-9999 is not stored for this tenant"
+    }
+  },
+  "status": 404
+}
