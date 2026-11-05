@@ -65,7 +65,18 @@ def propose(s, *, amendment_id: str, title: str, description: str, proposed_by: 
     )
     s.add(row)
     _hist(row, None, "pending", proposed_by, "proposed")
-    s.flush()
+    try:
+        s.flush()
+    except Exception:
+        # M31: concurrent propose race — unique constraint fired; roll back and
+        # re-read: identical pending re-proposal is an idempotent duplicate
+        s.rollback()
+        existing = s.execute(select(models.CoordinationAmendment).where(
+            models.CoordinationAmendment.amendment_id == amendment_id)).scalar_one_or_none()
+        if existing is not None and existing.status == "pending" and existing.title == title \
+                and existing.proposed_by == proposed_by:
+            return to_dict(existing), True
+        raise ValueError(f"amendment_id '{amendment_id}' already exists (concurrent insert)")
     return to_dict(row), False
 
 
@@ -127,6 +138,15 @@ def decide(s, amendment_id: str, decision: str, decided_by: str, note: str | Non
         models.CoordinationAmendment.amendment_id == amendment_id)).scalar_one_or_none()
     if row is None:
         return {"ok": False, "code": 404, "reason": "amendment_not_found"}
+    # M31 self-approval policy: PROHIBITED by default, enforced server-side.
+    # A proposer may never decide their own amendment (owner-reserved changes);
+    # only the explicit env override CICC_AMENDMENT_ALLOW_SELF_APPROVAL=1 permits
+    # it, and then it is still flagged self_approved=true in the audit trail.
+    self_approval = (row.proposed_by or "").lower() == decided_by.lower()
+    if self_approval and os.getenv("CICC_AMENDMENT_ALLOW_SELF_APPROVAL", "0") != "1":
+        return {"ok": False, "code": 403,
+                "reason": "self-approval prohibited: proposer cannot decide their own amendment "
+                          "(set CICC_AMENDMENT_ALLOW_SELF_APPROVAL=1 to explicitly permit, audited)"}
     if row.status != "pending":
         return {"ok": False, "code": 409, "reason": f"amendment already {row.status}"}
     new_status = "accepted" if decision == "accept" else "rejected"
@@ -148,18 +168,25 @@ def decide(s, amendment_id: str, decision: str, decided_by: str, note: str | Non
         return {"ok": False, "code": 409, "reason": "amendment already decided (concurrent)"}
     _hist(row, "pending", new_status, decided_by, note)
     superseded = []
+    from sqlalchemy import update as _upd
     for sid in (supersedes or []):
         srow = s.execute(select(models.CoordinationAmendment).where(
             models.CoordinationAmendment.amendment_id == sid)).scalar_one_or_none()
-        if srow and srow.status == "pending":
-            srow.status = "superseded"
-            srow.decided_by = decided_by
-            srow.decided_at = datetime.now(timezone.utc)
+        if srow is None:
+            continue
+        # M31: guarded CAS — only a still-pending amendment can be superseded;
+        # a concurrent direct decision on it wins and supersede loses
+        res2 = s.execute(
+            _upd(models.CoordinationAmendment)
+            .where(models.CoordinationAmendment.id == srow.id)
+            .where(models.CoordinationAmendment.status == "pending")
+            .values(status="superseded", decided_by=decided_by, decided_at=datetime.now(timezone.utc))
+        )
+        if res2.rowcount == 1:
             _hist(srow, "pending", "superseded", decided_by, f"superseded by {amendment_id}")
             superseded.append(sid)
-    self_approved = (row.proposed_by or "").lower() == decided_by.lower()
     return {"ok": True, "amendment_id": amendment_id, "status": new_status, "decided_by": decided_by,
-            "self_approved": self_approved, "superseded": superseded,
+            "self_approved": self_approval, "superseded": superseded,
             "compatibility": validate_compatibility(
                 json.loads(row.affects or "[]"), compat, descriptor or {})}
 
@@ -170,13 +197,18 @@ def withdraw(s, amendment_id: str, by: str) -> dict:
         models.CoordinationAmendment.amendment_id == amendment_id)).scalar_one_or_none()
     if row is None:
         return {"ok": False, "code": 404, "reason": "amendment_not_found"}
-    if row.status != "pending":
-        return {"ok": False, "code": 409, "reason": f"amendment already {row.status}"}
     if (row.proposed_by or "").lower() != (by or "").lower():
         return {"ok": False, "code": 403, "reason": "only the proposer may withdraw"}
-    row.status = "withdrawn"
-    row.decided_by = by
-    row.decided_at = datetime.now(timezone.utc)
+    # M31: guarded CAS — a concurrent decide/supersede/sweep wins, withdraw loses
+    from sqlalchemy import update
+    res = s.execute(
+        update(models.CoordinationAmendment)
+        .where(models.CoordinationAmendment.id == row.id)
+        .where(models.CoordinationAmendment.status == "pending")
+        .values(status="withdrawn", decided_by=by, decided_at=datetime.now(timezone.utc))
+    )
+    if res.rowcount != 1:
+        return {"ok": False, "code": 409, "reason": "amendment no longer pending (concurrent transition)"}
     _hist(row, "pending", "withdrawn", by)
     return {"ok": True, "amendment_id": amendment_id, "status": "withdrawn"}
 
@@ -189,9 +221,16 @@ def sweep_stale(s, now: datetime | None = None) -> list[str]:
             models.CoordinationAmendment.status == "pending")).scalars().all():
         created = row.created_at
         if created and (now - created.replace(tzinfo=timezone.utc)).total_seconds() > stale_after_s():
-            row.status = "stale"
-            _hist(row, "pending", "stale", "sweep", f"pending > {stale_after_s()}s")
-            out.append(row.amendment_id)
+            from sqlalchemy import update as _upd
+            res = s.execute(
+                _upd(models.CoordinationAmendment)
+                .where(models.CoordinationAmendment.id == row.id)
+                .where(models.CoordinationAmendment.status == "pending")
+                .values(status="stale")
+            )
+            if res.rowcount == 1:
+                _hist(row, "pending", "stale", "sweep", f"pending > {stale_after_s()}s")
+                out.append(row.amendment_id)
     return out
 
 

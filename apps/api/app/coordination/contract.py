@@ -80,6 +80,7 @@ def contract_v1() -> dict:
             "Amendment status lifecycle": ["pending", "accepted", "rejected", "withdrawn (proposer-only)", "superseded (via accept supersedes[])", "stale (sweep, CICC_AMENDMENT_STALE_S)"],
             "Amendment fields": ["amendment_id", "title", "description", "proposed_by", "affects[]", "compatibility", "target_version", "status", "decided_by", "decision_note", "linked_refs[]", "history[]", "duplicate?"],
             "POST /contract/amendments/{id}/decide": ["decision(accept|reject)", "decided_by(approver-only)", "note? (required if not backward_compatible)", "linked_refs[]", "supersedes[]"],
+            "self-approval policy": "M31: PROHIBITED server-side by default — proposer cannot decide own amendment (403); only explicit CICC_AMENDMENT_ALLOW_SELF_APPROVAL=1 permits it, always flagged self_approved=true in history",
             "POST /contract/amendments/{id}/withdraw": ["by(proposer-only)"],
             "POST /contract/amendments (duplicate)": "identical re-proposal of a pending amendment returns 200 with duplicate:true (idempotent)",
             "POST /contract/amendments": ["amendment_id", "title", "description", "proposed_by", "affects[]", "compatibility", "target_version?"],

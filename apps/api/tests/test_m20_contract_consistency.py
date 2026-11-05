@@ -285,7 +285,7 @@ def test_m29_health_last_operations(client):
     assert lo["last_webhook_received"] is None and lo["last_github_sync_success"] is None
 
 
-def test_m30_amendment_lifecycle_hardening(client):
+def test_m30_amendment_lifecycle_hardening(client, monkeypatch):
     """M30: duplicate idempotency, proposer-only withdraw, supersede, stale sweep,
     self-approval flag, backward-incompatible note requirement, audit history."""
     import datetime as _dt
@@ -314,11 +314,17 @@ def test_m30_amendment_lifecycle_hardening(client):
                     json={"decision": "accept", "decided_by": "owner", "supersedes": ["AMD-102"]}, headers=W)
     assert r.status_code == 200 and r.json()["superseded"] == ["AMD-102"]
     assert client.get("/api/v1/coordination/contract/amendments/AMD-102", headers=R).json()["status"] == "superseded"
-    # self-approval flagged
+    # M31 self-approval policy: prohibited by default (403), permitted+flagged only with explicit override
     client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-103", proposed_by="owner"), headers=W)
     r = client.post("/api/v1/coordination/contract/amendments/AMD-103/decide",
                     json={"decision": "accept", "decided_by": "owner"}, headers=W)
+    assert r.status_code == 403 and "self-approval" in r.json()["detail"]
+    monkeypatch.setenv("CICC_AMENDMENT_ALLOW_SELF_APPROVAL", "1")
+    client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-103b", proposed_by="owner"), headers=W)
+    r = client.post("/api/v1/coordination/contract/amendments/AMD-103b/decide",
+                    json={"decision": "accept", "decided_by": "owner"}, headers=W)
     assert r.status_code == 200 and r.json()["self_approved"] is True
+    monkeypatch.delenv("CICC_AMENDMENT_ALLOW_SELF_APPROVAL", raising=False)
     # backward-incompatible without note -> 422
     client.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-104", compatibility={"backward_compatible": False}), headers=W)
     r = client.post("/api/v1/coordination/contract/amendments/AMD-104/decide",
