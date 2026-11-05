@@ -107,6 +107,7 @@ async def github_webhook(
     with ops.SessionLocal() as s:
         result = webhook.ingest(s, x_github_delivery, x_github_event or "unknown", body,
                                 x_hub_signature_256, secrets)
+        s.commit()  # persist event/task AND any replay-detection alert (M16)
     if not result.get("ok"):
         raise HTTPException(status_code=result["code"], detail=result["reason"])
     return result

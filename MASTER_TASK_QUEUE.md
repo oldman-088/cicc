@@ -72,6 +72,21 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   agent PR references /api/v1/coordination yet (heads a1688bb/3462a8b/1a46f70).
 - Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
 
+## Done — M16 (continued development + master prompt alignment)
+- Master prompt located+reviewed read-only: README.md@main ca8f82c v1.0;
+  alignment doc docs/MASTER_PROMPT_ALIGNMENT.md; Agent-1-scoped deliverables
+  added: REQUIREMENTS_TRACEABILITY.md, ACCEPTANCE_TESTS.md, BLOCKERS.md,
+  RELEASE_READINESS.md, SECURITY_STATUS.md, API_DOCUMENTATION.md.
+- Contract conformance harness (fixture-labeled): tests/test_m16_conformance.py
+  (5) — DTO keys, 14-state enum, error codes 401/403/404/409/422, webhook DTO.
+- Webhook replay detection (M16-03): duplicate delivery older than
+  CICC_GH_MAX_REPLAY_AGE_S (default 24h) -> detection-only alert
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

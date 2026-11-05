@@ -188,6 +188,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
   + build; i18n 188/188.
 
+## Done — Milestone 16 (PR #4 update)
+
+- M16-01: per-agent adoption status recorded with specifics (Agent 4 partially
+  compatible discussion-level, path/auth/tenancy questions resolved; Agents
+  2/3 pending). Contract-conformance harness (5 fixture-labeled tests).
+- M16-02: e2e_check.py execution-mode labels (LIVE-API / LIVE-BFF /
+  SIMULATED-FIXTURE); 22/22 PASS @2026-11-05T10:28:12Z; real-PG kept separate.
+- M16-03: webhook replay detection alert (CICC_GH_MAX_REPLAY_AGE_S, detection
+  only — no invented timestamp); webhook router commit fix; BFF invariants
+  unchanged; no session system; no tenant migration; notifications disabled.
+- M16 master-prompt alignment: docs/MASTER_PROMPT_ALIGNMENT.md (README.md@main
+  ca8f82c v1.0) + Agent-1-scoped REQUIREMENTS_TRACEABILITY / ACCEPTANCE_TESTS /
+  BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
+- Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -315,6 +330,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   heads a1688bb / 3462a8b / 1a46f70). Accepted: none explicit; rejected: none.
 - Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
   + build; i18n 188/188.
+
+## Done — Milestone 16 (PR #4 update)
+
+- M16-01: per-agent adoption status recorded with specifics (Agent 4 partially
+  compatible discussion-level, path/auth/tenancy questions resolved; Agents
+  2/3 pending). Contract-conformance harness (5 fixture-labeled tests).
+- M16-02: e2e_check.py execution-mode labels (LIVE-API / LIVE-BFF /
+  SIMULATED-FIXTURE); 22/22 PASS @2026-11-05T10:28:12Z; real-PG kept separate.
+- M16-03: webhook replay detection alert (CICC_GH_MAX_REPLAY_AGE_S, detection
+  only — no invented timestamp); webhook router commit fix; BFF invariants
+  unchanged; no session system; no tenant migration; notifications disabled.
+- M16 master-prompt alignment: docs/MASTER_PROMPT_ALIGNMENT.md (README.md@main
+  ca8f82c v1.0) + Agent-1-scoped REQUIREMENTS_TRACEABILITY / ACCEPTANCE_TESTS /
+  BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
+- Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
 
 ## Next (backlog, priority order)
 
@@ -447,6 +477,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
   + build; i18n 188/188.
 
+## Done — Milestone 16 (PR #4 update)
+
+- M16-01: per-agent adoption status recorded with specifics (Agent 4 partially
+  compatible discussion-level, path/auth/tenancy questions resolved; Agents
+  2/3 pending). Contract-conformance harness (5 fixture-labeled tests).
+- M16-02: e2e_check.py execution-mode labels (LIVE-API / LIVE-BFF /
+  SIMULATED-FIXTURE); 22/22 PASS @2026-11-05T10:28:12Z; real-PG kept separate.
+- M16-03: webhook replay detection alert (CICC_GH_MAX_REPLAY_AGE_S, detection
+  only — no invented timestamp); webhook router commit fix; BFF invariants
+  unchanged; no session system; no tenant migration; notifications disabled.
+- M16 master-prompt alignment: docs/MASTER_PROMPT_ALIGNMENT.md (README.md@main
+  ca8f82c v1.0) + Agent-1-scoped REQUIREMENTS_TRACEABILITY / ACCEPTANCE_TESTS /
+  BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
+- Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -571,6 +616,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
   + build; i18n 188/188.
 
+## Done — Milestone 16 (PR #4 update)
+
+- M16-01: per-agent adoption status recorded with specifics (Agent 4 partially
+  compatible discussion-level, path/auth/tenancy questions resolved; Agents
+  2/3 pending). Contract-conformance harness (5 fixture-labeled tests).
+- M16-02: e2e_check.py execution-mode labels (LIVE-API / LIVE-BFF /
+  SIMULATED-FIXTURE); 22/22 PASS @2026-11-05T10:28:12Z; real-PG kept separate.
+- M16-03: webhook replay detection alert (CICC_GH_MAX_REPLAY_AGE_S, detection
+  only — no invented timestamp); webhook router commit fix; BFF invariants
+  unchanged; no session system; no tenant migration; notifications disabled.
+- M16 master-prompt alignment: docs/MASTER_PROMPT_ALIGNMENT.md (README.md@main
+  ca8f82c v1.0) + Agent-1-scoped REQUIREMENTS_TRACEABILITY / ACCEPTANCE_TESTS /
+  BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
+- Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -692,6 +752,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   heads a1688bb / 3462a8b / 1a46f70). Accepted: none explicit; rejected: none.
 - Regression M1–M14: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc
   + build; i18n 188/188.
+
+## Done — Milestone 16 (PR #4 update)
+
+- M16-01: per-agent adoption status recorded with specifics (Agent 4 partially
+  compatible discussion-level, path/auth/tenancy questions resolved; Agents
+  2/3 pending). Contract-conformance harness (5 fixture-labeled tests).
+- M16-02: e2e_check.py execution-mode labels (LIVE-API / LIVE-BFF /
+  SIMULATED-FIXTURE); 22/22 PASS @2026-11-05T10:28:12Z; real-PG kept separate.
+- M16-03: webhook replay detection alert (CICC_GH_MAX_REPLAY_AGE_S, detection
+  only — no invented timestamp); webhook router commit fix; BFF invariants
+  unchanged; no session system; no tenant migration; notifications disabled.
+- M16 master-prompt alignment: docs/MASTER_PROMPT_ALIGNMENT.md (README.md@main
+  ca8f82c v1.0) + Agent-1-scoped REQUIREMENTS_TRACEABILITY / ACCEPTANCE_TESTS /
+  BLOCKERS / RELEASE_READINESS / SECURITY_STATUS / API_DOCUMENTATION.
+- Regression: API 155/155 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
 
 ## Next (backlog, priority order)
 

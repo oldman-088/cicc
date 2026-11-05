@@ -14,3 +14,4 @@
 - 2026-11-05 M13: Agent 4 blockers answered (API_REFERENCE.md), boundary tests + 409 report fix + events task_id; Agents 2/3 unconfirmed (not assumed); API 150/150
 - 2026-11-05 M14 (d644f91+): BFF token injection (server-only) + tests + live verify; webhook replay/timestamp findings; adoption accepted/rejected/pending; Agents 2/3 pending, Agent 4 QA requested
 - 2026-11-05 M15 (6e2151e+): e2e_check.py 22/22 PASS live; M15 security review (BFF + session-architecture note); adoption re-check — all agents pending explicit confirmation
+- 2026-11-05 M16 (2f647f1+): master prompt alignment (README.md@ca8f82c v1.0); conformance harness; webhook replay detection alert; e2e mode labels 22/22; scoped deliverable docs; API 155/155

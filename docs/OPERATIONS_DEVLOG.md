@@ -166,3 +166,16 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   implemented (must align with platform auth_sessions sha256 contract);
   webhook replay recap. CONTRACT_ADOPTION: all agents PENDING.
 - API 150/150; web 23/23 + tsc + build; i18n 188/188.
+
+## 2026-11-05 — Milestone 16 (branch arena/961971ed-cicc, PR #4)
+
+- Master prompt: README.md on main @ ca8f82c (v1.0, 1384 lines) — reviewed
+  read-only; alignment written to docs/MASTER_PROMPT_ALIGNMENT.md. Searched all
+  branches for other prompt files — none. Not modified.
+- test_m16_conformance.py (5, fixture-labeled): DTO conformance, state enum,
+  error codes, webhook DTO + replay detection. Fixed webhook router missing
+  commit (replay alert wasn't persisted).
+- webhook.py: duplicate-delivery age check -> Alert webhook_replay_after_window
+  (CICC_GH_MAX_REPLAY_AGE_S default 86400) — detection only.
+- e2e_check.py: per-check mode labels; 22/22 PASS @10:28:12Z.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.

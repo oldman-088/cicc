@@ -19,7 +19,7 @@
         "DAG",
         "sweep"
       ],
-      "tests": "API 150/150 (7 real-PG + 1 live-GitHub); M13 boundary 8/8"
+      "tests": "API 155/155 (7 real-PG + 1 live-GitHub); conformance harness 5/5 (fixture-labeled); E2E 22/22 live"
     },
     "ops": {
       "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,7 +43,7 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M15"
+    "M1..M16"
   ],
   "contracts": {
     "version": "v1.0",
@@ -72,8 +72,14 @@
   "webhook_security": "HMAC+dedup+allowlist+rotation in force; no signed timestamp exists at GitHub (documented, not invented); remaining replay risk + mitigations in SECURITY_REVIEW.md \u00a7M14",
   "e2e": {
     "script": "scripts/e2e_check.py",
-    "last_run": "2026-11-05T10:14:51Z",
+    "last_run": "2026-11-05T10:28:12Z",
     "result": "22/22 PASS",
     "note": "agent-2/3 actors are simulated script submissions, NOT Arena sessions; BFF reads verified tokenless"
+  },
+  "master_prompt": {
+    "path": "README.md@main",
+    "version": "ULTIMATE MASTER PROMPT v1.0",
+    "commit": "ca8f82c",
+    "alignment_doc": "docs/MASTER_PROMPT_ALIGNMENT.md"
   }
 }

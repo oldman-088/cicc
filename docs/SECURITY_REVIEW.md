@@ -119,6 +119,16 @@ unit tests (`tests/bff.test.mjs`).
   absent from all responses (tested); every coordination transition incl.
   rejected ones is audited.
 
+## M16 (2026-11-05)
+- Webhook replay-state recovery: duplicates are still deduped, but a duplicate
+  whose first receipt is older than `CICC_GH_MAX_REPLAY_AGE_S` (default 24h)
+  now raises a detection-only alert `webhook_replay_after_window` (warning,
+  component coordination-webhook). No signed timestamp is invented; rejection
+  on age is impossible without one, so this is alerting/hardening only.
+  DB-restore dedup-state loss remains a documented residual risk; mitigation =
+  rotate `CICC_GH_WEBHOOK_SECRET`. Router commit fix: replay alerts now persist.
+- BFF invariants unchanged and re-verified (unit + live).
+
 ### Unresolved security decisions (owner)
 1. Tenant isolation model (A/B/C/D in the decision doc; recommendation B).
 2. Shared DB vs read-replica for platform auth (`CICC_PLATFORM_DB_URL`).

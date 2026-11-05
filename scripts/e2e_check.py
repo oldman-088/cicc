@@ -44,23 +44,29 @@ def call(base, method, path, body=None, headers=None):
             return e.code, {}
 
 
-def check(name, ok, extra=""):
+def check(name, ok, extra="", mode="LIVE-API"):
+    """mode: LIVE-API = real HTTP to the running API; LIVE-BFF = real HTTP to
+    the running web BFF (no browser token); SIMULATED-FIXTURE = submission by
+    this script acting as a stand-in agent (NOT an Arena session)."""
     results.append((name, ok))
-    print(f"[{time.strftime('%H:%M:%S')}] {'PASS' if ok else 'FAIL'}  {name} {extra}")
+    print(f"[{time.strftime('%H:%M:%S')}] {'PASS' if ok else 'FAIL'}  [{mode}]  {name} {extra}")
 
 
 def main():
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     print(f"E2E integration check started {ts}  API={API} WEB={WEB}")
-    print("NOTE: agent-2/agent-3 actors are SIMULATED submissions (script), not Arena sessions\n")
+    print("EXECUTION MODES: [LIVE-API]=real HTTP vs running API+its persistence; "
+          "[LIVE-BFF]=real HTTP vs running web BFF (server-side token, no browser token); "
+          "agent-2/3 actors are SIMULATED-FIXTURE submissions by this script — NOT Arena sessions. "
+          "Real-PostgreSQL coverage is separate (pytest -k 'postgres or pg').\n")
 
     # 1. register simulated agents
     c, _ = call(API, "POST", "/api/v1/coordination/agents/register",
                 {"agent": "agent-2-threat-intel", "capabilities": ["threat_intel"]}, W)
-    check("register agent-2-threat-intel (simulated)", c == 201, f"-> {c}")
+    check("register agent-2-threat-intel", c == 201, f"-> {c}", mode="SIMULATED-FIXTURE")
     c, _ = call(API, "POST", "/api/v1/coordination/agents/register",
                 {"agent": "agent-3-vuln-intel", "capabilities": ["vuln_intel"]}, W)
-    check("register agent-3-vuln-intel (simulated)", c == 201, f"-> {c}")
+    check("register agent-3-vuln-intel", c == 201, f"-> {c}", mode="SIMULATED-FIXTURE")
 
     # 2. threat-intel task lifecycle
     c, p = call(API, "POST", "/api/v1/coordination/tasks",
@@ -122,16 +128,16 @@ def main():
 
     # 5. frontend integration via BFF (no browser token)
     c, p = call(WEB, "GET", "/api/v1/coordination/agents", headers={})
-    check("BFF: agents readable with NO browser token", c == 200 and len(p.get("agents", [])) >= 2, f"-> {c}")
+    check("BFF: agents readable with NO browser token", c == 200 and len(p.get("agents", [])) >= 2, f"-> {c}", mode="LIVE-BFF")
     c, p = call(WEB, "GET", "/api/v1/coordination/tasks?kind=threat_intel", headers={})
-    check("BFF: tasks readable", c == 200 and len(p.get("tasks", [])) >= 1, f"-> {c}")
+    check("BFF: tasks readable", c == 200 and len(p.get("tasks", [])) >= 1, f"-> {c}", mode="LIVE-BFF")
     c, p = call(WEB, "GET", "/api/v1/coordination/metrics", headers={})
-    check("BFF: metrics readable (real counts)", c == 200 and p.get("tasks_total", 0) > 0)
+    check("BFF: metrics readable (real counts)", c == 200 and p.get("tasks_total", 0) > 0, mode="LIVE-BFF")
     c, p = call(WEB, "GET", "/api/v1/coordination/github/status", headers={})
-    check("BFF: LIVE github status", c == 200 and p.get("status") == "ok",
-          f"PRs={[x['number'] for x in p.get('open_prs', [])]}")
+    check("BFF: LIVE github status (real api.github.com)", c == 200 and p.get("status") == "ok",
+          f"PRs={[x['number'] for x in p.get('open_prs', [])]}", mode="LIVE-BFF")
     c, _ = call(WEB, "POST", "/api/v1/coordination/tasks", {"kind": "x"}, headers={"Content-Type": "application/json"})
-    check("BFF: write via browser -> 403", c == 403, f"-> {c}")
+    check("BFF: write via browser -> 403", c == 403, f"-> {c}", mode="LIVE-BFF")
 
     failed = [n for n, ok in results if not ok]
     print(f"\nE2E finished {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}: "

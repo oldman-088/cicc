@@ -122,7 +122,34 @@ def ingest(s, delivery_id: str, event: str, body: bytes, signature: str | None,
         return {"ok": False, "code": 400, "reason": "payload must be a JSON object"}
     existing = s.get(models.GitHubEvent, delivery_id)
     if existing is not None:
-        return {"ok": True, "duplicate": True, "delivery_id": delivery_id, "task_id": None}
+        # Replay detection (M16): GitHub sends NO signed timestamp, so we do
+        # not reject on age — we DETECT and alert. A duplicate whose first
+        # receipt is older than CICC_GH_MAX_REPLAY_AGE_S (default 24h) is a
+        # possible replay after dedup-state loss (e.g. DB restore).
+        replay_alert = False
+        try:
+            import os as _os
+            from datetime import datetime, timezone as _tz
+            max_age = float(_os.getenv("CICC_GH_MAX_REPLAY_AGE_S", "86400"))
+            first = existing.received_at
+            if first is not None:
+                if first.tzinfo is None:
+                    first = first.replace(tzinfo=_tz.utc)
+                age = (datetime.now(_tz.utc) - first).total_seconds()
+                if age > max_age:
+                    replay_alert = True
+                    s.add(models.Alert(
+                        rule="webhook_replay_after_window", component_key="coordination-webhook",
+                        severity="warning", status="active",
+                        message=(f"duplicate webhook delivery {delivery_id} first seen "
+                                 f"{age:.0f}s ago (> {max_age:.0f}s) — possible replay after "
+                                 f"dedup-state loss; rotate CICC_GH_WEBHOOK_SECRET if unexpected"),
+                        first_seen=first, last_seen=datetime.now(_tz.utc), occurrences=1,
+                        flapping=False))
+        except Exception:
+            replay_alert = False
+        return {"ok": True, "duplicate": True, "delivery_id": delivery_id, "task_id": None,
+                "replay_alert": replay_alert}
     norm = normalize(event, payload)
     s.add(models.GitHubEvent(
         delivery_id=delivery_id, event=event, action=norm["action"], repo=norm["repo"],

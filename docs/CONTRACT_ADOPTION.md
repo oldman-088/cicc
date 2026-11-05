@@ -61,3 +61,13 @@ PR #2 (`3462a8b`), PR #3 (`1a46f70`): **no file in any agent PR references
 | Agent 4 binding + visual QA | PENDING (blockers answered M13; QA requested M14) |
 | Rejected items | none |
 | Accepted items | none explicit yet — v1.0 stands as proposed |
+
+## M16 update (2026-11-05 ~10:30 UTC) — per-agent status with specifics
+
+| Agent | Status (M16) | Specific field/endpoint/DTO/auth/tenant mismatches found |
+|---|---|---|
+| Agent 2 (PR #3, head 1a46f70) | **PENDING** — no confirmation; no code references `/api/v1/coordination` | none identified (no integration code to compare); contract v1.0 offered |
+| Agent 3 (PR #1, head a1688bb) | **PENDING** — same | none identified; own contracts doc is "proposed, not agreed" |
+| Agent 4 (PR #2, head 3462a8b) | **PARTIALLY COMPATIBLE (discussion-level)** — engaged on PR #4 | M13: path ambiguity (`/api/v1/overview` vs `/api/v1/ops/overview`) — resolved in docs/API_REFERENCE.md; auth/tenancy question — answered (single-tenant, BFF, no browser token, tenant pending owner); DTO/error reference — provided; ownership overlap — per APPS_INTEGRATION_STRATEGY.md. No DTO field mismatches remain open; visual QA pending |
+
+Conformance harness (fixture-labeled, NOT agent integration): tests/test_m16_conformance.py (5 tests) validates v1.0 DTOs/state enum/error codes against the live app.
