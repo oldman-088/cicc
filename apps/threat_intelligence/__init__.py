@@ -163,12 +163,18 @@ from apps.threat_intelligence.source_reliability import (
     VerificationPromotionError,
 )
 from apps.threat_intelligence.contract_registry import (
+    LIFECYCLE_ORDER,
+    LOCAL_PACKAGE_IDENTITY,
+    TERMINAL_STATUSES,
     ContractDependency,
+    ContractLifecycleEntry,
+    ContractLifecycleError,
     ContractNotAcceptedError,
     ContractRegistry,
     ContractRegistryError,
     ContractStatus,
     OwnerAcceptanceError,
+    SelfAttestationError,
     default_registry,
 )
 from apps.threat_intelligence.reports import (
@@ -317,7 +323,7 @@ from apps.threat_intelligence.vendor_advisories import (
     VendorSecurityAdvisorySourceModel,
 )
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 
 __all__ = [
     # P1-00 core entity modules
@@ -453,12 +459,20 @@ __all__ = [
     "SourceReliabilityError",
     "VERIFICATION_RANK",
     # Cross-agent contract registry (proposed vs owner-accepted, pinned provenance)
+    # and the adoption ladder: PROPOSED -> ACCEPTED -> IMPLEMENTED -> MOUNTED -> EXECUTED
+    # -> VERIFIED, with rejection and supersession terminal.
     "ContractRegistry",
     "ContractDependency",
     "ContractStatus",
     "ContractRegistryError",
     "ContractNotAcceptedError",
     "OwnerAcceptanceError",
+    "ContractLifecycleEntry",
+    "ContractLifecycleError",
+    "SelfAttestationError",
+    "LIFECYCLE_ORDER",
+    "TERMINAL_STATUSES",
+    "LOCAL_PACKAGE_IDENTITY",
     "default_registry",
     # P0-A Domain B item 24: Threat Intelligence Reports
     "ThreatIntelReport",
