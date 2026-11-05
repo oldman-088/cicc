@@ -138,4 +138,39 @@ describe("server-side integration adapter", () => {
     expect(await response.json()).toEqual({ error: { code: "cross_site_forbidden" } });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("maps upstream network failure/timeout to a sanitized 503 without leaking details", async () => {
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED secret-internal-host")));
+    const response = await get(["coordination", "agents"]);
+    expect(response.status).toBe(503);
+    const text = await response.text();
+    expect(text).toContain("upstream_unavailable");
+    expect(text).not.toContain("secret-internal-host");
+  });
+
+  it("rejects malformed/non-JSON upstream payloads as invalid_upstream_response", async () => {
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>not json</html>", {
+      status: 200, headers: { "Content-Type": "application/json" },
+    })));
+    const response = await get(["coordination", "agents"]);
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain("invalid_upstream_response");
+  });
+
+  it("maps upstream 401 to unauthorized without forwarding upstream body", async () => {
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "invalid or missing read token" }), {
+      status: 401, headers: { "Content-Type": "application/json" },
+    })));
+    const response = await get(["coordination", "agents"]);
+    expect(response.status).toBe(401);
+    const text = await response.text();
+    expect(text).toContain("unauthorized");
+    expect(text).not.toContain("read token");
+  });
 });
