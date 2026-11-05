@@ -26,6 +26,14 @@ from .epss import (
     UnavailableEpssProvider,
     parse_epss_response,
 )
+from .ghsa import (
+    GHSA_API,
+    GhsaConnector,
+    GhsaSnapshot,
+)
+from .ghsa import (
+    LAST_VERIFIED_LIVE as GHSA_LAST_VERIFIED_LIVE,
+)
 from .nvd import LAST_VERIFIED_LIVE as NVD_LAST_VERIFIED_LIVE
 from .nvd import NVD_API, NvdConnector
 from .osv import LAST_VERIFIED_LIVE as OSV_LAST_VERIFIED_LIVE
@@ -43,6 +51,8 @@ __all__ = [
     "DEBIAN_LAST_VERIFIED_LIVE",
     "DEBIAN_TRACKER_URL",
     "EPSS_API",
+    "GHSA_API",
+    "GHSA_LAST_VERIFIED_LIVE",
     "LIVE_PROVIDER_AVAILABLE",
     "NVD_API",
     "NVD_LAST_VERIFIED_LIVE",
@@ -57,6 +67,8 @@ __all__ = [
     "EpssProvider",
     "EpssScore",
     "FixtureEpssProvider",
+    "GhsaConnector",
+    "GhsaSnapshot",
     "InMemoryEpssCache",
     "NvdConnector",
     "OsvConnector",

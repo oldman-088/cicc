@@ -79,6 +79,25 @@ class KevEntry:
     name: str | None
     ransomware_use: str | None
     due_date: date | None
+    #: CISA's own ``requiredAction`` wording, verbatim (M1, KEV-layer variant).
+    #: This is a SOURCE-PROVIDED instruction, deliberately kept apart from any
+    #: internally calculated remediation: the two must never be merged, because
+    #: one is the provider's binding instruction and the other is our arithmetic.
+    #: ``None`` means the catalogue row carried no requiredAction — unknown, not "".
+    required_action: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "cve": str(self.cve),
+            "date_added": self.date_added.isoformat() if self.date_added else None,
+            "vendor": self.vendor,
+            "product": self.product,
+            "name": self.name,
+            "ransomware_use": self.ransomware_use,
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "required_action": self.required_action,
+            "required_action_source": "cisa-kev" if self.required_action is not None else None,
+        }
 
     @property
     def known_ransomware(self) -> bool | None:
@@ -167,6 +186,9 @@ def _catalog_from_document(
                 limit=50,
             ),
             due_date=_safe_calendar_date(row.get("dueDate")),
+            required_action=coerce_text(
+                row.get("requiredAction"), field_name="requiredAction", limit=2000
+            ),
         )
 
     return KevCatalog(
