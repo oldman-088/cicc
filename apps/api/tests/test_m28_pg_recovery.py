@@ -277,3 +277,54 @@ def test_pg_concurrent_progress_vs_complete(pg_app):
     assert t["state"].lower() == sev[0]["kind"].split("->")[-1].lower()
     assert t["state"].lower() in ("completed", "running")
     assert 0 <= (t["progress"] or 0) <= 100
+
+
+# ---------------- M33: additional lifecycle race windows ----------------
+
+def test_pg_approval_decision_races_task_cancel(pg_app):
+    """WAITING_FOR_APPROVAL task: approve racing cancel — guarded CAS gives
+    exactly one terminal outcome; events consistent with persisted state."""
+    pg_app.post("/api/v1/coordination/tasks", json={"task_id": "m33-ap", "kind": "m33", "payload": {}, "requires_approval": True}, headers=W)
+    t = pg_app.get("/api/v1/coordination/tasks/m33-ap", headers=R).json()
+    assert t["state"].lower() == "waiting_for_approval", t["state"]
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futs = [ex.submit(pg_app.post, "/api/v1/coordination/tasks/m33-ap/approve",
+                          json={"decided_by": "owner"}, headers=W)]
+        futs += [ex.submit(pg_app.post, "/api/v1/coordination/tasks/m33-ap/reject",
+                           json={"decided_by": "owner"}, headers=W) for _ in range(2)]
+        futs += [ex.submit(pg_app.post, "/api/v1/coordination/tasks/m33-ap/cancel", headers=W) for _ in range(3)]
+        rs = [f.result() for f in futs]
+    codes = [r.status_code for r in rs]
+    assert set(codes) <= {200, 409}, codes
+    t = pg_app.get("/api/v1/coordination/tasks/m33-ap", headers=R).json()
+    sev = _state_events(pg_app, "m33-ap")
+    assert t["state"].lower() == sev[0]["kind"].split("->")[-1].lower()
+    # approve->QUEUED then cancel->CANCELLED is a valid sequential chain; what
+    # must hold: at most one transition into each of those states, and the
+    # persisted state equals the latest event (asserted above)
+    assert sum(1 for e in sev if e["kind"] == "state:WAITING_FOR_APPROVAL->QUEUED") <= 1
+    assert sum(1 for e in sev if e["kind"].endswith("->CANCELLED")) <= 1
+
+
+def test_pg_webhook_duplicate_races_task_create_same_event(pg_app, monkeypatch):
+    """Two concurrent webhook deliveries with the same X-GitHub-Delivery race
+    task creation from the same event_id: exactly one task row, one created
+    event; the loser is a detected duplicate (not a second task)."""
+    monkeypatch.setenv("CICC_GH_WEBHOOK_SECRET", "s3c")
+    import hashlib, hmac, json as _json
+    payload = _json.dumps({"action": "opened", "repository": {"full_name": "o/r"},
+                           "issue": {"number": 7}, "sender": {"login": "u"}}).encode()
+    sig = "sha256=" + hmac.new(b"s3c", payload, hashlib.sha256).hexdigest()
+    hdrs = {"X-GitHub-Event": "issues", "X-GitHub-Delivery": "m33-del-1",
+            "X-Hub-Signature-256": sig, "Content-Type": "application/json",
+            "Authorization": "Bearer w"}
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        rs = list(ex.map(lambda _: pg_app.post("/api/v1/coordination/webhook/github",
+                                               content=payload, headers=hdrs), range(6)))
+    assert all(r.status_code in (200, 201, 409) for r in rs), [r.status_code for r in rs]
+    with ops.SessionLocal() as s:
+        rows = s.execute(select(models.CoordinationTask).where(
+            models.CoordinationTask.event_id == "m33-del-1")).scalars().all()
+    assert len(rows) == 1
+    ev = pg_app.get(f"/api/v1/coordination/tasks/{rows[0].task_id}/events", headers=R).json()["events"]
+    assert sum(1 for e in ev if e["kind"] == "created") == 1

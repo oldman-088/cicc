@@ -32,6 +32,7 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
   const headers = buildUpstreamHeaders(req.headers, process.env);
   let body: ArrayBuffer | undefined =
     req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer();
+  let serverIdempotencyKey: string | undefined;
   if (coordWrite) {
     // M26 approved write path: POST /api/v1/coordination/tasks only.
     // Separate server-only write token, strict DTO allowlist, server-generated
@@ -50,6 +51,9 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
     if (!v.ok) {
       return NextResponse.json({ detail: "invalid_request", reason: v.error }, { status: 422 });
     }
+    // M33: expose the server-generated correlation key on the write response
+    // (additive response header; the key is also persisted and readable via GET)
+    serverIdempotencyKey = (v.value as { idempotency_key?: string }).idempotency_key;
     body = new TextEncoder().encode(JSON.stringify(v.value)).buffer as ArrayBuffer;
     headers.set("Authorization", `Bearer ${coordWriteToken(process.env)}`);
     headers.set("Content-Type", "application/json");
@@ -64,6 +68,7 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
     });
     const buf = await res.arrayBuffer();
     const out = new Headers();
+    if (coordWrite && serverIdempotencyKey) out.set("x-cicc-idempotency-key", serverIdempotencyKey);
     res.headers.forEach((v, k) => {
       if (!["content-encoding", "transfer-encoding", "connection"].includes(k.toLowerCase()))
         out.set(k, v);

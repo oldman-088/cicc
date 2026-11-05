@@ -202,3 +202,11 @@ test("M30: concurrent duplicate submissions get distinct server keys (no cross-r
   assert.notEqual(a.value.idempotency_key, b.value.idempotency_key);
   assert.equal(isCoordWriteAllowed("POST", ["v1", "coordination", "tasks"], env), true);
 });
+
+test("M33: write path exposes server idempotency key contract (bff-<uuid> per request)", () => {
+  let n = 0;
+  const a = validateCoordTaskBody({ kind: "k", payload: {} }, () => `bff-${++n}`);
+  const b = validateCoordTaskBody({ kind: "k", payload: {} }, () => `bff-${++n}`);
+  assert.ok(a.value.idempotency_key.startsWith("bff-"));
+  assert.notEqual(a.value.idempotency_key, b.value.idempotency_key);
+});

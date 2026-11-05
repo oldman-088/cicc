@@ -43,7 +43,7 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M32"
+    "M1..M33"
   ],
   "contracts": "{'version': 'v1.0', 'doc': 'docs/INTEGRATION_CONTRACTS.md', 'confirmation': 'requested on PR #4, pending Agents 2/3/4', 'adoption': 'Agents 2/3/4: PENDING explicit confirmation (no replies as of 2026-11-05 10:10 UTC; no agent PR references /api/v1/coordination yet); v1.0 proposed, additive, unchanged \u2014 docs/CONTRACT_ADOPTION.md'} | M29: amendment workflow live (AMD-001 pending owner accept)",
   "tenant_isolation": "decision doc only (docs/TENANT_ISOLATION_DECISION.md); awaiting owner; not production-ready",
@@ -96,7 +96,7 @@
   },
   "cross_agent_execution": "VERIFIED via PR#4 reference-dashboard BFF (task api-5a6a79bfa8d5); PR#7 Backup-Agent-4 component execution: UNVERIFIED | M27: Backup Agent 4 PR #7 EXECUTED = AGENT-REPORTED, LOCAL FIXTURE VERIFIED (comment @12:28:14Z, task api-be4338ee4efc); VERIFIED pending; idempotency_key now on task reads | M28: PR#7 @3736e74b VERIFIED by Agent 1 in shared sandbox env (task api-6387d0386482, key bff-e55f8476-\u2026); not production",
   "bff_write_path": "APPROVED+IMPLEMENTED on PR#4 reference BFF: POST /api/v1/coordination/tasks only, WEB_BFF_ALLOW_COORD_WRITE=1 + WEB_BFF_WRITE_TOKEN, DTO allowlist, server idempotency_key; live VERIFIED 201 + persisted + events @2026-11-05T12:22Z",
-  "updated_at": "2026-11-05T14:15Z",
+  "updated_at": "2026-11-05T14:54Z",
   "last_commit": "9e97bc84cbdcd19cfc7c553c6658fdb11ef4d8f6",
   "milestone_notes": {
     "M27": "complete: idempotency_key on reads, BFF hardening 31/31, PG 14, traceability doc, 197/197 API, 31/31 contract, 24/24 e2e"
