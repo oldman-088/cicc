@@ -26,3 +26,6 @@ Artifacts: screenshots + traces land in `test-results/`, HTML report in `playwri
 - Keyboard Tab focus visibility (computed outline not `none`).
 - Command Theater: WebGL canvas mounts or an accessible fallback is visible.
 Still manual-only after automation: screen-reader sessions, true contrast measurement, WebGL context-loss, fluent-speaker review.
+
+## Update — journey coverage (2026-11-05)
+Suite grew to **30 tests** (`e2e/journeys.spec.ts`: investigation create/annotate/reload persistence, local reminder read/unread persistence, honest unavailable failure states, cross-workspace navigation). First journey run (42033874095) was 29/30 — mobile navigation is collapsed, so the journey now opens the toggle like a real user. Run **42034338021: full success (30/30)**, with typecheck, 104 unit tests, and build also green.
