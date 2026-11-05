@@ -159,3 +159,55 @@ class TestLogCompaction:
         assert payload["rows_before"] == 2
         assert payload["rows_after"] == 1
         assert payload["chains_verified"] is True
+
+
+class TestB06EdgeCases:
+    def test_empty_log_compacts_to_empty_report_that_verifies(self):
+        log = ImmutableObservationLog()
+        report = log.compact()
+        assert report.rows_before == 0 and report.rows_after == 0
+        assert report.chains_verified  # vacuously true, and stated as such
+        assert report.snapshots == ()
+
+    def test_repeated_compaction_is_deterministic(self):
+        log = ImmutableObservationLog(allow_fixture=True)
+        for i in range(4):
+            log.append(_obs(at=T0 + timedelta(minutes=i)))
+            log.append(_obs(source="osv", at=T0 + timedelta(minutes=i)))
+        assert log.compact().as_dict() == log.compact().as_dict()
+
+    def test_grouping_is_scoped_by_tenant_too(self):
+        log = ImmutableObservationLog(allow_fixture=True)
+        log.append(_obs(tenant="t1", at=T0))
+        log.append(_obs(tenant="t2", at=T0 + timedelta(minutes=1)))
+        report = log.compact()
+        assert report.rows_after == 2
+        assert {s.tenant_id for s in report.snapshots} == {"t1", "t2"}
+
+    def test_out_of_order_arrival_is_sorted_by_collected_at(self):
+        rows = [
+            _obs(at=T0 + timedelta(minutes=9)),
+            _obs(at=T0),
+            _obs(at=T0 + timedelta(minutes=3)),
+        ]
+        (snap,) = compact_observations(rows)
+        assert snap.digest_chain == tuple(
+            r.digest for r in sorted(rows, key=lambda r: (r.collected_at, r.digest))
+        )
+        assert snap.first_collected_at == T0
+        assert snap.last_collected_at == T0 + timedelta(minutes=9)
+
+    def test_tampered_stored_chain_digest_is_detected(self):
+        rows = [_obs(at=T0), _obs(at=T0 + timedelta(minutes=1))]
+        (snap,) = compact_observations(rows)
+        forged = type(snap)(
+            tenant_id=snap.tenant_id, cve=snap.cve, source=snap.source,
+            origin=snap.origin, observation_count=snap.observation_count,
+            first_collected_at=snap.first_collected_at,
+            last_collected_at=snap.last_collected_at,
+            latest_digest=snap.latest_digest,
+            digest_chain=snap.digest_chain,
+            payload=snap.payload,
+            chain_digest="f" * 64,  # forged commitment
+        )
+        assert not verify_snapshot_chain(forged)

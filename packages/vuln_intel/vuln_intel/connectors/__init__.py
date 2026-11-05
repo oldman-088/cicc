@@ -4,6 +4,17 @@ Nothing here performs I/O on import, and no connector instantiates a network
 transport by default — callers must opt in explicitly.
 """
 
+from .debian import (
+    DEBIAN_TRACKER_URL,
+    DebianTrackerConnector,
+    DebianTrackerSnapshot,
+)
+from .debian import (
+    LAST_VERIFIED_LIVE as DEBIAN_LAST_VERIFIED_LIVE,
+)
+from .debian import (
+    to_vulnerability_records as debian_to_vulnerability_records,
+)
 from .epss import (
     EPSS_API,
     LIVE_PROVIDER_AVAILABLE,
@@ -21,6 +32,8 @@ from .osv import LAST_VERIFIED_LIVE as OSV_LAST_VERIFIED_LIVE
 from .osv import OSV_API, AdvisoryOnly, OsvConnector, OsvResult
 
 __all__ = [
+    "DEBIAN_LAST_VERIFIED_LIVE",
+    "DEBIAN_TRACKER_URL",
     "EPSS_API",
     "LIVE_PROVIDER_AVAILABLE",
     "NVD_API",
@@ -28,6 +41,8 @@ __all__ = [
     "OSV_API",
     "OSV_LAST_VERIFIED_LIVE",
     "AdvisoryOnly",
+    "DebianTrackerConnector",
+    "DebianTrackerSnapshot",
     "EpssCache",
     "EpssProvider",
     "EpssScore",
@@ -37,5 +52,6 @@ __all__ = [
     "OsvConnector",
     "OsvResult",
     "UnavailableEpssProvider",
+    "debian_to_vulnerability_records",
     "parse_epss_response",
 ]
