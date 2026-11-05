@@ -239,6 +239,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
   22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
 
+## Done — Milestone 20 (PR #4 update)
+
+- M20-1 contract consistency: descriptor now machine-verified against routes,
+  DTOs, state machine (8 tests); drift fixed. Integration guidance unchanged:
+  /contract + contract_check.py (27/27 live) + INTEGRATION_EXAMPLES.md.
+- M20-3 reliability: approval expiry 410, TTL/timeout expiry via sweep,
+  stale-agent heartbeat recovery, duplicate-webhook idempotency — all tested.
+  BFF + replay detection unchanged.
+- M20-5 master prompt re-verified README.md@main@ca8f82c v1.0 (diff empty).
+- Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -417,6 +429,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M19-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
   22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
+
+## Done — Milestone 20 (PR #4 update)
+
+- M20-1 contract consistency: descriptor now machine-verified against routes,
+  DTOs, state machine (8 tests); drift fixed. Integration guidance unchanged:
+  /contract + contract_check.py (27/27 live) + INTEGRATION_EXAMPLES.md.
+- M20-3 reliability: approval expiry 410, TTL/timeout expiry via sweep,
+  stale-agent heartbeat recovery, duplicate-webhook idempotency — all tested.
+  BFF + replay detection unchanged.
+- M20-5 master prompt re-verified README.md@main@ca8f82c v1.0 (diff empty).
+- Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
 
 ## Next (backlog, priority order)
 
@@ -600,6 +624,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
   22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
 
+## Done — Milestone 20 (PR #4 update)
+
+- M20-1 contract consistency: descriptor now machine-verified against routes,
+  DTOs, state machine (8 tests); drift fixed. Integration guidance unchanged:
+  /contract + contract_check.py (27/27 live) + INTEGRATION_EXAMPLES.md.
+- M20-3 reliability: approval expiry 410, TTL/timeout expiry via sweep,
+  stale-agent heartbeat recovery, duplicate-webhook idempotency — all tested.
+  BFF + replay detection unchanged.
+- M20-5 master prompt re-verified README.md@main@ca8f82c v1.0 (diff empty).
+- Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -775,6 +811,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
   22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
 
+## Done — Milestone 20 (PR #4 update)
+
+- M20-1 contract consistency: descriptor now machine-verified against routes,
+  DTOs, state machine (8 tests); drift fixed. Integration guidance unchanged:
+  /contract + contract_check.py (27/27 live) + INTEGRATION_EXAMPLES.md.
+- M20-3 reliability: approval expiry 410, TTL/timeout expiry via sweep,
+  stale-agent heartbeat recovery, duplicate-webhook idempotency — all tested.
+  BFF + replay detection unchanged.
+- M20-5 master prompt re-verified README.md@main@ca8f82c v1.0 (diff empty).
+- Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -947,6 +995,18 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M19-5 master prompt re-confirmed README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E
   22/22 live @2026-11-05T10:57:40Z; contract_check 27/27 @10:57:36Z.
+
+## Done — Milestone 20 (PR #4 update)
+
+- M20-1 contract consistency: descriptor now machine-verified against routes,
+  DTOs, state machine (8 tests); drift fixed. Integration guidance unchanged:
+  /contract + contract_check.py (27/27 live) + INTEGRATION_EXAMPLES.md.
+- M20-3 reliability: approval expiry 410, TTL/timeout expiry via sweep,
+  stale-agent heartbeat recovery, duplicate-webhook idempotency — all tested.
+  BFF + replay detection unchanged.
+- M20-5 master prompt re-verified README.md@main@ca8f82c v1.0 (diff empty).
+- Regression: API 173/173 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  E2E 22/22 live @2026-11-05T11:12:08Z; contract_check 27/27 @11:12:05Z.
 
 ## Next (backlog, priority order)
 

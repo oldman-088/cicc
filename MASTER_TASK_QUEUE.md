@@ -124,6 +124,17 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
 - API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
 
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

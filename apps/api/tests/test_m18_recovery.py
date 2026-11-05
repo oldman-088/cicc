@@ -39,7 +39,8 @@ def test_contract_descriptor_served(client):
     assert d["version"] == "1.0" and d["base"] == "/api/v1/coordination"
     assert d["auth"]["tenant"].startswith("PENDING")
     assert "webhook_replay_after_window" in d["idempotency"]["webhook"]
-    assert len(d["endpoints"]) >= 20 and "pending" in d["task_states"]
+    assert len(d["endpoints"]) >= 20
+    assert set(s.lower() for s in d["task_states"]) == {s.lower() for s in __import__("app.coordination.registry", fromlist=["CANONICAL_STATES"]).CANONICAL_STATES}
     # read-only: no token -> 401
     assert client.get("/api/v1/coordination/contract").status_code == 401
 

@@ -120,3 +120,14 @@ miscount, **no key was removed or lost**; parity en==ar holds at every commit.
   approval gate 409 + pending record, retry/dead-letter, 422 validation, audit &
   metrics consistency, error compatibility. 27/27 PASS live @2026-11-05T10:57:36Z.
   All submissions fixture-labeled.
+
+## M20 update (2026-11-05 ~11:12 UTC)
+
+- PR heads unchanged since M19: #1 **f56447c**, #2 3462a8b, #3 1a46f70; no new
+  PR #4/issue #5 comments. Code-level adoption: still NONE (no
+  /api/v1/coordination references in any agent PR).
+- Contract consistency audit (tests/test_m20_contract_consistency.py, 8):
+  descriptor now verified against the live FastAPI route table, Pydantic DTOs
+  and the state machine. Drift found & fixed in the descriptor: TaskIn was
+  missing ttl_s?/requires_approval?; approve|reject split into two entries;
+  task_states aligned to the 14 canonical states actually returned.

@@ -221,3 +221,16 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   contract_check + INTEGRATION_EXAMPLES §6). PR heads: #1 f56447c (65 commits,
   still no coordination refs), #2 3462a8b, #3 1a46f70. No code-level adoption.
 - API 165/165 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; E2E 22/22 @10:57:40Z.
+
+## 2026-11-05 — Milestone 20 (branch arena/961971ed-cicc, PR #4)
+
+- test_m20_contract_consistency.py (8): every /contract endpoint exists in the
+  real route table; DTO field lists == Pydantic models; task_states == 14
+  canonical states of the state machine; error codes 401/403/404/409/422
+  actually produced. Descriptor drift fixed in contract.py (TaskIn missing
+  ttl_s/requires_approval; approve|reject split; canonical state names).
+- Reliability edges: approval expiry -> 410; TTL expiry via sweep -> expired;
+  stale agent revived by heartbeat; 3x duplicate webhook -> exactly 1 task.
+- Live: contract_check 27/27 @11:12:05Z, E2E 22/22 @11:12:08Z; API 173/173
+  (7 real-PG + 1 live-GitHub); web 23/23 + tsc. PR heads unchanged
+  (f56447c/3462a8b/1a46f70); master prompt README.md@main@ca8f82c unchanged.

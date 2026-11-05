@@ -5,9 +5,10 @@ does NOT change contract v1.0 semantics; it mirrors docs/INTEGRATION_CONTRACTS.m
 so other agents can discover paths/DTOs/states/errors programmatically.
 """
 
-TASK_STATES = ["pending", "queued", "routed", "acknowledged", "in_progress",
-               "awaiting_approval", "approved", "rejected", "completed",
-               "failed", "cancelled", "expired"]
+# the 14 canonical states as returned by the API (normalize_state), lowercase
+TASK_STATES = ["created", "validating", "queued", "waiting_for_approval",
+               "assigned", "delivering", "acknowledged", "running", "completed",
+               "failed", "retrying", "blocked", "cancelled", "expired"]
 
 ERROR_CODES = {
     "401": "missing/invalid CICC_OPS_READ_TOKEN on reads (except webhook)",
@@ -39,7 +40,8 @@ ENDPOINTS = [
     {"method": "POST", "path": "/api/v1/coordination/tasks/{task_id}/fail", "auth": "write", "summary": "ReportIn {result}; retryable via /retry"},
     {"method": "POST", "path": "/api/v1/coordination/tasks/{task_id}/cancel", "auth": "write", "summary": "-> cancelled"},
     {"method": "POST", "path": "/api/v1/coordination/tasks/{task_id}/retry", "auth": "write", "summary": "failed/cancelled -> queued (retries+1)"},
-    {"method": "POST", "path": "/api/v1/coordination/tasks/{task_id}/approve|reject", "auth": "write + approver", "summary": "DecisionIn {decided_by, note}; approver allowlist"},
+    {"method": "POST", "path": "/api/v1/coordination/tasks/{task_id}/approve", "auth": "write + approver", "summary": "DecisionIn {decided_by, note}; approver allowlist"},
+    {"method": "POST", "path": "/api/v1/coordination/tasks/{task_id}/reject", "auth": "write + approver", "summary": "same; rejection is terminal (failed) with approval.status=rejected"},
     {"method": "GET", "path": "/api/v1/coordination/tasks/{task_id}/approval", "auth": "read", "summary": "approval status"},
     {"method": "GET", "path": "/api/v1/coordination/tasks/dag", "auth": "read", "summary": "dependency graph view"},
     {"method": "GET", "path": "/api/v1/coordination/metrics", "auth": "read", "summary": "counts by state/agent + delivery honesty"},
@@ -68,7 +70,7 @@ def contract_v1() -> dict:
         "endpoints": ENDPOINTS,
         "task_states": TASK_STATES,
         "dtos": {
-            "TaskIn": ["task_id?", "idempotency_key?", "kind", "priority", "title?", "payload", "repo?", "pr_ref?", "branch_ref?", "owner?", "depends_on?", "timeout_s?"],
+            "TaskIn": ["task_id?", "idempotency_key?", "kind", "priority", "title?", "payload", "repo?", "pr_ref?", "branch_ref?", "owner?", "depends_on?", "timeout_s?", "ttl_s?", "requires_approval?"],
             "ReportIn": ["result?"],
             "ProgressIn": ["percent", "note?"],
             "DecisionIn": ["decided_by", "note?"],

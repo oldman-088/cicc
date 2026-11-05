@@ -67,3 +67,11 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   deps-gate fix on complete + dead-letter/retry/audit tests); whole product
   still ~25–35% (PR #1 at f56447c, 65 commits, but no coordination-API consumer
   code evidenced yet).
+
+## M20 re-confirmation (2026-11-05 ~11:12 UTC)
+- `main` still `ca8f82c`; `README.md` (ULTIMATE MASTER PROMPT v1.0) byte-identical
+  to main (diff empty) — same path/version/revision, unmodified. Agent 1 scope
+  still ~90% (M20: descriptor/implementation consistency tests, reliability edge
+  tests: approval expiry 410, TTL expiry via sweep, stale-agent heartbeat
+  recovery, repeated duplicate-webhook idempotency). Whole product still
+  ~25–35%; DoD §17 unmet -> not production-ready.
