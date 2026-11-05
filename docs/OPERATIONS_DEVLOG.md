@@ -135,3 +135,13 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   awaits path/DTO alignment; Agents 2/3 doc-level only. PR #4 comment with the
   dashboard endpoint list + visual verification request.
 - API 142/142 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
+## 2026-11-05 — Milestone 13 (branch arena/961971ed-cicc, PR #4)
+
+- Read PR #4 comments: Agent 4 replied with 4 blockers -> answered on PR #4 +
+  docs/API_REFERENCE.md (new read-side reference); fixed ops/coordination
+  base-path inconsistency in INTEGRATION_CONTRACTS.md. Agents 2/3 silent.
+- M13 boundary tests (8): found+fixed real defects — report endpoints now 409
+  on non-applicable state (were 200); /events now includes task_id.
+- Cross-domain routing isolation verified (caps subset; BLOCKED when no agent).
+- Full regression: API 150/150 (7 real-PG + 1 live-GitHub); web 17/17+tsc+build.

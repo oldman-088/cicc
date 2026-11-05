@@ -36,6 +36,17 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - Security review M12 section w/ unresolved owner decisions; tenant isolation still
   pending; notifications disabled.
 
+## Done — M13 (integration stabilization)
+- Agent 4's 4 blockers answered on PR #4; docs/API_REFERENCE.md (read-side
+  contract: DTOs, error codes, cache semantics); path inconsistency fixed.
+  Agents 2/3 still silent — agreement NOT assumed; v1.0 unchanged.
+- Boundary tests (8): uniform errors, auth gates, cross-domain routing
+  isolation, webhook->dashboard read chain, audit completeness, idempotency,
+  no-network notifications, secret redaction. Fixes: report 409 on
+  non-applicable state; /events task_id. API 150/150.
+- Tenant isolation still pending owner (M13-04); notifications disabled;
+  RabbitMQ deprioritized per owner (M13-05) — human-assisted delivery kept.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

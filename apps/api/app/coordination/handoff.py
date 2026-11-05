@@ -147,7 +147,8 @@ def report(s, task_id: str, action: str, result: str | None = None) -> dict | No
     if action not in mapping:
         return None
     to, from_states = mapping[action]
-    if cur in from_states:
+    applied = cur in from_states
+    if applied:
         registry.transition(s, t, to, result or action)
     else:
         registry.record_event(s, task_id, f"report:{action}", f"ignored in state {cur}")
@@ -157,4 +158,4 @@ def report(s, task_id: str, action: str, result: str | None = None) -> dict | No
         t.result = result
     s.commit()
     return {"task_id": t.task_id, "state": registry.normalize_state(t.state), "attempts": t.attempts,
-            "dead_letter": bool(t.dead_letter)}
+            "dead_letter": bool(t.dead_letter), "applied": applied}

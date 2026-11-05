@@ -52,7 +52,7 @@ only `CICC_COORD_APPROVERS` may approve/reject. Every transition is audited
 
 # Contract v1.0 (M11-02) — stable, backward-compatible; confirmation requested from Agents 2/3/4 via PR #4 comment
 
-All coordination endpoints are under `/api/v1/coordination`, read-gated by
+All coordination endpoints are under the base `/api/v1/coordination` (paths in the table are relative to it), read-gated by
 read token, write-gated by write token + per-principal rate limit (429).
 Every state transition is audited (`GET /tasks/{id}/events`).
 
@@ -79,16 +79,19 @@ Every state transition is audited (`GET /tasks/{id}/events`).
 | 19 | DAG | `GET /tasks/dag` | — | `{nodes, edges}` |
 | 20 | Metrics | `GET /metrics` | — | honest aggregates (see M10) |
 | 21 | Sweep | `POST /sweep` | — | `{expired_tasks, requeued, expired_approvals, stale_agents}` |
-| 22 | Webhook (GitHub→us) | `POST /webhook/github` | HMAC headers | 401 bad sig / fail-closed, dedup by delivery |
+| 22 | Webhook (GitHub→us) | `POST /api/v1/coordination/webhook/github` | HMAC headers | 401 bad sig / fail-closed, dedup by delivery |
 | 23 | GitHub live | `GET /github/status`, `POST /github/sync` | — | probe/sync vs api.github.com |
 | 24 | GitHub events | `GET /events?limit=` | — | ingested webhook events w/ provenance |
 | 25 | Routing rules | `GET /rules`, `POST /rules` | `name, match, agent, priority` | explainable rules-first routing |
 
 ## Agent 4 dashboard contract (M11-06)
-The Coordination dashboard consumes ONLY these verified endpoints:
-`/agents`, `/tasks` (+filters), `/tasks/dag`, `/metrics`, `/events`,
-`/github/status`, plus ops `/api/v1/overview` (services incl. `rabbitmq`
-broker chip). It distinguishes: online vs stale agents; CREATED/QUEUED/
+The Coordination dashboard consumes ONLY these verified endpoints (full
+base paths — see docs/API_REFERENCE.md):
+- coordination base `/api/v1/coordination`: `/agents`, `/tasks` (+filters
+  `state`/`agent`/`kind`/`dead_letter`), `/tasks/dag`, `/metrics`, `/events`,
+  `/github/status`, `/rules`, `/tasks/{id}` (+`/events`, `/deliveries`, `/approval`)
+- ops base `/api/v1/ops`: `/overview` (services incl. `rabbitmq` broker chip),
+  `/components`, `/metrics`, `/alerts`, ... It distinguishes: online vs stale agents; CREATED/QUEUED/
 ASSIGNED/DELIVERING/ACKNOWLEDGED/RUNNING/WAITING_FOR_APPROVAL/BLOCKED/FAILED/
 RETRYING/COMPLETED/CANCELLED/EXPIRED; broker-confirmed vs human-assisted
 deliveries; broker connected vs unavailable; live metrics vs `—` when a
@@ -98,3 +101,11 @@ fetch fails. No fabricated data: failed fetches render as unavailable.
 - Legacy state aliases accepted on input, normalized to the 14 canonical states.
 - `delivered:false + via:human_assisted` semantics unchanged since M7.
 - New fields are additive; no endpoint removed since M6.
+
+
+## M13 update (2026-11-05)
+- Agent 4 replied on PR #4 with 4 blockers; all answered (paths, auth/tenancy,
+  DTOs -> `docs/API_REFERENCE.md`, frontend ownership). Their binding to v1.0
+  is **still pending** — agreement not assumed. Agents 2/3: no response yet.
+- Error contract tightened: report endpoints return 409 on non-applicable
+  state; `/events` items carry `task_id`. Both additive/backward-compatible.

@@ -120,9 +120,10 @@ def list_events(_gate: None = Depends(read_token_dependency), limit: int = Query
         rows = s.execute(
             select(models.GitHubEvent).order_by(models.GitHubEvent.received_at.desc()).limit(limit)
         ).scalars().all()
+        task_by_event = {t.event_id: t.task_id for t in s.execute(select(models.CoordinationTask)).scalars()}
         return {"events": [
             {"delivery_id": r.delivery_id, "event": r.event, "action": r.action,
-             "repo": r.repo, "sender": r.sender,
+             "repo": r.repo, "sender": r.sender, "task_id": task_by_event.get(r.delivery_id),
              "received_at": r.received_at.isoformat() if r.received_at else None}
             for r in rows
         ]}
@@ -257,6 +258,9 @@ def ack_task(task_id: str, request: Request, _gate: None = Depends(read_token_de
         r = handoff.report(s, task_id, "ack")
         if r is None:
             raise HTTPException(status_code=404, detail="task_not_found")
+        if not r.get("applied", True):
+            s.commit()
+            raise HTTPException(status_code=409, detail=f"report:ack ignored in state {r['state']}")
         return r
 
 
@@ -268,6 +272,9 @@ def start_task(task_id: str, request: Request, _gate: None = Depends(read_token_
         r = handoff.report(s, task_id, "start")
         if r is None:
             raise HTTPException(status_code=404, detail="task_not_found")
+        if not r.get("applied", True):
+            s.commit()
+            raise HTTPException(status_code=409, detail=f"report:start ignored in state {r['state']}")
         return r
 
 
@@ -279,6 +286,9 @@ def complete_task(task_id: str, _gate: None = Depends(read_token_dependency), bo
         r = handoff.report(s, task_id, "complete", body.result if body else None)
         if r is None:
             raise HTTPException(status_code=404, detail="task_not_found")
+        if not r.get("applied", True):
+            s.commit()
+            raise HTTPException(status_code=409, detail=f"report:complete ignored in state {r['state']}")
         return r
 
 
@@ -290,7 +300,7 @@ def fail_task(task_id: str, _gate: None = Depends(read_token_dependency), body: 
         r = handoff.report(s, task_id, "fail", body.result if body else None)
         if r is None:
             raise HTTPException(status_code=404, detail="task_not_found")
-        return r
+        return r  # fail is allowed from any active state; dead-letter policy applies
 
 
 @router.post("/tasks/{task_id}/cancel")

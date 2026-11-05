@@ -49,6 +49,13 @@ isolation is a documented decision pending owner approval
 (`docs/TENANT_ISOLATION_DECISION.md`); NOT claimed production-ready. Outbound
 notifications remain DISABLED (no network path in adapters).
 
+## M13 (2026-11-05)
+- Boundary tests added: uniform error contract (401/403/404/409/410/422/429),
+  write-token⊇read, report 409 on non-applicable state, webhook payload
+  redaction verified (`ghp_...`/`Bearer` never stored), notifications adapter
+  contains no network imports. Restart recovery, idempotency, dead-letter,
+  approval expiry, stale detection — regression-covered (M12/M13 suites).
+
 ### Unresolved security decisions (owner)
 1. Tenant isolation model (A/B/C/D in the decision doc; recommendation B).
 2. Shared DB vs read-replica for platform auth (`CICC_PLATFORM_DB_URL`).

@@ -193,6 +193,7 @@ export interface GitHubEventItem {
   action: string | null;
   repo: string | null;
   sender: string | null;
+  task_id: string | null; // M13: link to the registry task created from this event
   received_at: string | null;
 }
 

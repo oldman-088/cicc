@@ -200,3 +200,19 @@ Still environment-blocked: real-broker delivery/confirm (no Docker/broker here).
   409 post-sweep), dead-letter visibility (`GET /tasks?dead_letter=true` + audit
   event), restart recovery (file DB, new app instance, state persists, sweep works),
   task timeout, duplicates — all covered by tests, every transition audited.
+
+
+## v5.1 (Milestone 13 — integration stabilization)
+
+- **Agent 4's 4 blockers answered on PR #4** (paths, auth/tenancy, DTOs/errors,
+  frontend ownership); new `docs/API_REFERENCE.md` is the read-side reference
+  (exact DTOs, error codes 401/403/404/409/410/413/422/429, cache semantics).
+- **Boundary fixes from M13 tests**: report endpoints (ack/start/complete)
+  now return **409** when the report doesn't apply to the current state
+  (was 200 + audited "ignored"); `GET /coordination/events` items now include
+  `task_id`; cross-domain capability isolation verified (threat task never
+  routes to vuln-only agent; no capable agent -> BLOCKED, never misrouted).
+- Boundary error contract is uniform: 404 unknown id, 409 illegal transition /
+  deps unmet / waiting approval / no pending approval, 410 expired approval,
+  401/403 auth gates, 422 validation, 429 rate limit — all audited where state
+  is involved.

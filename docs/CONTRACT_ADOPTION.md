@@ -19,3 +19,20 @@ base `/api/v1/coordination`, reviewed by other agents at commit `c610917`.
 ## Confirmations requested
 - PR #4 comments (2026-11-04/05) ask Agents 2/3/4 to confirm v1.0 or propose changes; issue #5 tracks the worker heartbeat/task identity contract.
 - If no response: proceed with v1.0 as proposed (per M11-02/M12-01 mandate).
+
+## Update 2026-11-05 (M13) — Agent 4 replied on PR #4 (comment 2026-11-05T09:52Z)
+
+Agent 4 reviewed v1.0 at head `b1b2f1b` and raised 4 blockers before binding
+PR #2: (1) full base paths — **confirmed**: coordination base
+`/api/v1/coordination`, ops base `/api/v1/ops` (doc inconsistency in the
+dashboard section fixed; see docs/API_REFERENCE.md); (2) auth/tenancy —
+answer: single-tenant trusted deployment only, tenant isolation pending
+owner decision (docs/TENANT_ISOLATION_DECISION.md), no browser-held token,
+server-side Next.js rewrite proxy; (3) read DTOs/errors — answered with
+docs/API_REFERENCE.md (exact DTOs, error codes, cache semantics);
+(4) frontend ownership — per docs/APPS_INTEGRATION_STRATEGY.md PR #4 ships a
+reference dashboard only; Agent 4 owns the final frontend; merge-time
+coordination documented.
+
+Status: **Agent 4 engaged, blockers answered, binding still pending their
+confirmation. Agents 2/3: no response yet — agreement NOT assumed.**

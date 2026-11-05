@@ -11,3 +11,4 @@
 - 2026-11-04 M8 (this commit): OSS research decisions (docs/OSS_RESEARCH.md), LIVE GitHub API sync (api.github.com reachable — verified live), progress reports, dependency DAG, SECURITY_REVIEW.md
 - 2026-11-05 M11 (c610917+): integration proof — lifecycle tests 9 scenarios, contract v1.0, GitHub pagination/retry hardening, tenant decision doc, dashboard broker/channel honesty
 - 2026-11-05 M12 (b1b2f1b+): cross-agent integration proof — E2E threat/vuln flows, adoption record, reliability tests (stale/expiry/dead-letter/restart), dashboard verification request to Agent 4
+- 2026-11-05 M13: Agent 4 blockers answered (API_REFERENCE.md), boundary tests + 409 report fix + events task_id; Agents 2/3 unconfirmed (not assumed); API 150/150

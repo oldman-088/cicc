@@ -143,6 +143,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   metrics ok); visual verification requested from Agent 4 on PR #4.
 - M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
 
+## Done — Milestone 13 (PR #4 update)
+
+- M13-01: Agent 4 replied on PR #4 (4 blockers) — answered in docs +
+  PR comment; docs/API_REFERENCE.md created (read DTOs/errors/cache/auth);
+  path inconsistency fixed. Agents 2/3: no response; agreement not assumed.
+- M13-02/03: boundary tests (8) — uniform error contract, auth gates,
+  cross-domain routing isolation, webhook->dashboard chain, audit
+  completeness, idempotency, restart recovery, redaction, no-network
+  notifications. Fixes: report 409 on non-applicable state; /events task_id.
+- M13-04: tenant isolation pending owner; notifications disabled. M13-05:
+  RabbitMQ deprioritized per owner; human-assisted kept.
+- API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -225,6 +238,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M12-05: dashboard live-verified via :3000 proxy (page 200, LIVE github ok,
   metrics ok); visual verification requested from Agent 4 on PR #4.
 - M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
+
+## Done — Milestone 13 (PR #4 update)
+
+- M13-01: Agent 4 replied on PR #4 (4 blockers) — answered in docs +
+  PR comment; docs/API_REFERENCE.md created (read DTOs/errors/cache/auth);
+  path inconsistency fixed. Agents 2/3: no response; agreement not assumed.
+- M13-02/03: boundary tests (8) — uniform error contract, auth gates,
+  cross-domain routing isolation, webhook->dashboard chain, audit
+  completeness, idempotency, restart recovery, redaction, no-network
+  notifications. Fixes: report 409 on non-applicable state; /events task_id.
+- M13-04: tenant isolation pending owner; notifications disabled. M13-05:
+  RabbitMQ deprioritized per owner; human-assisted kept.
+- API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
 
 ## Next (backlog, priority order)
 
@@ -312,6 +338,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   metrics ok); visual verification requested from Agent 4 on PR #4.
 - M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
 
+## Done — Milestone 13 (PR #4 update)
+
+- M13-01: Agent 4 replied on PR #4 (4 blockers) — answered in docs +
+  PR comment; docs/API_REFERENCE.md created (read DTOs/errors/cache/auth);
+  path inconsistency fixed. Agents 2/3: no response; agreement not assumed.
+- M13-02/03: boundary tests (8) — uniform error contract, auth gates,
+  cross-domain routing isolation, webhook->dashboard chain, audit
+  completeness, idempotency, restart recovery, redaction, no-network
+  notifications. Fixes: report 409 on non-applicable state; /events task_id.
+- M13-04: tenant isolation pending owner; notifications disabled. M13-05:
+  RabbitMQ deprioritized per owner; human-assisted kept.
+- API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -391,6 +430,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   metrics ok); visual verification requested from Agent 4 on PR #4.
 - M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
 
+## Done — Milestone 13 (PR #4 update)
+
+- M13-01: Agent 4 replied on PR #4 (4 blockers) — answered in docs +
+  PR comment; docs/API_REFERENCE.md created (read DTOs/errors/cache/auth);
+  path inconsistency fixed. Agents 2/3: no response; agreement not assumed.
+- M13-02/03: boundary tests (8) — uniform error contract, auth gates,
+  cross-domain routing isolation, webhook->dashboard chain, audit
+  completeness, idempotency, restart recovery, redaction, no-network
+  notifications. Fixes: report 409 on non-applicable state; /events task_id.
+- M13-04: tenant isolation pending owner; notifications disabled. M13-05:
+  RabbitMQ deprioritized per owner; human-assisted kept.
+- API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -467,6 +519,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M12-05: dashboard live-verified via :3000 proxy (page 200, LIVE github ok,
   metrics ok); visual verification requested from Agent 4 on PR #4.
 - M12-06: SECURITY_REVIEW M12 section + unresolved owner decisions listed.
+
+## Done — Milestone 13 (PR #4 update)
+
+- M13-01: Agent 4 replied on PR #4 (4 blockers) — answered in docs +
+  PR comment; docs/API_REFERENCE.md created (read DTOs/errors/cache/auth);
+  path inconsistency fixed. Agents 2/3: no response; agreement not assumed.
+- M13-02/03: boundary tests (8) — uniform error contract, auth gates,
+  cross-domain routing isolation, webhook->dashboard chain, audit
+  completeness, idempotency, restart recovery, redaction, no-network
+  notifications. Fixes: report 409 on non-applicable state; /events task_id.
+- M13-04: tenant isolation pending owner; notifications disabled. M13-05:
+  RabbitMQ deprioritized per owner; human-assisted kept.
+- API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
 
 ## Next (backlog, priority order)
 
