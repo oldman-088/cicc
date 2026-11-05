@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -87,12 +88,19 @@ class TestReportIsHonest:
 
     def test_cli_exit_code_reflects_missing_oracles(self):
         """``python -m tests.oracle_tools`` must not exit 0 when a check cannot run."""
+        # ``cwd`` is explicit: without it this test only passes when pytest happens to
+        # be invoked from the package directory, and fails with
+        # "No module named 'tests'" when invoked from the repository root. A test whose
+        # result depends on the caller's working directory is a test that will one day
+        # fail for no reason and be deleted for being flaky.
+        package_root = Path(__file__).resolve().parent.parent
         completed = subprocess.run(
             [sys.executable, "-m", "tests.oracle_tools"],
             capture_output=True,
             text=True,
             timeout=120,
             check=False,
+            cwd=package_root,
         )
         expected = 0 if all(p.available for p in oracle_tools.probes()) else 1
         assert completed.returncode == expected
