@@ -259,6 +259,10 @@ class KevConnector:
     timeout: float = 60.0
     origin: str = "live"
     sleep: Callable[[float], None] | None = None
+    #: Sync timestamps, kept separate per Master Prompt §7 (added for
+    #: cross-connector consistency; ``parse`` never touches them).
+    last_attempt: datetime | None = None
+    last_success: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.gate is None:
@@ -268,6 +272,7 @@ class KevConnector:
     def fetch(self) -> KevCatalog:
         if self.transport is None:
             raise SourceResponseError("no transport configured", source="cisa-kev")
+        self.last_attempt = utcnow()
 
         def attempt() -> Mapping[str, Any]:
             assert self.gate is not None
@@ -305,7 +310,9 @@ class KevConnector:
         document = call_with_retry(
             attempt, policy=self.retry, sleep=self.sleep or __import__("time").sleep
         )
-        return _catalog_from_document(document, fetched_at=utcnow(), origin=self.origin)
+        catalog = _catalog_from_document(document, fetched_at=utcnow(), origin=self.origin)
+        self.last_success = utcnow()
+        return catalog
 
     def parse(self, document: Mapping[str, Any], *, fetched_at: datetime | None = None) -> KevCatalog:
         """Parse an already-obtained document (fixtures, offline replay)."""

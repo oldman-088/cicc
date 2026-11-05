@@ -35,7 +35,8 @@ could be wrong in either direction.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Mapping, TypeVar
 
@@ -49,8 +50,10 @@ __all__ = [
     "Decision",
     "MissionWellbeing",
     "SsvcAssessment",
+    "SsvcTimelinePolicy",
     "assess_ssvc",
     "mission_wellbeing",
+    "next_review",
     "parse_ssvc_options",
 ]
 
@@ -377,3 +380,45 @@ def assess_ssvc(
         source=source,
         notes=tuple(notes),
     )
+
+
+@dataclass(frozen=True)
+class SsvcTimelinePolicy:
+    """B-13 groundwork: how long an SSVC decision stays valid before re-review.
+
+    **PROVISIONAL — owner approval required.** Without an approved policy,
+    :func:`next_review` returns ``None`` ("no timeline"), never an invented date.
+    Intervals are per decision outcome; a ``0`` interval means "re-evaluate on
+    every ingest".
+    """
+
+    #: Review interval per decision, in days. Empty = no timelines at all.
+    review_intervals_days: Mapping[str, int] = field(default_factory=dict)
+    approved: bool = False
+    name: str = "unapproved"
+
+    def __post_init__(self) -> None:
+        for decision, days in self.review_intervals_days.items():
+            if decision not in {d.value for d in Decision}:
+                raise ValidationError(f"unknown SSVC decision {decision!r}", field="review_intervals_days")
+            if not isinstance(days, int) or isinstance(days, bool) or days < 0:
+                raise ValidationError(f"interval for {decision!r} must be a non-negative int", field="review_intervals_days")
+
+
+def next_review(
+    assessment: SsvcAssessment,
+    *,
+    assessed_at: datetime,
+    policy: SsvcTimelinePolicy | None = None,
+) -> datetime | None:
+    """When this assessment should be re-evaluated, or ``None`` when no approved
+    timeline policy exists (or the decision is a range, not a single outcome)."""
+    if policy is None or not policy.approved or not policy.review_intervals_days:
+        return None
+    decision = assessment.decision
+    if decision is None:
+        return None  # a decision range has no single timeline
+    days = policy.review_intervals_days.get(decision.value)
+    if days is None:
+        return None
+    return assessed_at + timedelta(days=days)
