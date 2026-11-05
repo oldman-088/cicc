@@ -36,3 +36,13 @@ coordination documented.
 
 Status: **Agent 4 engaged, blockers answered, binding still pending their
 confirmation. Agents 2/3: no response yet — agreement NOT assumed.**
+
+## M14 update (2026-11-05) — accepted / rejected / pending
+
+| Item | Status |
+|---|---|
+| Contract v1.0 — Agent 2 (Threat Intel) confirmation | **PENDING** (no reply on PR #4 / issue #5 as of 2026-11-05 ~10:05 UTC; confirmation re-requested) |
+| Contract v1.0 — Agent 3 (Vuln Intel) confirmation | **PENDING** (same) |
+| Contract v1.0 — Agent 4 (frontend) | **ENGAGED**: 4 blockers raised 2026-11-05 09:52Z, all answered same day (PR comment + docs/API_REFERENCE.md); binding + visual QA (desktop/mobile, EN/AR RTL/LTR) re-requested; not yet confirmed |
+| Rejected contract items | **none** — no agent has rejected any v1.0 item |
+| Silent contract changes | **none** — v1.0 additive only; M13/M14 changes (409 reports, events task_id, BFF) are backward-compatible additions |

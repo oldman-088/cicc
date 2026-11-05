@@ -156,6 +156,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   RabbitMQ deprioritized per owner; human-assisted kept.
 - API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
 
+## Done — Milestone 14 (PR #4 update)
+
+- M14-03 BFF: server-side `/api/*` proxy with token injection from server env
+  only; client Authorization/Cookie stripped; writes 403 unless enabled;
+  optional Sec-Fetch-Site same-origin enforcement; logging limited to
+  method/path/status. Unit tests 6/6 + live checks on :3000 (no-token 200,
+  bogus-token stripped, POST 403, cross-site 403). web 23/23 + tsc + build.
+- M14-04 webhook security: protections vs limitations documented
+  (no signed timestamp at GitHub — not invented); replay risk after DB
+  restore noted with mitigations.
+- M14-01 adoption: accepted/rejected/pending split recorded; Agents 2/3
+  PENDING (confirmation re-requested on PR #4 + issue #5); Agent 4 engaged,
+  visual QA (desktop/mobile, EN/AR RTL, states) requested.
+- Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -251,6 +266,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M13-04: tenant isolation pending owner; notifications disabled. M13-05:
   RabbitMQ deprioritized per owner; human-assisted kept.
 - API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
+## Done — Milestone 14 (PR #4 update)
+
+- M14-03 BFF: server-side `/api/*` proxy with token injection from server env
+  only; client Authorization/Cookie stripped; writes 403 unless enabled;
+  optional Sec-Fetch-Site same-origin enforcement; logging limited to
+  method/path/status. Unit tests 6/6 + live checks on :3000 (no-token 200,
+  bogus-token stripped, POST 403, cross-site 403). web 23/23 + tsc + build.
+- M14-04 webhook security: protections vs limitations documented
+  (no signed timestamp at GitHub — not invented); replay risk after DB
+  restore noted with mitigations.
+- M14-01 adoption: accepted/rejected/pending split recorded; Agents 2/3
+  PENDING (confirmation re-requested on PR #4 + issue #5); Agent 4 engaged,
+  visual QA (desktop/mobile, EN/AR RTL, states) requested.
+- Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
 
 ## Next (backlog, priority order)
 
@@ -351,6 +381,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   RabbitMQ deprioritized per owner; human-assisted kept.
 - API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
 
+## Done — Milestone 14 (PR #4 update)
+
+- M14-03 BFF: server-side `/api/*` proxy with token injection from server env
+  only; client Authorization/Cookie stripped; writes 403 unless enabled;
+  optional Sec-Fetch-Site same-origin enforcement; logging limited to
+  method/path/status. Unit tests 6/6 + live checks on :3000 (no-token 200,
+  bogus-token stripped, POST 403, cross-site 403). web 23/23 + tsc + build.
+- M14-04 webhook security: protections vs limitations documented
+  (no signed timestamp at GitHub — not invented); replay risk after DB
+  restore noted with mitigations.
+- M14-01 adoption: accepted/rejected/pending split recorded; Agents 2/3
+  PENDING (confirmation re-requested on PR #4 + issue #5); Agent 4 engaged,
+  visual QA (desktop/mobile, EN/AR RTL, states) requested.
+- Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -443,6 +488,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
   RabbitMQ deprioritized per owner; human-assisted kept.
 - API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
 
+## Done — Milestone 14 (PR #4 update)
+
+- M14-03 BFF: server-side `/api/*` proxy with token injection from server env
+  only; client Authorization/Cookie stripped; writes 403 unless enabled;
+  optional Sec-Fetch-Site same-origin enforcement; logging limited to
+  method/path/status. Unit tests 6/6 + live checks on :3000 (no-token 200,
+  bogus-token stripped, POST 403, cross-site 403). web 23/23 + tsc + build.
+- M14-04 webhook security: protections vs limitations documented
+  (no signed timestamp at GitHub — not invented); replay risk after DB
+  restore noted with mitigations.
+- M14-01 adoption: accepted/rejected/pending split recorded; Agents 2/3
+  PENDING (confirmation re-requested on PR #4 + issue #5); Agent 4 engaged,
+  visual QA (desktop/mobile, EN/AR RTL, states) requested.
+- Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -532,6 +592,21 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M13-04: tenant isolation pending owner; notifications disabled. M13-05:
   RabbitMQ deprioritized per owner; human-assisted kept.
 - API 150/150 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
+## Done — Milestone 14 (PR #4 update)
+
+- M14-03 BFF: server-side `/api/*` proxy with token injection from server env
+  only; client Authorization/Cookie stripped; writes 403 unless enabled;
+  optional Sec-Fetch-Site same-origin enforcement; logging limited to
+  method/path/status. Unit tests 6/6 + live checks on :3000 (no-token 200,
+  bogus-token stripped, POST 403, cross-site 403). web 23/23 + tsc + build.
+- M14-04 webhook security: protections vs limitations documented
+  (no signed timestamp at GitHub — not invented); replay risk after DB
+  restore noted with mitigations.
+- M14-01 adoption: accepted/rejected/pending split recorded; Agents 2/3
+  PENDING (confirmation re-requested on PR #4 + issue #5); Agent 4 engaged,
+  visual QA (desktop/mobile, EN/AR RTL, states) requested.
+- Regression M1–M13: API 150/150 (7 real-PG + 1 live-GitHub); i18n 188/188.
 
 ## Next (backlog, priority order)
 

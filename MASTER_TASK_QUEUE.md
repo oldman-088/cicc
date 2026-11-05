@@ -47,6 +47,18 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - Tenant isolation still pending owner (M13-04); notifications disabled;
   RabbitMQ deprioritized per owner (M13-05) — human-assisted delivery kept.
 
+## Done — M14 (integration closure)
+- BFF server-side token injection implemented + tested + live-verified
+  (apps/web/app/api/[...path]/route.ts, lib/bff.mjs): no token in browser JS,
+  client auth headers stripped, writes 403, optional same-origin enforcement,
+  no token logging. web 23/23.
+- Webhook security findings documented (SECURITY_REVIEW.md §M14): real
+  protections + honest no-signed-timestamp limitation + remaining replay
+  risk + safe mitigations.
+- Adoption record split accepted/rejected/pending (CONTRACT_ADOPTION.md);
+  Agents 2/3 PENDING (not assumed); Agent 4 visual QA requested on PR #4.
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

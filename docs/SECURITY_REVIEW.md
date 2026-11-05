@@ -56,6 +56,39 @@ notifications remain DISABLED (no network path in adapters).
   contains no network imports. Restart recovery, idempotency, dead-letter,
   approval expiry, stale detection — regression-covered (M12/M13 suites).
 
+## M14 — Webhook security findings (2026-11-05)
+
+**Actual protections in force** (all tested): HMAC-sha256 signature
+(`X-Hub-Signature-256`, constant-time compare), fail-closed 401 when the
+secret is unset, dual-secret rotation grace, replay dedup on
+`X-GitHub-Delivery` (primary key — a replayed delivery is acknowledged, never
+reprocessed), event allowlist, 256 KiB body cap, JSON-object validation,
+secret-key redaction in normalized payloads, per-principal rate limits on all
+other endpoints.
+
+**Timestamp freshness — honest limitation**: GitHub's standard webhook
+signature covers only the body; it sends **no signed timestamp**, and we do
+not invent one. Therefore a captured (body, signature) pair remains valid
+until the secret rotates. Mitigations actually in place: delivery-id dedup
+(each event has a unique id, so a replayed pair is a no-op), allowlist, size
+cap, fail-closed secret handling, rotation procedure. **Remaining replay
+risk**: if the events table is wiped/restored from backup, previously seen
+delivery ids could be re-accepted until rotation. Safe additional mitigations
+(short of a signed timestamp): keep dedup state in the same transactional DB
+as tasks (already), rotate the secret on any suspected leak, and optionally
+compare `received_at` against a max-age alert (detection only, not rejection).
+
+**Server-side BFF (M14-03, implemented)**: `/api/*` is proxied by a server
+route handler (`apps/web/app/api/[...path]/route.ts` + `lib/bff.mjs`) that
+injects the API token from server-only env `WEB_BFF_API_TOKEN`, strips any
+client `Authorization`/`Cookie`/`x-cicc-*` headers, denies writes unless
+`WEB_BFF_ALLOW_WRITES=1`, optionally enforces `Sec-Fetch-Site` same-origin
+(`WEB_BFF_ENFORCE_SAME_ORIGIN=1`), and logs only method/path/status — never
+tokens. Browser JS never sees a token; nothing secret in local/session
+storage (only the locale preference). Verified live on :3000 (no-token read
+200, bogus client token stripped→200, POST→403, cross-site→403) and by 6
+unit tests (`tests/bff.test.mjs`).
+
 ### Unresolved security decisions (owner)
 1. Tenant isolation model (A/B/C/D in the decision doc; recommendation B).
 2. Shared DB vs read-replica for platform auth (`CICC_PLATFORM_DB_URL`).

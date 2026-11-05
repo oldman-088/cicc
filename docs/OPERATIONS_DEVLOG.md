@@ -145,3 +145,13 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   on non-applicable state (were 200); /events now includes task_id.
 - Cross-domain routing isolation verified (caps subset; BLOCKED when no agent).
 - Full regression: API 150/150 (7 real-PG + 1 live-GitHub); web 17/17+tsc+build.
+
+## 2026-11-05 — Milestone 14 (branch arena/961971ed-cicc, PR #4)
+
+- BFF: app/api/[...path]/route.ts + lib/bff.mjs; removed blind rewrite from
+  next.config (handler owns /api/*). Unit tests tests/bff.test.mjs (6).
+  Live: no-token read 200, client bogus Authorization stripped, POST 403,
+  Sec-Fetch-Site cross-site 403 / same-origin 200, LIVE github via BFF ok.
+- SECURITY_REVIEW §M14 webhook findings; CONTRACT_ADOPTION accepted/rejected/
+  pending; PR #4 comment to Agents 2/3 (confirm) and Agent 4 (visual QA).
+- API regression 150/150; web 23/23 + tsc + build; i18n 188/188.

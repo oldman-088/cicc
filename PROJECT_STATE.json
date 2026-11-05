@@ -43,14 +43,31 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M13"
+    "M1..M14"
   ],
   "contracts": {
     "version": "v1.0",
     "doc": "docs/INTEGRATION_CONTRACTS.md",
     "confirmation": "requested on PR #4, pending Agents 2/3/4",
-    "adoption": "Agent 4 engaged (4 blockers answered on PR #4, binding pending); Agents 2/3 no response \u2014 agreement not assumed; v1.0 in docs/INTEGRATION_CONTRACTS.md + docs/API_REFERENCE.md"
+    "adoption": "Agent 4 engaged (blockers answered, visual QA requested); Agents 2/3 PENDING \u2014 not assumed; see docs/CONTRACT_ADOPTION.md"
   },
   "tenant_isolation": "decision doc only (docs/TENANT_ISOLATION_DECISION.md); awaiting owner; not production-ready",
-  "rabbitmq": "deprioritized per owner (M13-05); human-assisted delivery supported and honestly reported; live verification environment-blocked (no Docker)"
+  "rabbitmq": "deprioritized per owner (M13-05); human-assisted delivery supported and honestly reported; live verification environment-blocked (no Docker)",
+  "bff": {
+    "status": "implemented+tested+live-verified",
+    "files": [
+      "apps/web/app/api/[...path]/route.ts",
+      "apps/web/lib/bff.mjs"
+    ],
+    "invariants": [
+      "no token in browser JS",
+      "no secrets in web storage",
+      "client auth headers stripped",
+      "writes 403 unless WEB_BFF_ALLOW_WRITES=1",
+      "same-origin enforcement optional",
+      "no token logging"
+    ],
+    "tests": "web 23/23 (6 BFF unit) + live :3000 checks"
+  },
+  "webhook_security": "HMAC+dedup+allowlist+rotation in force; no signed timestamp exists at GitHub (documented, not invented); remaining replay risk + mitigations in SECURITY_REVIEW.md \u00a7M14"
 }

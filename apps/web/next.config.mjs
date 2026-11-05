@@ -1,18 +1,10 @@
 /** @type {import('next').NextConfig} */
 
-// Server-side proxy target for the operations API. The browser only ever
-// calls relative "/api/..." URLs; Next.js rewrites forward them here.
-const apiInternalUrl = process.env.API_INTERNAL_URL || "http://127.0.0.1:8000";
-
-const nextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${apiInternalUrl}/api/:path*`,
-      },
-    ];
-  },
-};
+// M14-03: /api/* is handled by the server-side BFF route handler
+// (app/api/[...path]/route.ts), which injects the API token server-side from
+// WEB_BFF_API_TOKEN. The browser never holds or sends a token, and no rewrite
+// forwards raw client requests anymore. API_INTERNAL_URL is still the
+// server-side upstream for that handler.
+const nextConfig = {};
 
 export default nextConfig;

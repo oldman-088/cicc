@@ -5,11 +5,15 @@ Base URLs (verified against `app/main.py`):
 - Coordination: `/api/v1/coordination/...` (`app/coordination/router.py`, prefix `/api/v1/coordination`)
 - Health: `/`, `/health`, `/ready`
 
-The Next.js dashboard proxies **server-side**: browser calls relative
-`/api/...`; `next.config` rewrites forward to `API_INTERNAL_URL`. The browser
-never holds a token. In the current reference deployment the API is run either
-without tokens (trusted, single-tenant) or the token is injected server-side
-(BFF backlog item). **No browser-held static token is introduced.**
+The Next.js dashboard proxies **server-side via the BFF** (M14):
+browser calls relative `/api/...` with **no token**; the route handler
+`app/api/[...path]/route.ts` forwards to `API_INTERNAL_URL` and injects
+`Authorization: Bearer $WEB_BFF_API_TOKEN` (server env only). Client
+`Authorization`/`Cookie`/`x-cicc-*` headers are stripped; writes return 403
+unless `WEB_BFF_ALLOW_WRITES=1`; `WEB_BFF_ENFORCE_SAME_ORIGIN=1` rejects
+cross-site browser requests. Logs contain only method/path/status.
+**No browser-held static token is introduced; nothing secret is stored in
+web storage.**
 
 ## Authentication & errors (applies to both families)
 
