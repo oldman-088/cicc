@@ -41,7 +41,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 
 from ..errors import ValidationError
-from ..schema import CveId
+from ..schema import CveId, utcnow
 from .contracts import VulnerabilityStore
 
 __all__ = [
@@ -187,7 +187,8 @@ def _iso(value: object) -> str | None:
     return None
 
 
-def shape_record(row: Mapping[str, Any]) -> dict[str, Any]:
+def shape_record(row: Mapping[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
+    """The `now` clock is injectable so freshness is deterministic in tests."""
     """One stored row → the documented API object.
 
     Missing values stay missing: the response never fills an unconsulted KEV lookup
@@ -257,6 +258,10 @@ def shape_record(row: Mapping[str, Any]) -> dict[str, Any]:
         "affected": details.get("affected") or [],
         "references": details.get("references") or [],
         "freshness": enrichment.get("freshness"),
+        # Additive API-facing freshness vocabulary (unknown/never_verified/current/
+        # aging/stale) computed from the last recorded successful fetch; a cached
+        # record without one is never reported as current.
+        "freshness_view": _freshness_block(details, now=now),
         "policy": enrichment.get("policy"),
         # Standing and structured conflicts. Consumers need to be able to exclude a
         # withdrawn advisory *before* rendering it as work to do, and to show why a
@@ -296,7 +301,7 @@ class VulnerabilityApi:
     def __init__(self, store: VulnerabilityStore) -> None:
         self.store = store
 
-    def get(self, request: GetVulnerabilityRequest) -> ApiResponse:
+    def get(self, request: GetVulnerabilityRequest, *, now: datetime | None = None) -> ApiResponse:
         try:
             row = self.store.find(tenant_id=request.tenant_id, cve=request.cve)
         except Exception as exc:  # a driver failure is a 503, not a 500 stack
@@ -305,9 +310,9 @@ class VulnerabilityApi:
             ) from exc
         if row is None:
             raise ApiError("not_found", f"{request.cve} is not stored for this tenant")
-        return ApiResponse(status=200, body={"data": shape_record(row)})
+        return ApiResponse(status=200, body={"data": shape_record(row, now=now)})
 
-    def list(self, request: ListVulnerabilitiesRequest) -> ApiResponse:
+    def list(self, request: ListVulnerabilitiesRequest, *, now: datetime | None = None) -> ApiResponse:
         try:
             rows, next_cursor = self.store.list(
                 tenant_id=request.tenant_id,
@@ -324,7 +329,7 @@ class VulnerabilityApi:
         return ApiResponse(
             status=200,
             body={
-                "data": [shape_record(row) for row in rows],
+                "data": [shape_record(row, now=now) for row in rows],
                 "page": {
                     "limit": request.limit,
                     "next_cursor": next_cursor,
@@ -391,3 +396,16 @@ def asgi_handler(
             )
 
     return handler
+
+def _freshness_block(details: Mapping[str, Any], *, now: datetime | None) -> dict[str, Any]:
+    """Freshness from the last recorded *successful* source fetch.
+
+    Absent timestamp => NEVER_VERIFIED: a cached record never implies currency.
+    """
+    from ..freshness import api_freshness_view
+    from ..schema import parse_timestamp
+
+    raw = details.get("last_success_at")
+    observed = parse_timestamp(raw, field_name="last_success_at") if isinstance(raw, str) else None
+    return api_freshness_view(observed_at=observed, now=now or utcnow())
+

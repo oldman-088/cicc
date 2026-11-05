@@ -36,9 +36,10 @@ healthy, empty feed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
+from .errors import ValidationError
 from .schema import (
     CollectionStatus,
     Freshness,
@@ -47,10 +48,12 @@ from .schema import (
 )
 
 __all__ = [
+    "API_FRESHNESS_STATES",
     "FRESHNESS_SCHEMA",
     "FreshnessState",
     "ObservationFreshness",
     "SourceSynchronisation",
+    "api_freshness_view",
     "describe_freshness",
 ]
 
@@ -336,3 +339,70 @@ def _as_datetime(value: object) -> datetime | None:
         except ValueError:
             return None
     return None
+
+
+#: The API-facing freshness vocabulary (additive view over ``FreshnessState``):
+#: a consumer of list/get responses can assert on exactly these five states.
+API_FRESHNESS_STATES = (
+    "unknown",          # inputs needed to decide are absent
+    "never_verified",   # no successful source fetch recorded — a cached record is NOT current
+    "current",          # within the fresh window
+    "aging",            # past fresh, still within the stale limit
+    "stale",            # beyond the stale limit, or a failing source serving old data
+)
+
+
+def api_freshness_view(
+    *,
+    observed_at: datetime | None,
+    source_state: SourceSynchronisation | None = None,
+    now: datetime | None = None,
+    fresh_within: timedelta = timedelta(hours=24),
+    stale_after: timedelta = timedelta(days=7),
+    configured: bool = True,
+) -> dict[str, Any]:
+    """Freshness in the list/get API vocabulary, derived from :func:`describe_freshness`.
+
+    Mapping: ``never_succeeded``/``not_configured`` -> ``never_verified`` when no
+    success exists (not_configured only when nothing is configured at all);
+    ``unknown`` stays ``unknown``; bucket ``fresh`` -> ``current``, ``recent`` ->
+    ``aging``, ``stale``/``expired`` and ``failed`` -> ``stale`` (with the failure in
+    the reason). Deterministic for a given (observed_at, now) pair; naive datetimes
+    are rejected by the underlying helpers.
+    """
+    # Explicit tz-safety: naive inputs must fail loudly with a typed error, never
+    # with a TypeError from datetime arithmetic or a silently wrong age.
+    for label, value in (("observed_at", observed_at), ("now", now)):
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValidationError(f"{label} must be timezone-aware", field=label)
+    obs = describe_freshness(
+        observed_at=observed_at,
+        source_state=source_state,
+        now=now,
+        fresh_within=fresh_within,
+        stale_after=stale_after,
+        configured=configured,
+    )
+    if obs.state == FreshnessState.NEVER_SUCCEEDED:
+        state = "never_verified"
+    elif obs.state == FreshnessState.NOT_CONFIGURED:
+        state = "unknown" if observed_at is None else "never_verified"
+    elif obs.state == FreshnessState.UNKNOWN:
+        state = "unknown"
+    elif obs.state == FreshnessState.FAILED:
+        state = "stale"
+    else:
+        state = "current" if obs.bucket.bucket == "fresh" else (
+            "aging" if obs.bucket.bucket == "recent" else "stale"
+        )
+    return {
+        "state": state,
+        "age_seconds": obs.age.total_seconds() if obs.age else None,
+        "observed_at": obs.observed_at.astimezone(timezone.utc).isoformat()
+        if obs.observed_at
+        else None,
+        "assessed_at": obs.assessed_at.astimezone(timezone.utc).isoformat()
+        if obs.assessed_at
+        else None,
+        "reason": obs.detail or "",
+    }

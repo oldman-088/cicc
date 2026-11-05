@@ -30,10 +30,13 @@ stdlib-only.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 
-#: Stable namespace so the serialNumber is deterministic for a given
-#: generation time (uuid5) — golden fixtures must not flap per run.
+#: Stable namespace for the content-derived serialNumber (uuid5 over the SHA-256
+#: of the canonical document JSON) — identical logical inputs give an identical
+#: serial across runs, so golden fixtures do not flap.
 _CICC_NAMESPACE = uuid.NAMESPACE_URL
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -275,7 +278,6 @@ def to_vex(
     document: dict[str, Any] = {
         "bomFormat": "CycloneDX",
         "specVersion": VEX_SPEC_VERSION,
-        "serialNumber": f"urn:uuid:{uuid.uuid5(_CICC_NAMESPACE, moment.isoformat())}",
         "version": 1,
         "metadata": {
             "timestamp": moment.astimezone(timezone.utc).isoformat(),
@@ -297,6 +299,18 @@ def to_vex(
         },
         "vulnerabilities": vulnerabilities,
     }
+    # The serialNumber is derived from the document CONTENT (canonical JSON hash),
+    # not from the wall clock: identical logical inputs produce an identical BOM
+    # serial across runs, which is what makes golden fixtures reproducible. The
+    # generation timestamp still lives in metadata.timestamp (a fact about the
+    # run, not part of the identity).
+    hashable = {k: v for k, v in document.items() if k != "serialNumber"}
+    hashable["metadata"] = {k: v for k, v in hashable["metadata"].items()
+                            if k != "timestamp"}  # run fact, not document identity
+    canonical = json.dumps(hashable, sort_keys=True, default=str)
+    document["serialNumber"] = (
+        f"urn:uuid:{uuid.uuid5(_CICC_NAMESPACE, hashlib.sha256(canonical.encode()).hexdigest())}"
+    )
     if components:
         document["components"] = components
 

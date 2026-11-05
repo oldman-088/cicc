@@ -29,6 +29,13 @@
       "score": 0.94
     },
     "freshness": null,
+    "freshness_view": {
+      "age_seconds": null,
+      "assessed_at": "2026-11-04T09:00:00+00:00",
+      "observed_at": null,
+      "reason": "no observation timestamp: age cannot be assessed",
+      "state": "unknown"
+    },
     "kev": true,
     "origin": "fixture",
     "policy": null,

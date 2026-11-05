@@ -239,10 +239,10 @@ def build() -> dict[str, Any]:
 
     api = VulnerabilityApi(store)
     listing = api.list(
-        ListVulnerabilitiesRequest(tenant_id=tenant, limit=50, order="cve")
+        ListVulnerabilitiesRequest(tenant_id=tenant, limit=50, order="cve"), now=GOLDEN_NOW
     ).body
     detail = api.get(
-        GetVulnerabilityRequest(tenant_id=tenant, cve="CVE-2026-1001")
+        GetVulnerabilityRequest(tenant_id=tenant, cve="CVE-2026-1001"), now=GOLDEN_NOW
     ).body
 
     workflow = AssessmentWorkflow(

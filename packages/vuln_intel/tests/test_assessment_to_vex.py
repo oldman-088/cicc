@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from vuln_intel.assessment import workflow_for
 from vuln_intel.interop.vex import to_vex
@@ -69,3 +69,30 @@ class TestAssessmentToVex:
         export = to_vex(_report(), generated_at=NOW)
         assert "true" not in {p["value"] for p in export.document["metadata"]["properties"]
                               if p["name"] == "cicc:live_verified"}
+
+
+class TestVexSerialDeterminism:
+    def test_identical_inputs_identical_serial_across_different_clocks(self):
+        """The serialNumber is content-derived, not clock-derived: two exports of
+        the same logical report at different generation times share a serial."""
+        later = NOW + timedelta(days=3)
+        a = to_vex(_report(), generated_at=NOW).document["serialNumber"]
+        b = to_vex(_report(), generated_at=later).document["serialNumber"]
+        assert a == b and a.startswith("urn:uuid:")
+
+    def test_identical_inputs_identical_full_document_at_same_clock(self):
+        a = to_vex(_report(), generated_at=NOW).document
+        b = to_vex(_report(), generated_at=NOW).document
+        assert a == b
+
+    def test_different_content_different_serial(self):
+        other = to_vex(_report(), generated_at=NOW)
+        rec2 = NormalizedVulnerability(
+            cve=CveId.parse("CVE-2026-0099"), origin=Origin.FIXTURE,
+            affected=(AffectedPackage(ecosystem="npm", name="x", introduced="0", fixed="1"),),
+            sources=("osv",),
+        )
+        inv2 = Inventory(dependencies=(Dependency(ecosystem="npm", name="x", version="0.5", asset="a"),))
+        rep2 = workflow_for(records=[rec2], inventory=inv2, now=lambda: NOW)
+        c = to_vex(rep2, generated_at=NOW).document["serialNumber"]
+        assert c != other.document["serialNumber"]

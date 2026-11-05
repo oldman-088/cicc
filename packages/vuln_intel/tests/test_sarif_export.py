@@ -51,3 +51,34 @@ class TestSarifExport:
         doc = to_sarif(workflow_for(records=[], inventory=Inventory(), now=lambda: NOW),
                        generated_at=NOW)
         assert doc["runs"][0]["results"] == []
+
+
+SARIF_LEVELS = {"none", "note", "warning", "error"}
+
+
+class TestSarifSpecShape:
+    def test_structural_conformance_to_sarif_2_1_0(self):
+        doc = to_sarif(_report(), generated_at=NOW)
+        assert doc["version"] == "2.1.0"
+        assert doc["$schema"].endswith("sarif-2.1.0.json")
+        assert isinstance(doc["runs"], list) and len(doc["runs"]) == 1
+        run = doc["runs"][0]
+        assert run["tool"]["driver"]["name"]
+        for result in run["results"]:
+            assert set(("ruleId", "level", "message")) <= set(result)
+            assert result["level"] in SARIF_LEVELS
+            assert isinstance(result["message"]["text"], str) and result["message"]["text"]
+        props = run["properties"]
+        for key in ("cicc:origin", "cicc:live_verified", "cicc:unassessed", "cicc:generated_at"):
+            assert key in props
+
+    def test_all_four_exposure_cases_present_and_distinct(self):
+        doc = to_sarif(_report(), generated_at=NOW)
+        levels = {r["ruleId"]: r["level"] for r in doc["runs"][0]["results"]}
+        assert levels == {"CVE-2021-44228": "error", "CVE-2026-0002": "none"}
+        assert "CVE-2026-0003" in doc["runs"][0]["properties"]["cicc:unassessed"]
+
+    def test_live_verified_never_true_for_fixture(self):
+        doc = to_sarif(_report(), generated_at=NOW)
+        assert doc["runs"][0]["properties"]["cicc:live_verified"] == "false"
+        assert doc["runs"][0]["properties"]["cicc:origin"] == "fixture"
