@@ -195,3 +195,94 @@ def test_pg_self_approval_prohibited_server_side(pg_app, monkeypatch):
     assert r.status_code == 200 and r.json()["self_approved"] is True
     row = _db_row(pg_app, "AMD-PG-SA")
     assert any(h["by"] == "agent-1" and h["to"] == "accepted" for h in json.loads(row.history))
+
+
+# ---------------- M32: additional race windows ----------------
+
+def test_pg_decide_vs_attach_refs_race(pg_app):
+    """decide racing attach_refs: refs merge and decision both land; final
+    history has exactly one terminal transition; linked_refs are the union."""
+    pg_app.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-M32-R"), headers=W)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f1 = ex.submit(pg_app.post, "/api/v1/coordination/contract/amendments/AMD-M32-R/refs",
+                       json={"refs": ["PR#4@151b060"]}, headers=W)
+        f2 = ex.submit(pg_app.post, "/api/v1/coordination/contract/amendments/AMD-M32-R/decide",
+                       json={"decision": "accept", "decided_by": "owner", "linked_refs": ["PR#7@91a16256"]}, headers=W)
+        rs = [f1.result(), f2.result()]
+    assert all(r.status_code == 200 for r in rs), [r.status_code for r in rs]
+    a = pg_app.get("/api/v1/coordination/contract/amendments/AMD-M32-R", headers=R).json()
+    assert a["status"] == "accepted"
+    assert set(a["linked_refs"]) >= {"PR#4@151b060", "PR#7@91a16256"}
+    hist = a["history"]
+    assert len([h for h in hist if h["to"] in ("accepted", "rejected")]) == 1
+
+
+def test_pg_task_sweep_vs_amendment_sweep_interleaved(pg_app, monkeypatch):
+    """POST /sweep runs task sweeps and amendment stale-sweep in one call;
+    racing two sweeps must not double-transition anything."""
+    import datetime as _dt
+    # one expired task + one stale amendment
+    pg_app.post("/api/v1/coordination/tasks", json={"task_id": "m32-sw", "kind": "m32", "payload": {}, "ttl_s": 1}, headers=W)
+    pg_app.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-M32-SW"), headers=W)
+    with ops.SessionLocal() as s:
+        row = s.execute(select(models.CoordinationAmendment).where(
+            models.CoordinationAmendment.amendment_id == "AMD-M32-SW")).scalar_one()
+        row.created_at = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=30)
+        t = s.execute(select(models.CoordinationTask).where(models.CoordinationTask.task_id == "m32-sw")).scalar_one()
+        t.expires_at = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=5)
+        s.commit()
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        rs = list(ex.map(lambda _: pg_app.post("/api/v1/coordination/sweep", headers=W), range(4)))
+    assert all(r.status_code == 200 for r in rs)
+    # task expired exactly once
+    ev = pg_app.get("/api/v1/coordination/tasks/m32-sw/events", headers=R).json()["events"]
+    assert sum(1 for e in ev if (e["kind"] or "") == "state:CREATED->EXPIRED") == 1
+    # amendment stale exactly once
+    row = _db_row(pg_app, "AMD-M32-SW")
+    assert row.status == "stale"
+    hist = json.loads(row.history)
+    assert len([h for h in hist if h["to"] == "stale"]) == 1
+
+
+def test_pg_withdraw_vs_supersede_vs_stale_single_terminal(pg_app, monkeypatch):
+    """Three racing terminal transitions (withdraw by proposer, supersede via
+    another accept, stale sweep) — exactly one wins; history consistent."""
+    import datetime as _dt
+    pg_app.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-M32-X"), headers=W)
+    pg_app.post("/api/v1/coordination/contract/amendments", json=_amd("AMD-M32-Y"), headers=W)
+    with ops.SessionLocal() as s:
+        row = s.execute(select(models.CoordinationAmendment).where(
+            models.CoordinationAmendment.amendment_id == "AMD-M32-X")).scalar_one()
+        row.created_at = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=30)
+        s.commit()
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        f1 = ex.submit(pg_app.post, "/api/v1/coordination/contract/amendments/AMD-M32-X/withdraw", json={"by": "agent-1"}, headers=W)
+        f2 = ex.submit(pg_app.post, "/api/v1/coordination/contract/amendments/AMD-M32-Y/decide",
+                       json={"decision": "accept", "decided_by": "owner", "supersedes": ["AMD-M32-X"]}, headers=W)
+        f3 = ex.submit(pg_app.post, "/api/v1/coordination/sweep", headers=W)
+        rs = [f1.result(), f2.result(), f3.result()]
+    # sweep and decide-Y may still return 200 for their own targets; what matters
+    # is that X received exactly ONE terminal transition (CAS losers get 409 or
+    # skip silently) — verified via history below.
+    row = _db_row(pg_app, "AMD-M32-X")
+    assert row.status in ("withdrawn", "superseded", "stale")
+    hist = json.loads(row.history)
+    terminal = [h for h in hist if h["to"] in ("withdrawn", "superseded", "stale", "accepted", "rejected")]
+    assert len(terminal) == 1
+
+
+def test_pg_effective_version_under_concurrent_accepts(pg_app):
+    """Concurrent accepts of different versions: effective version is the
+    deterministic numeric max regardless of commit order."""
+    for i, v in enumerate(["1.3", "1.10", "1.2"]):
+        aid = f"AMD-M32-V{i}"
+        pg_app.post("/api/v1/coordination/contract/amendments", json=_amd(aid, target_version=v), headers=W)
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        rs = list(ex.map(
+            lambda i: pg_app.post(f"/api/v1/coordination/contract/amendments/AMD-M32-V{i}/decide",
+                                  json={"decision": "accept", "decided_by": "owner"}, headers=W),
+            range(3)))
+    assert all(r.status_code == 200 for r in rs)
+    c1 = pg_app.get("/api/v1/coordination/contract", headers=R).json()
+    c2 = pg_app.get("/api/v1/coordination/contract", headers=R).json()
+    assert c1["version"] == c2["version"] == "1.10"  # deterministic

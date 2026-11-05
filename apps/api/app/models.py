@@ -9,7 +9,7 @@ rows are seeded.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import UniqueConstraint,  Boolean, Column, DateTime, Integer, String, Text
 
 from app.db import Base
 
@@ -373,6 +373,21 @@ class CoordinationAmendment(Base):
     history = Column(Text, nullable=True)          # M30: JSON audit trail of status transitions
     created_at = Column(DateTime(timezone=True), default=utcnow)
     decided_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class CoordinationAmendmentRef(Base):
+    """M32: per-ref rows for amendment traceability. Append-only with a unique
+    (amendment_id, ref) constraint, so concurrent decide/attach_refs can never
+    overwrite each other's refs (unlike a JSON column)."""
+
+    __tablename__ = "coord_amendment_refs"
+    __table_args__ = (UniqueConstraint("amendment_id", "ref", name="uq_amendment_ref"),)
+
+    id = Column(Integer, primary_key=True)
+    amendment_id = Column(String(64), index=True)
+    ref = Column(String(256))
+    added_by = Column(String(128), nullable=True)
+    at = Column(DateTime(timezone=True), default=utcnow)
 
 
 class CoordinationDelivery(Base):

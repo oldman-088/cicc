@@ -56,7 +56,7 @@ def propose(s, *, amendment_id: str, title: str, description: str, proposed_by: 
                 and existing.proposed_by == proposed_by
                 and json.loads(existing.affects or "[]") == (affects or []))
         if existing.status == "pending" and same:
-            return to_dict(existing), True  # idempotent duplicate submission
+            return to_dict(s, existing), True  # idempotent duplicate submission
         raise ValueError(f"amendment_id '{amendment_id}' already exists (status={existing.status})")
     row = models.CoordinationAmendment(
         amendment_id=amendment_id, title=title, description=description,
@@ -75,19 +75,52 @@ def propose(s, *, amendment_id: str, title: str, description: str, proposed_by: 
             models.CoordinationAmendment.amendment_id == amendment_id)).scalar_one_or_none()
         if existing is not None and existing.status == "pending" and existing.title == title \
                 and existing.proposed_by == proposed_by:
-            return to_dict(existing), True
+            return to_dict(s, existing), True
         raise ValueError(f"amendment_id '{amendment_id}' already exists (concurrent insert)")
-    return to_dict(row), False
+    return to_dict(s, row), False
 
 
-def to_dict(row: models.CoordinationAmendment) -> dict:
+def _refs_for(s, row) -> list:
+    """M32: refs come from the append-only refs table (union with legacy column)."""
+    refs = []
+    if row.linked_refs:
+        refs = json.loads(row.linked_refs)
+    for r in s.execute(select(models.CoordinationAmendmentRef).where(
+            models.CoordinationAmendmentRef.amendment_id == row.amendment_id)).scalars().all():
+        if r.ref not in refs:
+            refs.append(r.ref)
+    return refs
+
+
+def _add_refs(s, amendment_id: str, refs: list, by: str | None = None) -> list:
+    """Idempotent ref insert; concurrent duplicates are ignored via the unique
+    constraint. Returns the full ref list afterwards."""
+    for ref in refs or []:
+        s.add(models.CoordinationAmendmentRef(amendment_id=amendment_id, ref=str(ref)[:256], added_by=by))
+    try:
+        s.flush()
+    except Exception:
+        s.rollback()  # unique violation on a concurrent identical ref -> fine
+        for ref in refs or []:
+            exists = s.execute(select(models.CoordinationAmendmentRef).where(
+                models.CoordinationAmendmentRef.amendment_id == amendment_id,
+                models.CoordinationAmendmentRef.ref == str(ref)[:256])).scalar_one_or_none()
+            if exists is None:
+                s.add(models.CoordinationAmendmentRef(amendment_id=amendment_id, ref=str(ref)[:256], added_by=by))
+        s.flush()
+    row = s.execute(select(models.CoordinationAmendment).where(
+        models.CoordinationAmendment.amendment_id == amendment_id)).scalar_one_or_none()
+    return _refs_for(s, row) if row else []
+
+
+def to_dict(s, row: models.CoordinationAmendment) -> dict:
     return {
         "amendment_id": row.amendment_id, "title": row.title, "description": row.description,
         "affects": json.loads(row.affects) if row.affects else [],
         "compatibility": json.loads(row.compatibility) if row.compatibility else {},
         "target_version": row.target_version, "proposed_by": row.proposed_by,
         "status": row.status, "decided_by": row.decided_by, "decision_note": row.decision_note,
-        "linked_refs": json.loads(row.linked_refs) if row.linked_refs else [],
+        "linked_refs": _refs_for(s, row),
         "history": json.loads(row.history) if row.history else [],
         "created_at": _iso(row.created_at), "decided_at": _iso(row.decided_at),
     }
@@ -97,13 +130,13 @@ def list_amendments(s, status: str | None = None) -> list[dict]:
     q = select(models.CoordinationAmendment).order_by(models.CoordinationAmendment.id.desc())
     if status:
         q = q.where(models.CoordinationAmendment.status == status)
-    return [to_dict(r) for r in s.execute(q).scalars().all()]
+    return [to_dict(s, r) for r in s.execute(q).scalars().all()]
 
 
 def get(s, amendment_id: str) -> dict | None:
     row = s.execute(select(models.CoordinationAmendment).where(
         models.CoordinationAmendment.amendment_id == amendment_id)).scalar_one_or_none()
-    return to_dict(row) if row else None
+    return to_dict(s, row) if row else None
 
 
 def validate_compatibility(affects: list, compatibility: dict, descriptor: dict) -> dict:
@@ -161,9 +194,12 @@ def decide(s, amendment_id: str, decision: str, decided_by: str, note: str | Non
         .where(models.CoordinationAmendment.id == row.id)
         .where(models.CoordinationAmendment.status == "pending")
         .values(status=new_status, decided_by=decided_by, decision_note=note,
-                linked_refs=json.dumps(linked_refs or []),
                 decided_at=datetime.now(timezone.utc))
     )
+    if res.rowcount == 1:
+        # M32: refs go to the append-only refs table — concurrent attach_refs
+        # can never be overwritten by a decision
+        _add_refs(s, amendment_id, linked_refs or [], by=decided_by)
     if res.rowcount != 1:
         return {"ok": False, "code": 409, "reason": "amendment already decided (concurrent)"}
     _hist(row, "pending", new_status, decided_by, note)
@@ -239,10 +275,7 @@ def attach_refs(s, amendment_id: str, refs: list) -> dict:
         models.CoordinationAmendment.amendment_id == amendment_id)).scalar_one_or_none()
     if row is None:
         return {"ok": False, "code": 404, "reason": "amendment_not_found"}
-    existing = json.loads(row.linked_refs) if row.linked_refs else []
-    merged = existing + [r for r in refs if r not in existing]
-    row.linked_refs = json.dumps(merged)
-    s.flush()
+    merged = _add_refs(s, amendment_id, refs)
     return {"ok": True, "amendment_id": amendment_id, "linked_refs": merged}
 
 
