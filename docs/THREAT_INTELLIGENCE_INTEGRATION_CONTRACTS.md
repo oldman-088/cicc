@@ -5,7 +5,8 @@
 - **Base:** `main` @ `ca8f82c0500637e22851d7128cddf99081ef3c08`
 - **Recovered from:** Agent 2 branch `arena/93315d2c-cicc` — commits `933b29f`, `805cd2b`, `1a46f70` (PR #3, Draft)
 - **Implementation:** `apps/threat_intelligence/integration_contracts.py`
-- **Tests:** `apps/threat_intelligence/tests/test_integration_contracts.py` (18 tests)
+- **Contract registry:** `apps/threat_intelligence/contract_registry.py`
+- **Tests:** `test_integration_contracts.py` (18) + `test_contract_registry.py` (36)
 - **Verification mode:** `fixture_tested` — **no outbound network request was made by any code in this package**
 
 > ## Contract status rule (applies to everything below)
@@ -19,10 +20,45 @@
 
 ---
 
+## 0. Exact provenance of every dependency (VERIFIED)
+
+Every contract below is pinned in `contract_registry.py` to the commit it was
+actually read from. Branch heads were resolved with
+`git ls-remote origin refs/heads/<branch>`; documents were read with
+`git show <branch>:<path>`. **No source branch was modified.**
+
+| `contract_id` | Owner | Version as published | Source commit | Source document | PR | Status |
+|---|---|---|---|---|---|---|
+| `agent1-coordination-v1` | Agent 1 | `Contract v1.0 (M11-02)` — 25 numbered endpoints | `2c6af207a08955b9990ea9d89af8fd60fed3bc91` | `docs/INTEGRATION_CONTRACTS.md` | `oldman-088/cicc#4` | **PROPOSED** |
+| `agent1-ops-worker-heartbeat` | Agent 1 | Issue #5 worker heartbeat | `2c6af207a08955b9990ea9d89af8fd60fed3bc91` | GitHub Issue #5 | — | **PROPOSED** |
+| `agent3-vuln-intel-m1-m6` | Agent 3 | `verification 2026-11-05 @ 5e91ff6 (1160 tests)` | `84fca769f78c1ebede13a22529719f0735cf1afc` | `docs/vulnerability-intelligence/INTEGRATION_READINESS.md` | `oldman-088/cicc#1` | **PROPOSED** |
+| `agent3-storage-port` | Agent 3 | proposed storage port | `84fca769f78c1ebede13a22529719f0735cf1afc` | `docs/vulnerability-intelligence/INTEGRATION_CONTRACTS.md` | `oldman-088/cicc#1` | **PROPOSED** |
+| `agent2-threat-intel-ownership` | Agent 2 | PR #3 head `1a46f70` | `1a46f704bc09207d2755fbfd5a7e8ae48b646e1b` | `PROJECT_STATE.json`, `apps/threat_intelligence/*` | `oldman-088/cicc#3` | **PROPOSED** |
+
+Registry summary: **5 dependencies, 5 `proposed`, 0 `accepted`, 0 load-bearing.**
+
+Enforcement is not documentary. `ContractRegistry.assert_load_bearing(id)`
+raises `ContractNotAcceptedError` naming the owner, the commit and the document
+while the entry is still a proposal, and `load_bearing` cannot be set at
+construction — only `record_owner_acceptance(contract_id, accepted_by=…,
+acceptance_reference=…)` flips it, and that rejects placeholder actors and
+references (`pending`, `tbd`, `unknown`, `none`, …).
+
+### Owner review requested
+
+| Owner | Asked to confirm | Where |
+|---|---|---|
+| Agent 1 | Coordination Contract v1.0 payload shapes; `Agent1RegistrationPayload.meta` identity fields; `task_id` slash prohibition; ≥30s / 120s heartbeat cadence | PR #4 |
+| Agent 3 | M1 `kev_required_action` placement (KEV-layer-only vs shared record — Agent 3 marks this **BLOCKED pending an owner decision**); M2 advisory shape; M3–M6 as implemented | PR #1 |
+| Agent 2 / owner | Whether these modules land independently or fold into PR #3; the `implement_timeouts_retries` signature widening | PR #3 / PR #6 |
+
+---
+
 ## 1. Agent 1 — Central Coordination & System Health
 
-Source read from `origin/arena/961971ed-cicc:docs/INTEGRATION_CONTRACTS.md` (Coordination Contract v1.0)
-and Issue #5 (ops worker heartbeat).
+Source read from `origin/arena/961971ed-cicc:docs/INTEGRATION_CONTRACTS.md` at
+commit `2c6af20` (Coordination Contract v1.0, M11-02) and Issue #5 (ops worker
+heartbeat).
 
 | Contract surface | Implemented model | Enforcement |
 |---|---|---|

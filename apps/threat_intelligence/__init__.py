@@ -98,9 +98,78 @@ from apps.threat_intelligence.osint_sources import (
     TAXII21SyncStateModel,
 )
 from apps.threat_intelligence.osint_sources import SecurityError
+from apps.threat_intelligence.persistence import (
+    APPEND_ONLY_TABLES,
+    SCHEMA_SQL,
+    AppendOnlyViolationError,
+    AuditRecord,
+    ConflictRecord,
+    EntityHistoryRecord,
+    EntityPage,
+    PersistenceError,
+    SQLiteThreatIntelRepository,
+    StoredEntityRecord,
+    StoredObservation,
+    TenantIsolationError,
+    ThreatIntelRepository,
+    repository_from_url,
+)
 from apps.threat_intelligence.relationships import (
     RelationshipModel,
     RelationshipService,
+)
+from apps.threat_intelligence.collection_workers import (
+    TERMINAL_STATES,
+    CircuitBreakerConfig,
+    CollectionJob,
+    CollectionWorker,
+    CollectionWorkerError,
+    JobEvent,
+    JobNotLeasableError,
+    JobState,
+    LeaseConflictError,
+    RetryPolicy,
+    SourceCircuitBreaker,
+    UnknownJobError,
+    WorkerMetrics,
+    derive_idempotency_key,
+)
+from apps.threat_intelligence.api_surface import (
+    API_CONTRACT_VERSION,
+    API_PREFIX,
+    ROUTES,
+    ApiNotFoundError,
+    ApiResponse,
+    ApiSurfaceNotMountedError,
+    ApiUnauthorizedError,
+    ApiValidationError,
+    HttpMethod,
+    RequestContext,
+    RouteSpec,
+    ThreatIntelApiSurface,
+    build_fastapi_router,
+)
+from apps.threat_intelligence.source_reliability import (
+    VERIFICATION_RANK,
+    FreshnessPolicy,
+    FreshnessState,
+    ReliabilityTier,
+    SourceAvailability,
+    SourceOutcome,
+    SourceReliabilityError,
+    SourceReliabilityRecord,
+    SourceReliabilityService,
+    VerificationEvidence,
+    VerificationPromotionError,
+)
+from apps.threat_intelligence.contract_registry import (
+    ContractDependency,
+    ContractNotAcceptedError,
+    ContractRegistry,
+    ContractRegistryError,
+    ContractStatus,
+    OwnerAcceptanceError,
+    default_registry,
 )
 from apps.threat_intelligence.threat_actors import (
     ThreatActorModel,
@@ -117,7 +186,7 @@ from apps.threat_intelligence.vendor_advisories import (
     VendorSecurityAdvisorySourceModel,
 )
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 __all__ = [
     # P1-00 core entity modules
@@ -196,4 +265,68 @@ __all__ = [
     "PaginationMetaDTO",
     "VALID_MAPPING_TYPES",
     "VALID_CONSULTED_STATES",
+    # P3-01 persistence (SQLite, append-only history, tenant isolation)
+    "ThreatIntelRepository",
+    "SQLiteThreatIntelRepository",
+    "repository_from_url",
+    "StoredEntityRecord",
+    "StoredObservation",
+    "EntityHistoryRecord",
+    "ConflictRecord",
+    "AuditRecord",
+    "EntityPage",
+    "PersistenceError",
+    "AppendOnlyViolationError",
+    "TenantIsolationError",
+    "SCHEMA_SQL",
+    "APPEND_ONLY_TABLES",
+    # P3-02 API integration surface (contract-only, NOT mounted)
+    "ThreatIntelApiSurface",
+    "RouteSpec",
+    "ROUTES",
+    "API_PREFIX",
+    "API_CONTRACT_VERSION",
+    "RequestContext",
+    "ApiResponse",
+    "HttpMethod",
+    "ApiValidationError",
+    "ApiNotFoundError",
+    "ApiUnauthorizedError",
+    "ApiSurfaceNotMountedError",
+    "build_fastapi_router",
+    # P3-03 background collection architecture (no worker process runs)
+    "CollectionWorker",
+    "CollectionJob",
+    "JobState",
+    "JobEvent",
+    "WorkerMetrics",
+    "RetryPolicy",
+    "CircuitBreakerConfig",
+    "SourceCircuitBreaker",
+    "TERMINAL_STATES",
+    "CollectionWorkerError",
+    "UnknownJobError",
+    "JobNotLeasableError",
+    "LeaseConflictError",
+    "derive_idempotency_key",
+    # Source reliability, freshness & evidence-gated verification
+    "SourceReliabilityService",
+    "SourceReliabilityRecord",
+    "SourceOutcome",
+    "FreshnessPolicy",
+    "FreshnessState",
+    "SourceAvailability",
+    "ReliabilityTier",
+    "VerificationEvidence",
+    "VerificationPromotionError",
+    "SourceReliabilityError",
+    "VERIFICATION_RANK",
+    # Cross-agent contract registry (proposed vs owner-accepted, pinned provenance)
+    "ContractRegistry",
+    "ContractDependency",
+    "ContractStatus",
+    "ContractRegistryError",
+    "ContractNotAcceptedError",
+    "OwnerAcceptanceError",
+    "default_registry",
 ]

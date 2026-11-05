@@ -4,9 +4,10 @@
 - Repository: oldman-088/cicc
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft)
-- Status: P1-04 OSINT Intelligence Sources Integration COMPLETED + P1-01/P1-02/P1-03 Regression Hardening + Cross-Agent Integration Contracts
-- Total Tests: 205/205 passed (0 warnings)
+- Status: P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (fixture-tested, none mounted)
+- Total Tests: 534/534 passed (0 warnings)
 - Base: main @ ca8f82c
+- PR: #6 (OPEN, base main)
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70 (933b29f and 805cd2b were orphaned by two force-push resets to ca8f82c)
 - Agent 2 availability: UNAVAILABLE, explicitly confirmed by the user (`unavailable_proceed_with_recovery`)
 
@@ -96,33 +97,84 @@ This backlog organizes the remaining capabilities identified under Full Autonomo
 - [x] Full technical autonomy within Threat Intelligence domain
 - [x] Security/Data Integrity maintained (no fabrication, no synthetic verified, no credentials, no disabling security, no unverified external, no destructive shared, no direct main)
 
+## Stage 2 (Agent 6) — COMPLETED CAPABILITIES
+
+- [x] **P3-01: Threat Intelligence Persistence** (`apps/threat_intelligence/persistence.py`, 29 tests)
+  - Standard-library `sqlite3`; **no new third-party dependency** (SQLAlchemy not imported)
+  - Append-only `ti_observations` / `ti_entity_history` / `ti_conflicts` / `ti_audit_log` enforced by
+    SQL `BEFORE UPDATE`/`BEFORE DELETE` triggers raising `ABORT`
+  - Construction-time trigger self-check inside a rolled-back transaction; fails fast if a SQLite
+    build ignores the triggers
+  - Tenant isolation in every primary key and `WHERE` clause; parameterized SQL only
+  - **Status: IMPLEMENTED, TESTED. Not mounted; no migration; no ORM session wiring.**
+
+- [x] **P3-02: HTTP/API Integration Surface** (`apps/threat_intelligence/api_surface.py`, 36 tests)
+  - 7 routes under `/api/v1/threat-intelligence`, contract `1.0.0-proposed`
+  - Transport-agnostic dispatcher; FastAPI referenced only inside a guarded import
+  - Scope-gated (`401`), tenant-gated (`403`), validation-mapped (`422` with field), `404` split
+    between `not_found` and `route_not_found`
+  - **Status: IMPLEMENTED, TESTED. NOT MOUNTED. No server bound, no ASGI app exported, FastAPI not installed here.**
+
+- [x] **P3-03: Background Collection & Synchronization Architecture** (`apps/threat_intelligence/collection_workers.py`, 40 tests)
+  - Bounded exponential backoff + jitter, 8 job states, 4 terminal states
+  - Lease-based claiming with conflict detection and expired-lease reclaim
+  - Per-source circuit breaker (closed/open/half_open) with bounded probes
+  - Idempotency index, `WorkerMetrics` counters, bounded structured event log
+  - **Status: IMPLEMENTED, TESTED. NO WORKER PROCESS IS RUNNING — `run_pending` is caller-invoked and synchronous.**
+
+- [x] **Source Reliability, Freshness & Verification State** (`apps/threat_intelligence/source_reliability.py`, 47 tests)
+  - Windowed reliability scoring with failure-streak penalty; unscored sources are never silently trusted
+  - Freshness driven by last **successful** collection; future-dated stamps classify as `unknown`
+  - **Evidence-gated verification promotion**: no code path sets `live_verified` from a flag
+
+- [x] **Cross-Agent Contract Registry** (`apps/threat_intelligence/contract_registry.py`, 36 tests)
+  - 5 dependencies pinned to exact source commits; **5 proposed, 0 accepted, 0 load-bearing**
+  - `assert_load_bearing` raises while a contract is still a proposal
+
+- [x] **Static Integrity Checks** (`apps/threat_intelligence/tests/test_package_integrity.py`, 141 tests)
+  - Acyclic import graph, standalone imports, no networking client, no socket at import,
+    no thread/process at import, no secrets, `.gitignore` coverage, export completeness
+
+- [x] **PR #3 ↔ PR #6 Reconciliation** (`docs/PR3_PR6_RECONCILIATION.md`)
+  - 0 files only in PR #3, 37 only in PR #6, 12 shared (7 root docs are the only real conflicts)
+  - PR #6 is a functional superset of PR #3 for both shared modules; no PR #3 method or test removed
+
 ## Completion Status
 ✅ Phase 0: COMPLETED (41/41 tests passed, commit f8f2868)
 ✅ Extended Authorization: COMPLETED (57 new tests, 98/98 total passed, commit d639eee)
-✅ Completion & Handoff: COMPLETED (commit 933b29f)
-✅ Autonomous Engineering Authorization: IN PROGRESS (P1-01, P1-02, P1-03 completed; Agent 2 commits 805cd2b, f7d3939, 480fa3d, 1a46f70)
+✅ Completion & Handoff: COMPLETED (commit 933b29f, recovered by Agent 6)
+✅ Autonomous Engineering Authorization: IN PROGRESS (P1-01, P1-02, P1-03 completed by Agent 2)
 ✅ P1-01 / P1-02 / P1-03 Regression Hardening: COMPLETED by Agent 6 (+4 regression tests)
 ✅ P1-04 OSINT Intelligence Sources Integration: COMPLETED by Agent 6 (16 tests)
-✅ Cross-Agent Integration Contracts (Agent 1 / Agent 3 / Agent 4): IMPLEMENTED by Agent 6 (18 tests), NOT accepted
+✅ Cross-Agent Integration Contracts: IMPLEMENTED by Agent 6 (18 tests), NOT accepted
+✅ P3-01 Persistence: IMPLEMENTED by Agent 6 (29 tests), NOT mounted
+✅ P3-02 API surface: IMPLEMENTED by Agent 6 (36 tests), NOT mounted
+✅ P3-03 Collection workers: IMPLEMENTED by Agent 6 (40 tests), NO worker running
+✅ Source reliability + evidence-gated verification: IMPLEMENTED by Agent 6 (47 tests)
+✅ Contract registry: IMPLEMENTED by Agent 6 (36 tests), all PROPOSED
+✅ Static integrity checks: ADDED by Agent 6 (141 tests)
 ✅ Orphaned commit recovery: COMPLETED (933b29f, 805cd2b recovered alongside 1a46f70)
-✅ Documentation: MAINTAINED (all root files updated + docs/THREAT_INTELLIGENCE_INTEGRATION_CONTRACTS.md added)
-✅ Branch: ACTIVE (arena/28e50255-cicc)
+✅ Reconciliation: DOCUMENTED (docs/PR3_PR6_RECONCILIATION.md)
+✅ Documentation: MAINTAINED (7 root files + 2 docs/ files)
+✅ Branch: ACTIVE (arena/28e50255-cicc), PR #6 OPEN
 ✅ Handoff to Agent 2: READY (see DEVELOPMENT_LOG.md "Agent 6 Handover")
 
 ## Remaining Work (next priorities)
 - [ ] P2-01: Cross-Entity Relationship Analysis Engine
-- [ ] P2-02: Confidence Scoring and Reliability Framework
+- [ ] P2-02: Confidence Scoring and Reliability Framework (foundation exists in `source_reliability.py`)
 - [ ] P2-03: Temporal Intelligence Analysis
-- [ ] P2-04: Conflicting Intelligence Resolution
-- [ ] P3-01 through P3-04: PostgreSQL/SQLAlchemy, FastAPI, background workflows, observability
+- [ ] P2-04: Conflicting Intelligence Resolution (conflict records exist in OSINT + persistence)
+- [ ] P3-04: Observability and Performance (`WorkerMetrics` + `health_snapshot` exist; needs a dashboard consumer)
 - [ ] P4-01 through P4-04: Vulnerability Intelligence, Command Theater, System Health, Investigation interfaces
 - [ ] P5-01 through P5-03: security validation, expanded coverage, documentation
-- [ ] LIVE-01: live-source verification once outbound egress to CISA / MITRE / vendor hosts is authorised
+- [ ] **MOUNT-01**: host mounting of the API surface and persistence layer once the owner approves a migration
+- [ ] **LIVE-01**: live-source verification once outbound egress to CISA / MITRE / vendor hosts is authorised
 
 # Last Updated
-2026-11-05 - P1-04 OSINT Integration completed by Agent 6; P1-01/P1-02/P1-03 hardened; cross-agent integration contracts implemented
+2026-11-05 - Stage 2: persistence, API surface, collection workers, source reliability, contract registry and static checks added by Agent 6
 Agent: Arena.ai Agent Mode - Agent 6 (Full Threat Intelligence Backup Engineer)
 Branch: arena/28e50255-cicc
+PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 205/205 passed (0 warnings)
+Total Tests: 534/534 passed (0 warnings)

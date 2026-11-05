@@ -4,10 +4,36 @@
 - Repository: oldman-088/cicc
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft - untouched)
-- Status: P1-04 OSINT Intelligence Sources Integration COMPLETED + P1-01/P1-02/P1-03 Regression Hardening + Cross-Agent Integration Contracts
-- Total Tests: 205/205 passed (0 warnings)
+- Status: Stage 2 — P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (fixture-tested, none mounted)
+- Total Tests: 534/534 passed (0 warnings)
 - Base: main @ ca8f82c
+- PR: #6 (OPEN, base main)
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
+
+## What Is Actually Ready To Integrate (Stage 2)
+
+| Layer | Module | Status | What a host must still do |
+|---|---|---|---|
+| Persistence | `persistence.py` (29 tests) | IMPLEMENTED, TESTED | Approve a migration path if this becomes the shared store; today it is a self-contained SQLite store |
+| API | `api_surface.py` (36 tests) | IMPLEMENTED, TESTED, **NOT MOUNTED** | Install FastAPI, call `build_fastapi_router(surface)`, inject `RequestContext` from the authenticated principal, call `mark_mounted("host-name")` |
+| Workers | `collection_workers.py` (40 tests) | IMPLEMENTED, TESTED, **NOTHING RUNNING** | Provide a scheduler that calls `run_pending(handler, now=...)`; supply the actual fetch callables |
+| Reliability | `source_reliability.py` (47 tests) | IMPLEMENTED, TESTED | Feed real `record_outcome` data; promotions require real evidence |
+| Contracts | `contract_registry.py` (36 tests) | IMPLEMENTED, TESTED | Obtain owner acceptance for each dependency; 5 proposed / 0 accepted today |
+
+**No layer above is live, mounted or running.** Each row's right-hand column is
+the work that remains, and each is asserted by test rather than merely claimed.
+
+## Storage-Port Boundary (Agent 3 alignment)
+
+Agent 3's `docs/vulnerability-intelligence/INTEGRATION_CONTRACTS.md` at commit
+`84fca769` states the rule explicitly: *"this subsystem defines the storage
+port; the host implements it"* and *"a SQL adapter needs an approved migration
+and lives in the host"*.
+
+`persistence.py` therefore does **not** claim to be that adapter. It is a
+Threat Intelligence-local SQLite store with append-only history, offered so the
+domain has a working, tested persistence shape to design against. Adopting it as
+the platform store is an owner decision requiring an approved migration.
 
 ## Cross-Agent Integration Readiness (Agent 6 - IMPLEMENTED, NOT ACCEPTED)
 
@@ -199,11 +225,15 @@ This report documents the technical preparation for production integration of th
    `apps/threat_intelligence/integration_contracts.py`. Until then nothing there is load-bearing.
 2. **Live egress authorisation.** No live-source verification is possible until outbound access to
    CISA, MITRE, and vendor hosts is granted. Today all verification is `fixture_tested`.
-3. **Branch reconciliation.** Agent 2's PR #3 and `arena/28e50255-cicc` overlap on the 11 recovered
-   modules, 11 recovered test files, and 7 root docs. Recommended order: land PR #3, then rebase
-   this branch onto it.
-4. **Persistence and HTTP layers.** Not implemented here. `models.py`, `main.py`, and migrations
-   were deliberately never touched.
+3. **Branch reconciliation.** See `docs/PR3_PR6_RECONCILIATION.md`. Corrected finding: PR #3's
+   `apps/` tree contains **only four files**; 0 files are exclusive to PR #3, 37 are exclusive to
+   PR #6, and 12 are shared (of which `README.md` is byte-identical). The only genuine conflicts
+   are the 7 root documentation files. Recommended order: land PR #3, then rebase this branch.
+4. **Persistence and HTTP layers are implemented but not mounted.** `persistence.py` and
+   `api_surface.py` exist and are tested; neither is wired into a host. `models.py`, `main.py`,
+   and migrations were deliberately never touched.
+5. **No worker process exists.** `collection_workers.py` provides the control plane; a host must
+   supply the scheduler that calls `run_pending`.
 
 # Completion Status
 ✅ Phase 0: COMPLETED (41/41 tests passed, commit f8f2868)
@@ -212,14 +242,22 @@ This report documents the technical preparation for production integration of th
 ✅ Autonomous Engineering Authorization: IN PROGRESS (P1-01/P1-02/P1-03 completed by Agent 2)
 ✅ P1-04 OSINT Intelligence Sources Integration: COMPLETED by Agent 6 (16 tests)
 ✅ Cross-Agent Integration Contracts: IMPLEMENTED by Agent 6 (18 tests), NOT accepted
-✅ Documentation: MAINTAINED (all root files updated + docs/THREAT_INTELLIGENCE_INTEGRATION_CONTRACTS.md)
-✅ Branch: ACTIVE (arena/28e50255-cicc)
+✅ P3-01 Persistence: IMPLEMENTED by Agent 6 (29 tests), NOT mounted
+✅ P3-02 API surface: IMPLEMENTED by Agent 6 (36 tests), NOT mounted
+✅ P3-03 Collection workers: IMPLEMENTED by Agent 6 (40 tests), NO worker running
+✅ Source reliability + evidence-gated verification: IMPLEMENTED by Agent 6 (47 tests)
+✅ Contract registry: IMPLEMENTED by Agent 6 (36 tests), 5 proposed / 0 accepted
+✅ Static integrity checks: ADDED by Agent 6 (141 tests)
+✅ PR #3 <-> PR #6 reconciliation: DOCUMENTED (docs/PR3_PR6_RECONCILIATION.md)
+✅ Documentation: MAINTAINED (7 root files + 2 docs/ files)
+✅ Branch: ACTIVE (arena/28e50255-cicc), PR #6 OPEN
 ✅ Handoff to Agent 2: READY (see DEVELOPMENT_LOG.md)
 
 # Last Updated
-2026-11-05 - P1-04 OSINT Integration completed by Agent 6; P1-01/P1-02/P1-03 hardened; cross-agent integration contracts implemented
+2026-11-05 - Stage 2: persistence, API surface, collection workers, source reliability, contract registry and static checks added by Agent 6
 Agent: Arena.ai Agent Mode - Agent 6 (Full Threat Intelligence Backup Engineer)
 Branch: arena/28e50255-cicc
+PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 205/205 passed (0 warnings)
+Total Tests: 534/534 passed (0 warnings)

@@ -6,7 +6,7 @@
   "acting_agent": "Agent 6 - Full Threat Intelligence Backup Engineer",
   "primary_owner_agent": "Agent 2 - Threat Intelligence Lead",
   "agent2_availability_confirmed_by_user": "unavailable_proceed_with_recovery",
-  "current_phase": "P1-04 OSINT Intelligence Sources Integration COMPLETED + P1-01/P1-02/P1-03 Regression Hardening + Cross-Agent Integration Contracts",
+  "current_phase": "P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (all fixture-tested, none mounted)",
   "phase_0_status": "completed",
   "extended_authorization_status": "completed",
   "autonomous_engineering_status": "in_progress",
@@ -14,9 +14,14 @@
   "recovered_from_commits": ["933b29f", "805cd2b", "1a46f70"],
   "orphaned_commits_recovered": ["933b29f", "805cd2b"],
   "pull_request": {
+    "number": 6,
+    "url": "https://github.com/oldman-088/cicc/pull/6",
+    "state": "open",
+    "is_draft": false,
     "base": "main",
     "head": "arena/28e50255-cicc",
-    "owner_agent": "Agent 6"
+    "owner_agent": "Agent 6",
+    "merged": false
   },
   "agent2_pull_request": {
     "number": 3,
@@ -24,17 +29,18 @@
     "state": "open_draft",
     "base": "main",
     "head": "arena/93315d2c-cicc",
-    "head_commit_at_recovery": "1a46f704bc09207d2755fbfd5a7e8ae48b646e1b"
+    "head_commit_at_recovery": "1a46f704bc09207d2755fbfd5a7e8ae48b646e1b",
+    "modified_by_agent6": false
   },
   "implementation_summary": {
     "core_modules": 5,
     "extended_layers": 3,
     "autonomous_extensions": 3,
-    "agent6_extensions": 2,
-    "total_modules": 13,
-    "total_test_files": 13,
-    "total_tests": 205,
-    "tests_passed": 205,
+    "agent6_extensions": 7,
+    "total_submodules": 18,
+    "total_test_files": 19,
+    "total_tests": 534,
+    "tests_passed": 534,
     "tests_failed": 0,
     "warnings": 0,
     "pydantic_v2_compatible": true,
@@ -42,6 +48,7 @@
     "pytest_version": "9.2.0",
     "experimental_labeling": "EXPERIMENTAL_DEMO_DATA_ONLY",
     "provenance_enabled": true,
+    "provenance_storage": "append_only_sql_triggers",
     "relationship_layer": "implemented",
     "enrichment_layer": "implemented",
     "collection_normalization_layer": "implemented",
@@ -49,8 +56,13 @@
     "cisa_kev_integration_connector": "implemented_and_hardened",
     "vendor_security_advisories_framework": "implemented_with_six_parsers",
     "osint_stix_taxii_integration": "implemented",
-    "cross_agent_integration_contracts": "implemented",
-    "network_io_performed": "none"
+    "persistence_layer": "implemented_sqlite_append_only",
+    "api_surface": "contract_only_not_mounted",
+    "collection_workers": "implemented_no_worker_process_running",
+    "source_reliability": "implemented_evidence_gated_verification",
+    "cross_agent_contract_registry": "implemented_all_proposed_none_accepted",
+    "network_io_performed": "none",
+    "third_party_dependencies_added": "none"
   },
   "modules": [
     "threat_actors",
@@ -71,24 +83,27 @@
   ],
   "agent6_extensions": [
     "osint_sources",
-    "integration_contracts"
+    "integration_contracts",
+    "persistence",
+    "api_surface",
+    "collection_workers",
+    "source_reliability",
+    "contract_registry"
   ],
   "package_exports": {
     "file": "apps/threat_intelligence/__init__.py",
-    "version": "1.1.0",
-    "exported_symbols": 69
+    "version": "1.2.0",
+    "exported_symbols": 128,
+    "import_graph": "acyclic_dag",
+    "cold_import_ms_measured": 135,
+    "cold_import_asserted_under_ms": 2000
   },
   "test_results": {
-    "phase_0_tests": 41,
-    "extended_authorization_tests": 57,
-    "autonomous_engineering_tests": 64,
-    "agent6_regression_tests": 4,
-    "agent6_osint_tests": 16,
-    "agent6_integration_contract_tests": 18,
-    "total_tests": 205,
-    "passed": 205,
+    "total_tests": 534,
+    "passed": 534,
     "failed": 0,
     "warnings": 0,
+    "command": "PYTHONPATH=/home/user/cicc .venv/bin/pytest apps/threat_intelligence/tests -q",
     "per_file": {
       "test_threat_actors.py": 8,
       "test_malware.py": 8,
@@ -102,58 +117,154 @@
       "test_cisa_kev.py": 21,
       "test_vendor_advisories.py": 26,
       "test_osint_sources.py": 16,
-      "test_integration_contracts.py": 18
+      "test_integration_contracts.py": 18,
+      "test_persistence.py": 29,
+      "test_api_surface.py": 36,
+      "test_collection_workers.py": 40,
+      "test_source_reliability.py": 47,
+      "test_contract_registry.py": 36,
+      "test_package_integrity.py": 141
     }
   },
-  "p1_04_osint_integration": {
-    "status": "completed",
-    "module": "apps/threat_intelligence/osint_sources.py",
-    "tests": "apps/threat_intelligence/tests/test_osint_sources.py",
-    "test_count": 16,
-    "stix_2_1_support": ["stix-bundle validation", "threat-actor", "indicator", "campaign", "malware", "infrastructure", "relationship", "identity"],
-    "taxii_2_1_support": ["collection model", "manifest entry model", "envelope ingestion", "sync state tracking"],
-    "indicators_supported": ["ipv4", "ipv6", "domain", "url", "file_sha256", "email"],
-    "defanging_supported": ["hxxp/hxxps", "[.]", "(.)", "[:]"],
-    "deduplication": "canonical indicator value + entity id registry",
-    "conflict_handling": "append-only OSINTConflictRecordModel with kept/discarded values and resolution policy",
-    "confidence_scoring": "base confidence from raw observations + 0.05 per additional distinct corroborating source (same-source re-fetch cannot inflate confidence)",
-    "provenance": "append-only OSINTObservationModel history; sources is the deduplicated set",
-    "connectors": ["urlhaus", "malwarebazaar"],
-    "resilience": ["per-source failure tracking", "circuit breaker with reset", "payload size cap (default 1 MiB)"],
-    "malicious_input_protection": ["executable-injection regex guard", "payload byte cap", "oversized payload rejection"],
-    "verification_mode": "fixture_tested",
-    "live_source_verified": false
+  "p3_01_persistence": {
+    "status": "implemented_not_mounted",
+    "module": "apps/threat_intelligence/persistence.py",
+    "tests": 29,
+    "backend": "python stdlib sqlite3 (no SQLAlchemy, no new third-party dependency)",
+    "tables": ["ti_entities", "ti_observations", "ti_entity_history", "ti_conflicts", "ti_audit_log"],
+    "append_only_tables": ["ti_observations", "ti_entity_history", "ti_conflicts", "ti_audit_log"],
+    "append_only_enforcement": "SQL BEFORE UPDATE/DELETE triggers raising ABORT; verified at construction time by a transactional probe that fails fast if a SQLite build ignores triggers",
+    "tenant_isolation": "tenant_id is part of every primary key and every WHERE clause; empty tenant raises TenantIsolationError",
+    "sql_safety": "all statements parameterized; identifier helper rejects anything outside ^[A-Za-z_][A-Za-z0-9_]*$; injection payloads verified inert",
+    "pagination": "opaque integer-offset cursors, malformed cursor raises PersistenceError",
+    "url_schemes_supported": ["sqlite://:memory:", "sqlite:///<absolute path>"],
+    "url_schemes_rejected": ["postgresql://", "sqlite://", "sqlite:///relative/path.db"],
+    "sqlalchemy_adapter": "not implemented - documented as a host-side contract only"
   },
-  "cross_agent_integration_contracts": {
-    "status": "implemented_not_accepted",
-    "module": "apps/threat_intelligence/integration_contracts.py",
-    "tests": "apps/threat_intelligence/tests/test_integration_contracts.py",
-    "test_count": 18,
-    "documentation": "docs/THREAT_INTELLIGENCE_INTEGRATION_CONTRACTS.md",
-    "agent1_coordination_contract_v1_0": {
-      "models": ["Agent1RegistrationPayload", "Agent1HeartbeatPayload", "Agent1OpsWorkerHeartbeatPayload", "Agent1TaskEnqueuePayload"],
-      "identity_honesty": "registers agent-2-threat-intel with meta.acting_agent=agent-6-backup and meta.primary_owner=agent-2",
-      "issue5_heartbeat_cadence": "interval_seconds >= 30, stall_threshold_seconds default 120",
-      "task_id_guard": "path-safe [A-Za-z0-9_.:-]; slashes rejected",
-      "source": "origin/arena/961971ed-cicc:docs/INTEGRATION_CONTRACTS.md",
-      "accepted": false
+  "p3_02_api_surface": {
+    "status": "contract_only_not_mounted",
+    "module": "apps/threat_intelligence/api_surface.py",
+    "tests": 36,
+    "api_prefix": "/api/v1/threat-intelligence",
+    "contract_version": "1.0.0-proposed",
+    "route_count": 7,
+    "framework": "transport-agnostic dispatcher; FastAPI referenced only inside a guarded import in build_fastapi_router",
+    "fastapi_installed_in_this_environment": false,
+    "fastapi_absent_behaviour": "build_fastapi_router raises ApiSurfaceNotMountedError (tested)",
+    "mount_status_default": "not_mounted_pending_owner_approval",
+    "mount_status_requires": "explicit mark_mounted(mounted_by=...) call with a non-blank host identity",
+    "authorization": "declares required scope per route; 401 when scope missing; never derives tenant from request data",
+    "tenant_resolution": "403 tenant_resolution_required when tenant unresolved (never 500)",
+    "error_mapping": "401 unauthorized / 403 tenant_resolution_required / 404 not_found / 404 route_not_found / 422 validation_error with field / 400 persistence_error / 500 internal_error without leaking detail",
+    "server_bound": false,
+    "asgi_app_exported": false
+  },
+  "p3_03_collection_workers": {
+    "status": "implemented_no_worker_process_running",
+    "module": "apps/threat_intelligence/collection_workers.py",
+    "tests": 40,
+    "execution_model": "synchronous, caller-invoked run_pending; no thread, process, asyncio loop or scheduler is started",
+    "retries": "bounded exponential backoff with jitter; max_attempts default 5, capped 1..100; delay capped at max_delay_seconds",
+    "job_states": ["pending", "leased", "running", "succeeded", "retry_scheduled", "failed", "abandoned", "expired"],
+    "terminal_states": ["succeeded", "failed", "abandoned", "expired"],
+    "leases": "lease_seconds default 300; expired leases reclaimed; LeaseConflictError on concurrent claim by another owner",
+    "circuit_breaker": "per-source closed/open/half_open with failure_threshold, cooldown_seconds and bounded half-open probes",
+    "idempotency": "per-(tenant, idempotency_key) index suppresses duplicates and counts them; stable SHA-256 derived key insensitive to payload key order",
+    "observability": "WorkerMetrics counters (global and per source) plus a bounded structured JobEvent log",
+    "error_detail_handling": "exception text truncated to 500 chars and newlines stripped before storage",
+    "time_handling": "fully injected; no test sleeps",
+    "network_io": "none"
+  },
+  "source_reliability": {
+    "status": "implemented",
+    "module": "apps/threat_intelligence/source_reliability.py",
+    "tests": 47,
+    "reliability_scoring": "success ratio over a bounded sliding window (default 50) blended with a 0.5 failure-streak penalty",
+    "unscored_sources": "score is None and tier is UNSCORED - never a fabricated default; confidence_adjustment returns applied=false",
+    "tiers": ["tier1_authoritative >=0.90", "tier2_reliable >=0.70", "tier3_unproven >=0.40", "tier4_unreliable <0.40", "unscored"],
+    "freshness_states": ["fresh", "aging", "stale", "expired", "unknown"],
+    "freshness_reference": "last successful collection, not last attempt; future-dated timestamps classify as unknown not fresh",
+    "verification_modes": ["fixture_tested", "oracle_verified", "live_verified"],
+    "verification_promotion": "evidence-gated; one rank at a time; requires specific observation_ref and attributable performed_by; placeholder values rejected",
+    "verification_demotion": "always allowed without evidence (conservative direction); evidence history retained",
+    "hard_invariant": "no code path sets live_verified from a flag alone"
+  },
+  "contract_registry": {
+    "status": "implemented",
+    "module": "apps/threat_intelligence/contract_registry.py",
+    "tests": 36,
+    "documentation": "docs/THREAT_INTELLIGENCE_INTEGRATION_CONTRACTS.md section 0",
+    "total_dependencies": 5,
+    "proposed": 5,
+    "accepted": 0,
+    "load_bearing": 0,
+    "dependencies": [
+      {
+        "contract_id": "agent1-coordination-v1",
+        "owner": "Agent 1",
+        "version": "Contract v1.0 (M11-02), 25 endpoints",
+        "source_branch": "arena/961971ed-cicc",
+        "source_commit": "2c6af207a08955b9990ea9d89af8fd60fed3bc91",
+        "source_document": "docs/INTEGRATION_CONTRACTS.md",
+        "pull_request": "oldman-088/cicc#4",
+        "status": "proposed"
+      },
+      {
+        "contract_id": "agent1-ops-worker-heartbeat",
+        "owner": "Agent 1",
+        "version": "Issue #5 worker heartbeat",
+        "source_commit": "2c6af207a08955b9990ea9d89af8fd60fed3bc91",
+        "status": "proposed"
+      },
+      {
+        "contract_id": "agent3-vuln-intel-m1-m6",
+        "owner": "Agent 3",
+        "version": "verification 2026-11-05 @ 5e91ff6 (1160 tests)",
+        "source_branch": "arena/fa0df787-cicc",
+        "source_commit": "84fca769f78c1ebede13a22529719f0735cf1afc",
+        "source_document": "docs/vulnerability-intelligence/INTEGRATION_READINESS.md",
+        "pull_request": "oldman-088/cicc#1",
+        "status": "proposed",
+        "agent3_blocked_items": ["M1 requiredAction placement - owner decision required", "M2 no upstream advisory source in Agent 3"]
+      },
+      {
+        "contract_id": "agent3-storage-port",
+        "owner": "Agent 3",
+        "source_commit": "84fca769f78c1ebede13a22529719f0735cf1afc",
+        "source_document": "docs/vulnerability-intelligence/INTEGRATION_CONTRACTS.md",
+        "status": "proposed",
+        "note": "Agent 3 defines the storage port and the host implements the SQL adapter; our SQLite store is NOT offered as that adapter"
+      },
+      {
+        "contract_id": "agent2-threat-intel-ownership",
+        "owner": "Agent 2",
+        "source_commit": "1a46f704bc09207d2755fbfd5a7e8ae48b646e1b",
+        "pull_request": "oldman-088/cicc#3",
+        "status": "proposed"
+      }
+    ],
+    "enforcement": "assert_load_bearing raises ContractNotAcceptedError while proposed; load_bearing cannot be set at construction; record_owner_acceptance rejects placeholder actors and references"
+  },
+  "reconciliation": {
+    "documentation": "docs/PR3_PR6_RECONCILIATION.md",
+    "pr3_head": "1a46f704bc09207d2755fbfd5a7e8ae48b646e1b",
+    "pr6_head": "a221003601a09aa0130ac0b900e9d6273773876e",
+    "files_only_in_pr3": 0,
+    "files_only_in_pr6": 37,
+    "files_in_both": 12,
+    "genuine_conflict_candidates": "7 root documentation files only; README.md is byte-identical on both branches",
+    "pr3_apps_tree_file_count": 4,
+    "key_finding": "PR #3's apps/ tree contains only cisa_kev.py, vendor_advisories.py and their two test files; the 9 core/extended modules exist only in the orphaned commits recovered into PR #6",
+    "shared_module_relationship": "PR #6 is a functional superset of PR #3 for cisa_kev.py and vendor_advisories.py; zero PR #3 methods and zero PR #3 tests were removed",
+    "pr3_only_lines": {
+      "cisa_kev.py": 43,
+      "vendor_advisories.py": 68,
+      "tests": 0
     },
-    "agent3_vulnerability_intelligence_mismatches": {
-      "M1_kev_required_action": "KEVVulnerabilityCorrelationDTO.kev_required_action carries verbatim CISA requiredAction",
-      "M2_vendor_advisory_identifiers": "VendorAdvisoryLinkDTO list kept separate from CVE aliases; parsers for msrc/cisco/redhat/ubuntu/debian/ghsa",
-      "M3_mapping_type_rollup": "techniques filtered to exploitation_technique; techniques_by_mapping_type carries the full CTID split",
-      "M4_sub_technique_identity": "technique_id validated ^T\\d{4}(\\.\\d{3})?$; T1059.001 never truncated to T1059",
-      "M5_provenance_granularity": "ProvenanceSummaryDTO exposes sources (deduplicated), observations_count, corroboration_count with observations_count >= len(sources)",
-      "M6_consulted_tri_state": "VALID_CONSULTED_STATES = {consulted_mapped, consulted_unmapped, not_consulted}; KEV kev field is None/False/True",
-      "source": "origin/arena/fa0df787-cicc:docs/vulnerability-intelligence/INTEGRATION_READINESS.md section 3.2",
-      "accepted": false
-    },
-    "agent4_frontend_dto_envelopes": {
-      "models": ["ThreatIntelListEnvelope", "ThreatIntelDetailEnvelope", "ThreatIntelErrorEnvelope", "FreshnessMetaDTO", "PaginationMetaDTO"],
-      "honesty_fields": ["verification_mode (fixture_tested default)", "host_mount_status (not_mounted_pending_owner_approval default)"],
-      "accepted": false
-    },
-    "bridge": "ThreatIntelligenceIntegrationBridge"
+    "pr3_only_lines_classification": "stub bodies (pass / comment-only) replaced by real logic, and narrow field reads widened to accept a superset of inputs; no capability was dropped",
+    "signature_change": "implement_timeouts_retries return type None (PR #3) -> Dict[str, Any] (PR #6); no caller exists in either branch",
+    "confidence_defect_fixes_preserved": 2,
+    "merge_recommended_order": "land PR #3 first, then rebase arena/28e50255-cicc onto main"
   },
   "documentation_files": [
     "PROJECT_STATE.json",
@@ -163,26 +274,8 @@
     "INTEGRATION_PREPARATION_REPORT.md",
     "BACKLOG.md",
     "SECURITY_REVIEW.md",
-    "docs/THREAT_INTELLIGENCE_INTEGRATION_CONTRACTS.md"
-  ],
-  "integration_contracts": [
-    "PostgreSQL/SQLAlchemy",
-    "FastAPI routers",
-    "Authentication/Authorization",
-    "Tenant Isolation",
-    "Audit Logging",
-    "Investigation Workflows",
-    "Intelligence Collection",
-    "Vulnerability Intelligence",
-    "Command Theater",
-    "System Health/Operations Dashboard",
-    "MITRE Ingestion Pipeline contracts",
-    "CISA KEV Integration contracts",
-    "Vendor Security Advisories Integration contracts",
-    "OSINT STIX 2.1 / TAXII 2.1 contracts",
-    "Agent 1 Coordination Contract v1.0 (proposed, not accepted)",
-    "Agent 3 Vulnerability Intelligence M1-M6 (proposed, not accepted)",
-    "Agent 4 Frontend DTO envelopes (proposed, not accepted)"
+    "docs/THREAT_INTELLIGENCE_INTEGRATION_CONTRACTS.md",
+    "docs/PR3_PR6_RECONCILIATION.md"
   ],
   "coordination_interfaces": [
     "Command Theater",
@@ -199,12 +292,14 @@
     "payload_size_cap": "1 MiB default (configurable)",
     "secure_logging": "enabled",
     "credential_protection": "enabled",
-    "tenant_isolation": "enabled",
-    "authorization_boundaries": "enforced",
-    "auditability": "enabled",
-    "provenance_preservation": "append_only",
+    "secrets_in_source": "none; static check asserts no hardcoded credential literals",
+    "tenant_isolation": "enabled and tested at persistence, API and reliability layers",
+    "authorization_boundaries": "declared per route; enforced in the dispatcher",
+    "auditability": "append_only_audit_log",
+    "provenance_preservation": "append_only_sql_triggers",
     "safe_ingestion_recovery": "enabled",
     "duplicate_conflict_handling": "explicit",
+    "static_checks": "test_package_integrity.py - 141 checks: acyclic import graph, standalone imports, no networking client, no socket at import, no thread/process at import, no secrets, .gitignore coverage, export completeness, fixture_tested defaults",
     "no_fabrication": true,
     "no_synthetic_verified": true,
     "no_credentials": true,
@@ -220,30 +315,40 @@
     "oracle_verified": false,
     "live_verified": false,
     "outbound_network_requests_made": false,
-    "statement": "No code in apps/threat_intelligence/ performs network I/O. Every ingestion path is exercised against in-repo fixtures only."
+    "api_mounted": false,
+    "worker_running": false,
+    "source_live": false,
+    "statement": "No code in apps/threat_intelligence/ performs network I/O, mounts an HTTP route, or starts a background process. Every ingestion path is exercised against in-repo fixtures only."
   },
-  "completion_criteria": {
-    "functionality_completed": true,
-    "architecture_summary": "documented",
-    "files_created_modified": true,
-    "test_results_evidence": "205/205 passed",
-    "security_integrity_review": "passed",
-    "remaining_limitations": "no live-source verification; cross-agent contracts implemented but not accepted; no HTTP/persistence layer",
-    "integration_contracts": "defined_but_not_accepted",
-    "recovered_commit_shas": ["933b29f", "805cd2b", "1a46f70"],
-    "branch_name": "arena/28e50255-cicc",
-    "handoff_ready": true,
-    "agent2_priority_respected": true
+  "master_prompt_alignment": {
+    "file_path": "README.md",
+    "title": "ULTIMATE MASTER PROMPT - v1.0",
+    "commit_reviewed": "ca8f82c0500637e22851d7128cddf99081ef3c08",
+    "lines": 1384,
+    "bytes": 32851,
+    "modified": false,
+    "verified_by": "git diff --exit-code ca8f82c HEAD -- README.md",
+    "domain_b_threat_intelligence_items": 15,
+    "domain_b_items_with_implementation": 13,
+    "domain_b_items_without_implementation": ["24 Threat Intelligence Reports", "12 Threat Group Profiles (partial - MITRE groups ingested but no dedicated profile module)"],
+    "threat_intelligence_domain_completion_estimate_percent": 62,
+    "overall_cicc_product_completion_estimate_percent": 12,
+    "estimation_basis": "Threat Intelligence: 13 of 15 Domain B modules implemented and tested, plus persistence/API/worker/reliability layers; held below 100% because no live source connector is operational, no host mounting exists and Domain B item 24 is absent. Overall product: 7 domains (A-G) plus 20 enterprise extension modules (5.1-5.20), frontend, 3D experience, AI engine and unified knowledge graph are outside this agent's scope and largely unimplemented in this repository."
   },
+  "blockers_and_owner_decisions": [
+    "BLOCKED: no outbound egress to CISA / MITRE / vendor hosts in this environment, so no live-source verification is possible",
+    "DECISION: whether integration_contracts.py and contract_registry.py land independently or fold into PR #3",
+    "DECISION: implement_timeouts_retries return-type widening (None -> Dict) needs Agent 2 sign-off",
+    "DECISION: Agent 3 M1 kev_required_action placement (KEV-layer-only vs shared record) is BLOCKED pending owner decision",
+    "DECISION: Agent 1 must confirm or amend the coordination payload shapes before any of it is load-bearing",
+    "DECISION: whether __init__.py eager imports are acceptable (verified acyclic, 128 exports, ~135 ms cold import)"
+  ],
   "next_priorities": [
     "P2-01: Cross-Entity Relationship Analysis Engine",
-    "P2-02: Confidence Scoring and Reliability Framework",
+    "P2-02: Confidence Scoring and Reliability Framework (foundation now exists in source_reliability.py)",
     "P2-03: Temporal Intelligence Analysis",
-    "P2-04: Conflicting Intelligence Resolution",
-    "P3-01: PostgreSQL/SQLAlchemy Integration Contracts",
-    "P3-02: FastAPI Integration Interfaces",
-    "P3-03: Background Collection Workflows",
-    "P3-04: Observability and Performance",
+    "P2-04: Conflicting Intelligence Resolution (OSINT + persistence conflict records exist)",
+    "P3-04: Observability and Performance (WorkerMetrics and health_snapshot exist; needs a dashboard consumer)",
     "P4-01: Vulnerability Intelligence Interface (Agent 3 coordination)",
     "P4-02: Command Theater Interface",
     "P4-03: System Health/Operations Dashboard Interface",
@@ -251,7 +356,8 @@
     "P5-01: Advanced Security Validation Enhancements",
     "P5-02: Expanded Test Coverage",
     "P5-03: Documentation Maintenance",
-    "LIVE-01: Live-source verification of CISA KEV / MITRE ATT&CK / vendor advisories once outbound egress to those hosts is authorised"
+    "LIVE-01: Live-source verification once outbound egress to CISA / MITRE / vendor hosts is authorised",
+    "MOUNT-01: Host mounting of the API surface and persistence layer once the owner approves a migration"
   ],
   "updated_at": "2026-11-05T00:00:00Z",
   "agent_status": "agent6_backup_active_agent2_unavailable_per_user_confirmation"

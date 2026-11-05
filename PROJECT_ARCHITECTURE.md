@@ -4,30 +4,110 @@
 - Repository: oldman-088/cicc
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft - untouched)
-- Status: P1-04 OSINT Intelligence Sources Integration COMPLETED + P1-01/P1-02/P1-03 Regression Hardening + Cross-Agent Integration Contracts
-- Total Tests: 205/205 passed (0 warnings)
+- Status: Stage 2 — P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (fixture-tested, none mounted)
+- Total Tests: 534/534 passed (0 warnings)
 - Base: main @ ca8f82c
+- PR: #6 (OPEN, base main)
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 
-## Module Map (as of Agent 6 continuation)
+## Module Map (as of Agent 6 Stage 2)
 ```
 apps/threat_intelligence/
-├── __init__.py               # v1.1.0, 69 exported symbols (Agent 6)
+├── __init__.py               # v1.2.0, 128 exported symbols (Agent 6)
+│
+│  --- P1-00 core entity modules ---
 ├── threat_actors.py          # ThreatActorModel + ThreatActorService
 ├── malware.py                # MalwareModel + MalwareService
 ├── campaigns.py              # CampaignModel + CampaignService
 ├── ttps.py                   # TTPModel + TTPService
 ├── mitre_mapping.py          # MITREMappingModel + MITREMappingService
+│
+│  --- extended layers ---
 ├── relationships.py          # RelationshipModel + RelationshipService
 ├── enrichment.py             # IntelligenceSourceModel / IntelligenceEnrichmentModel + Service
 ├── collection.py             # CollectionTaskModel / NormalizationRecordModel + CollectionService
+│
+│  --- P1-01 .. P1-04 ingestion ---
 ├── mitre_ingestion.py        # P1-01 MITREIngestionService (+ STIX 2.1 ATT&CK bundle)
 ├── cisa_kev.py               # P1-02 CISAKEVIngestionService (+ catalog feed, get_by_cve)
 ├── vendor_advisories.py      # P1-03 VendorSecurityAdvisoryIngestionService (6 parsers)
 ├── osint_sources.py          # P1-04 OSINTIngestionService (STIX 2.1 / TAXII 2.1) - Agent 6
-├── integration_contracts.py  # Cross-agent contracts (Agent 1 / 3 / 4) - Agent 6
-└── tests/                    # 13 test files, 205 tests
+│
+│  --- P3-01 .. P3-03 platform layers (Agent 6) ---
+├── persistence.py            # P3-01 SQLite repository, append-only triggers, tenant isolation
+├── api_surface.py            # P3-02 typed route registry + dispatcher (NOT mounted)
+├── collection_workers.py     # P3-03 job lifecycle, retries, leases, circuit breaker (no worker runs)
+├── source_reliability.py     # reliability / freshness / evidence-gated verification
+│
+│  --- cross-agent coordination (Agent 6) ---
+├── integration_contracts.py  # Agent 1 / Agent 3 / Agent 4 payload & DTO models
+├── contract_registry.py      # proposed-vs-accepted registry with pinned commit provenance
+│
+└── tests/                    # 19 test files, 534 tests
 ```
+
+### Layer dependency direction (verified acyclic by `test_package_integrity.py`)
+```
+api_surface ──> integration_contracts ──> cisa_kev
+     │                              └──> vendor_advisories
+     └────────> persistence
+
+collection_workers, source_reliability, osint_sources, mitre_ingestion,
+relationships, enrichment, collection, campaigns, malware, ttps,
+threat_actors, mitre_mapping  ──> (leaf modules, no intra-package imports)
+```
+Cold package import measured at ~135 ms in a clean interpreter and asserted
+`< 2000 ms`. All 18 submodules import standalone.
+
+### P3-01 Persistence (Agent 6)
+- `SQLiteThreatIntelRepository` on the standard library `sqlite3`. **No SQLAlchemy,
+  no new third-party dependency.**
+- Append-only enforcement is at the **database** layer: `BEFORE UPDATE` /
+  `BEFORE DELETE` triggers on `ti_observations`, `ti_entity_history`,
+  `ti_conflicts` and `ti_audit_log` raise `ABORT`. A raw `DELETE` therefore fails
+  even for a caller holding the live connection.
+- The repository **verifies its own triggers at construction** inside a
+  rolled-back transaction. If a SQLite build ignored them, construction raises
+  `AppendOnlyViolationError` rather than silently permitting history rewrite.
+- `tenant_id` participates in every primary key and every `WHERE` clause.
+- Every statement is parameterized; `_safe_identifier` rejects anything outside
+  `^[A-Za-z_][A-Za-z0-9_]*$`.
+
+### P3-02 API surface (Agent 6) — contract only
+- `ROUTES` is a declarative `RouteSpec` tuple: method, path template, operation
+  id, request model, required scope, tenant requirement, path params.
+- `ThreatIntelApiSurface.dispatch` validates scope → tenant → parameters →
+  handler, and maps domain errors to HTTP codes deterministically.
+- FastAPI appears **only** inside a guarded import in `build_fastapi_router`;
+  with FastAPI absent (the state of this repository) it raises
+  `ApiSurfaceNotMountedError`.
+- Nothing is mounted: no server is bound, no ASGI app is exported, and
+  `mount_status()` reports `not_mounted_pending_owner_approval` until a host
+  calls `mark_mounted(mounted_by=...)`.
+
+### P3-03 Collection workers (Agent 6) — nothing runs in the background
+- `CollectionWorker.run_pending(handler, now=...)` executes synchronously when
+  invoked. No thread, process, asyncio loop or scheduler is created.
+- Time is fully injected, which is what makes backoff and expiry testable
+  without sleeping.
+
+### Source reliability (Agent 6)
+- Reliability = windowed success ratio × (1 − 0.5 × min(1, streak/5)).
+- Zero outcomes ⇒ score `None`, tier `UNSCORED`; `confidence_adjustment` returns
+  `applied: false` rather than silently trusting an unscored source.
+- Freshness is measured from the last **successful** collection.
+- Verification promotion is evidence-gated: `promote_verification` requires a
+  specific `observation_ref` and an attributable `performed_by`, forbids rank
+  skipping, and has no flag-only path to `live_verified`.
+
+### Contract registry (Agent 6)
+- `contract_registry.py` pins each cross-agent dependency to the exact commit it
+  was read from, and records `proposed` / `accepted` / `superseded` / `rejected`.
+- `load_bearing` cannot be set at construction; only
+  `record_owner_acceptance(contract_id, accepted_by=…, acceptance_reference=…)`
+  flips it, and placeholder actors or references are rejected.
+- `assert_load_bearing` raises `ContractNotAcceptedError` while a contract is
+  still a proposal, naming the owner, commit and document.
 
 ### P1-04 OSINT layer (Agent 6)
 - `OSINTIngestionService` — single entry point; `tenant_id` scoped; `max_payload_bytes` cap (1 MiB default).
@@ -235,11 +315,24 @@ apps/threat_intelligence/vendor_advisories.py
   payload data as a `dict`. Live fetching is the platform owner's concern.
 - **No persistence.** No SQLAlchemy models, no Alembic migrations, no DDL. In-memory dicts only.
   The persistence contract is described in `INTEGRATION_PREPARATION_REPORT.md`, not implemented.
-- **No HTTP surface.** No FastAPI routers. `FreshnessMetaDTO.host_mount_status` defaults to
+- **HTTP surface is contract-only.** `api_surface.py` exposes a route registry and a
+  dispatcher, but binds no server and exports no ASGI app.
+  `FreshnessMetaDTO.host_mount_status` defaults to
   `not_mounted_pending_owner_approval` so a frontend cannot mistake "not mounted" for "empty".
+- **Persistence is local, not shared.** `persistence.py` opens a SQLite file (or `:memory:`)
+  and nothing else. It is **not** offered as the host SQL adapter: Agent 3's storage-port
+  contract states the subsystem defines the port and *the host implements the adapter* behind an
+  approved migration.
+- **No background execution.** `collection_workers.py` starts no thread, process or event loop.
+  `run_pending` runs when a caller invokes it and returns.
 - **No shared-file mutation.** `models.py`, `main.py`, and migrations were never touched.
 - **Verification honesty.** `verification_mode` is `fixture_tested` on every service; promotion to
-  `oracle_verified` / `live_verified` requires an actual external call by the caller.
+  `oracle_verified` / `live_verified` requires a real `VerificationEvidence` record with a specific
+  `observation_ref` and an attributable `performed_by`. There is no flag-only path.
+- **These boundaries are enforced by test, not by comment.** `test_package_integrity.py`
+  (141 checks) asserts the acyclic import graph, the absence of any networking client, that no
+  socket is opened at import, that no thread or process is started, that no secret-looking
+  literal exists, and that every service defaults to `fixture_tested`.
 
 # Completion Status
 ✅ Phase 0: COMPLETED (41/41 tests passed, commit f8f2868)
@@ -248,14 +341,22 @@ apps/threat_intelligence/vendor_advisories.py
 ✅ Autonomous Engineering Authorization: IN PROGRESS (P1-01/P1-02/P1-03 completed by Agent 2)
 ✅ P1-04 OSINT Intelligence Sources Integration: COMPLETED by Agent 6 (16 tests)
 ✅ Cross-Agent Integration Contracts: IMPLEMENTED by Agent 6 (18 tests), NOT accepted
-✅ Documentation: MAINTAINED (all root files updated + docs/THREAT_INTELLIGENCE_INTEGRATION_CONTRACTS.md)
-✅ Branch: ACTIVE (arena/28e50255-cicc)
+✅ P3-01 Persistence: IMPLEMENTED by Agent 6 (29 tests), NOT mounted
+✅ P3-02 API surface: IMPLEMENTED by Agent 6 (36 tests), NOT mounted
+✅ P3-03 Collection workers: IMPLEMENTED by Agent 6 (40 tests), NO worker running
+✅ Source reliability + evidence-gated verification: IMPLEMENTED by Agent 6 (47 tests)
+✅ Contract registry: IMPLEMENTED by Agent 6 (36 tests), 5 proposed / 0 accepted
+✅ Static integrity checks: ADDED by Agent 6 (141 tests)
+✅ PR #3 <-> PR #6 reconciliation: DOCUMENTED (docs/PR3_PR6_RECONCILIATION.md)
+✅ Documentation: MAINTAINED (7 root files + 2 docs/ files)
+✅ Branch: ACTIVE (arena/28e50255-cicc), PR #6 OPEN
 ✅ Handoff to Agent 2: READY (see DEVELOPMENT_LOG.md)
 
 # Last Updated
-2026-11-05 - P1-04 OSINT Integration completed by Agent 6; P1-01/P1-02/P1-03 hardened; cross-agent integration contracts implemented
+2026-11-05 - Stage 2: persistence, API surface, collection workers, source reliability, contract registry and static checks added by Agent 6
 Agent: Arena.ai Agent Mode - Agent 6 (Full Threat Intelligence Backup Engineer)
 Branch: arena/28e50255-cicc
+PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 205/205 passed (0 warnings)
+Total Tests: 534/534 passed (0 warnings)

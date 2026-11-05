@@ -4,10 +4,77 @@
 - Repository: oldman-088/cicc
 - Branch: arena/28e50255-cicc (Agent 6 - Full Threat Intelligence Backup Engineer)
 - Primary owner branch: arena/93315d2c-cicc (Agent 2, PR #3 Draft - untouched)
-- Status: P1-04 OSINT Intelligence Sources Integration COMPLETED + P1-01/P1-02/P1-03 Regression Hardening + Cross-Agent Integration Contracts
-- Total Tests: 205/205 passed (0 warnings)
+- Status: Stage 2 — P3-01 Persistence + P3-02 API surface + P3-03 Collection workers + source reliability + contract registry (fixture-tested, none mounted)
+- Total Tests: 534/534 passed (0 warnings)
 - Base: main @ ca8f82c
+- PR: #6 (OPEN, base main)
 - Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
+
+## Agent 6 Security Additions — Stage 2
+
+### 8. Append-only history enforced at the database layer (VERIFIED)
+- `ti_observations`, `ti_entity_history`, `ti_conflicts` and `ti_audit_log` each carry
+  `BEFORE UPDATE` and `BEFORE DELETE` triggers that `RAISE(ABORT, ...)`. A raw `DELETE` fails
+  with `sqlite3.IntegrityError` even for a caller holding the live connection.
+- The repository **verifies its own triggers at construction**, inside an explicit
+  `BEGIN`/`ROLLBACK` transaction. If a SQLite build ignored the triggers, construction raises
+  `AppendOnlyViolationError` instead of silently permitting history rewrite. The probe leaves no
+  row and consumes no `AUTOINCREMENT` id (asserted: first observation id is `1`).
+- Tests: `TestAppendOnlyEnforcement` (7 tests) in `test_persistence.py`.
+
+### 9. Tenant isolation at persistence, API and reliability layers (VERIFIED)
+- `tenant_id` participates in every primary key and every `WHERE` clause; an empty tenant raises
+  `TenantIsolationError`, mapped to HTTP `403 tenant_resolution_required` — never `500`, because
+  leaking a stack trace there would be worse than the error.
+- Verified that an audit write for `t1` does not appear when listing `t2`, and that a tenant which
+  never wrote sees nothing.
+
+### 10. SQL injection surface closed (VERIFIED)
+- Every statement is parameterized. `_safe_identifier` rejects anything outside
+  `^[A-Za-z_][A-Za-z0-9_]*$`.
+- An `entity_id` of `IOC-1'; DROP TABLE ti_entities; --` is stored inertly and the table survives
+  and remains queryable.
+
+### 11. API authorization boundary (VERIFIED)
+- Scope declared per route; missing scope → `401`. The audit route requires a distinct
+  `threat_intel:audit_read` scope.
+- `RequestContext.tenant_id` is **never derived from request data** — a host supplies it from the
+  authenticated principal. Actor identities are whitespace-collapsed so the audit log stays
+  single-line.
+- Unexpected exceptions map to `500 internal_error` **without** the original message; asserted that
+  a secret detail string does not appear in the envelope.
+
+### 12. No background execution, no network, enforced by test (VERIFIED)
+- `test_package_integrity.py` (141 checks) asserts: no module imports `requests`, `httpx`,
+  `urllib.request`, `socket`, `aiohttp` or equivalents; importing the package opens no socket
+  (subprocess probe with `socket.socket` replaced); no module imports `multiprocessing` or
+  `asyncio`; `threading` is permitted only for lock primitives; no `Thread(`, `Process(`,
+  `create_task(` or `while True:` appears in any module.
+- Constructing a worker and enqueueing a job does not change `threading.active_count()`.
+
+### 13. No secrets in source, verified statically (VERIFIED)
+- A static check scans every module for credential-shaped literals and fails on any assignment
+  matching `(api_key|secret|password|token) = "<8+ chars>"`.
+- `.gitignore` (added by Agent 6 — the repository previously had none) excludes `.env`, `.env.*`,
+  `.venv/`, `__pycache__/`, `node_modules/` and local raw feed dumps. A check asserts no `.env*`
+  file is tracked.
+
+### 14. Evidence-gated verification state (VERIFIED)
+- `promote_verification` requires a specific `observation_ref` and an attributable
+  `performed_by`; placeholders (`none`, `tbd`, `placeholder`, `unknown`, `anonymous`, `self`, …)
+  are rejected; rank skipping is forbidden; same-rank promotion is refused.
+- **There is no code path that sets `live_verified` from a flag.** A static check asserts no module
+  contains `verification_mode = "live_verified"` or the keyword-argument form.
+- Demotion to `fixture_tested` needs no evidence (conservative direction) and retains the evidence
+  history.
+
+### 15. Contract-provenance integrity (VERIFIED)
+- `contract_registry.py` pins all 5 cross-agent dependencies to exact source commits; both pinned
+  SHAs are asserted to be real git commit objects and both source branches asserted to exist on
+  `origin`. **Neither source branch was modified.**
+- `load_bearing` cannot be set at construction. `record_owner_acceptance` rejects placeholder
+  actors and references, so `accepted` cannot become a self-declared state.
+- Current state: **5 proposed, 0 accepted, 0 load-bearing.**
 
 ## Agent 6 Security Additions (P1-04 + Integration Contracts)
 
@@ -188,11 +255,26 @@ This review documents the security and integrity measures verified across all Th
 - **PR URL**: https://github.com/oldman-088/cicc/pull/3
 - **Handoff Ready**: Yes (Autonomous Engineering Authorization active)
 
+## Operational Limitations (Stage 2 — stated plainly)
+
+- **No API is mounted.** `api_surface.py` binds no server and exports no ASGI app. FastAPI is not
+  installed in this environment; `build_fastapi_router` raises `ApiSurfaceNotMountedError` and that
+  failure path is the one under test.
+- **No worker is running.** `collection_workers.py` starts no thread, process or event loop.
+  `run_pending` executes synchronously when a caller invokes it.
+- **No source is live.** No outbound network request was made by any code in this package. Every
+  record carries `EXPERIMENTAL_DEMO_DATA_ONLY`; every service reports `fixture_tested`.
+- **Persistence is local.** SQLite only; no shared database, no migration, no ORM session wiring.
+  It is explicitly **not** offered as Agent 3's host-side SQL adapter.
+- **No contract is accepted.** All 5 cross-agent dependencies are `proposed` and `assert_load_bearing`
+  raises while they remain so.
+
 ## Next Security Priorities (IDENTIFIED IN BACKLOG)
-- **P2-04**: Conflicting Intelligence Resolution (planned) — OSINT conflict records already lay the groundwork
+- **P2-04**: Conflicting Intelligence Resolution (planned) — OSINT and persistence conflict records already lay the groundwork
 - **P5-01**: Advanced Security Validation Enhancements (planned)
 - **P5-02**: Expanded Test Coverage (including security tests)
 - **P5-03**: Documentation Maintenance (including security documentation)
+- **MOUNT-01**: Host mounting of the API surface and persistence layer once the owner approves a migration
 - **LIVE-01**: Live-source verification once outbound egress to CISA / MITRE / vendor hosts is authorised
 
 # Completion Status
@@ -202,15 +284,23 @@ This review documents the security and integrity measures verified across all Th
 ✅ Autonomous Engineering Authorization: IN PROGRESS (P1-01/P1-02/P1-03 completed by Agent 2)
 ✅ P1-04 OSINT Intelligence Sources Integration: COMPLETED by Agent 6 (16 tests)
 ✅ Cross-Agent Integration Contracts: IMPLEMENTED by Agent 6 (18 tests), NOT accepted
-✅ Documentation: MAINTAINED (all root files updated + docs/THREAT_INTELLIGENCE_INTEGRATION_CONTRACTS.md)
-✅ Branch: ACTIVE (arena/28e50255-cicc)
+✅ P3-01 Persistence: IMPLEMENTED by Agent 6 (29 tests), NOT mounted
+✅ P3-02 API surface: IMPLEMENTED by Agent 6 (36 tests), NOT mounted
+✅ P3-03 Collection workers: IMPLEMENTED by Agent 6 (40 tests), NO worker running
+✅ Source reliability + evidence-gated verification: IMPLEMENTED by Agent 6 (47 tests)
+✅ Contract registry: IMPLEMENTED by Agent 6 (36 tests), 5 proposed / 0 accepted
+✅ Static integrity checks: ADDED by Agent 6 (141 tests)
+✅ PR #3 <-> PR #6 reconciliation: DOCUMENTED (docs/PR3_PR6_RECONCILIATION.md)
+✅ Documentation: MAINTAINED (7 root files + 2 docs/ files)
+✅ Branch: ACTIVE (arena/28e50255-cicc), PR #6 OPEN
 ✅ Handoff to Agent 2: READY (see DEVELOPMENT_LOG.md)
-✅ Security Review: PASSED (205/205 tests, all constraints met)
+✅ Security Review: PASSED (534/534 tests, all constraints met)
 
 # Last Updated
-2026-11-05 - P1-04 OSINT Integration completed by Agent 6; P1-01/P1-02/P1-03 hardened; cross-agent integration contracts implemented
+2026-11-05 - Stage 2: persistence, API surface, collection workers, source reliability, contract registry and static checks added by Agent 6
 Agent: Arena.ai Agent Mode - Agent 6 (Full Threat Intelligence Backup Engineer)
 Branch: arena/28e50255-cicc
+PR: https://github.com/oldman-088/cicc/pull/6 (OPEN, base main)
 Recovered from Agent 2 commits: 933b29f, 805cd2b, 1a46f70
 Agent 2 PR: https://github.com/oldman-088/cicc/pull/3 (untouched)
-Total Tests: 205/205 passed (0 warnings)
+Total Tests: 534/534 passed (0 warnings)
