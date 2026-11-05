@@ -37,7 +37,7 @@ Status legend: **Done** = implemented and checked to the stated level; **In prog
 ## PR #2 handling
 
 - [x] Reviewed the current PR #2 description, changed-file list, branch head, and this batch's source/documentation diff; typecheck, full suite, build, audit, and smoke checks passed before updating the PR.
-- [ ] Update PR #2 body and push only to `arena/09952395-cicc` after the current diff is finalized. Do not merge PR #2 or push to `main`.
+- [x] Reviewed and finalized the 35-file frontend/documentation diff, committed as `ab549b8`, pushed only to `arena/09952395-cicc`, and updated PR #2's description. PR #2 remains open and unmerged; no push to `main`.
 
 ## Later work (contract/product dependent)
 

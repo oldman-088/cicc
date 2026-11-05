@@ -11,6 +11,7 @@ Updated: 2026-11-05 · Working branch: `arena/09952395-cicc`
 - Added runtime-validated API adapters and localized read-only System Health/Coordination workspaces with explicit loading, unconfigured, error, malformed, empty, retry, and stale-after-failure states. Fixtures remain synthetic and isolated to tests.
 - Found and reported the PR #4 Coordination agent DTO discrepancy: the reference documents `last_seen`/`completed_tasks`/`failed_tasks`, while the current `agents.py`/registry source returns `last_heartbeat`/`completed`/`failed`. The strict decoder accepts these two observed spellings, rejects conflicting duplicate aliases, and exposes the timestamp field actually supplied; this does not resolve the upstream mismatch. Clarification request: [PR #4 comment #6656004782](https://github.com/oldman-088/cicc/pull/4#issuecomment-6656004782).
 - Did not modify backend files or other agents' branches. Agents 2/3 have not confirmed adoption; no user authentication or tenant isolation is claimed.
+- Reviewed the 35-file frontend/documentation diff, committed it as `ab549b8`, pushed only to `arena/09952395-cicc`, and updated PR #2's description. PR #2 remains open and unmerged; no push to `main`.
 
 ### Verification
 
