@@ -59,6 +59,7 @@ from ..schema import (
     NormalizedVulnerability,
     Origin,
     ProvenanceRecord,
+    RecordStatus,
     Reference,
     Severity,
     SourceKind,
@@ -66,6 +67,7 @@ from ..schema import (
     coerce_text,
     mapping_list,
     parse_timestamp,
+    strictest_status,
     utcnow,
 )
 from ..transport import Transport, transport_kind
@@ -366,6 +368,7 @@ class NvdConnector:
                     notes.append(note)
 
         notes.extend(_status_notes(cve))
+        record_status = _record_status(cve)
         ssvc_options = _ssvc_inputs(cve, notes)
 
         severity = Severity.UNKNOWN
@@ -410,6 +413,7 @@ class NvdConnector:
             cvss=tuple(cvss_scores),
             severity=severity,
             ssvc=ssvc_options,
+            record_status=record_status,
             cwe=tuple(cwe),
             references=tuple(references),
             provenance=(
@@ -480,6 +484,33 @@ def _ssvc_inputs(cve: Mapping[str, Any], notes: list[str]) -> tuple[tuple[str, s
                 "NVD supplied an SSVC block with no usable decision points; ignored"
             )
     return ()
+
+
+def _record_status(cve: Mapping[str, Any]) -> RecordStatus | None:
+    """Map NVD's ``vulnStatus`` plus ``cveTags`` onto a typed standing.
+
+    Kept separate from the prose notes so a consumer can branch on it: a disputed
+    claim and a withdrawn one call for different responses, and neither is
+    recoverable from free text without re-parsing English.
+    """
+    found: list[RecordStatus | None] = []
+    status = _text(cve.get("vulnStatus"))
+    if status == "Rejected":
+        found.append(RecordStatus.REJECTED)
+    elif status in ("Awaiting Analysis", "Undergoing Analysis", "Received"):
+        found.append(RecordStatus.UNDERGOING_ANALYSIS)
+    elif status == "Analyzed":
+        found.append(RecordStatus.PUBLISHED)
+
+    tags = cve.get("cveTags")
+    if isinstance(tags, list):
+        for tag_block in tags:
+            if not isinstance(tag_block, Mapping):
+                continue
+            for tag in tag_block.get("tags") or ():
+                if isinstance(tag, str) and tag.strip().lower() == "disputed":
+                    found.append(RecordStatus.DISPUTED)
+    return strictest_status(found)
 
 
 def _status_notes(cve: Mapping[str, Any]) -> list[str]:

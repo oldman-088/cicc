@@ -563,6 +563,23 @@ def score_vulnerability(
         warnings.append(
             f"origin is '{record.origin.value}': this ranking is not production intelligence"
         )
+    # -- standing: a withdrawn or contested claim must not rank like a settled one -
+    claim = record.is_actionable_claim
+    if claim is False:
+        reasons.append(
+            f"record standing '{record.record_status.value if record.record_status else '?'}': "
+            "the advisory is not a live claim, so no remediation is implied"
+        )
+    elif record.record_status is not None and record.record_status.value != "published":
+        reasons.append(
+            f"record standing '{record.record_status.value}': the claim is not settled"
+        )
+    if claim is not None and claim is False:
+        warnings.append(
+            "ranking a withdrawn/rejected advisory: it is reported for completeness, "
+            "not as work to do"
+        )
+
     if record.conflict_notes:
         warnings.append(
             "source disagreements present: " + "; ".join(record.conflict_notes[:3])

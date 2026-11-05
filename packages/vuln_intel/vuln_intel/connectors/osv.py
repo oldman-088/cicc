@@ -62,6 +62,7 @@ from ..schema import (
     NormalizedVulnerability,
     Origin,
     ProvenanceRecord,
+    RecordStatus,
     Reference,
     Severity,
     SourceKind,
@@ -500,6 +501,12 @@ class OsvConnector:
             sources=("osv",),
             conflict_notes=tuple(notes),
             verification="unverified",
+            # A withdrawn advisory is not a live claim. OSV states this explicitly,
+            # so it becomes a typed standing rather than only a note in prose.
+            record_status=(
+                RecordStatus.REJECTED if withdrawn is not None else RecordStatus.PUBLISHED
+            ),
+            withdrawn=withdrawn,
         )
         return record, AdvisoryOnly(
             advisory_id=advisory_id,

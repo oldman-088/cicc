@@ -82,6 +82,48 @@ class SourceKind(str, Enum):
     EPSS = "epss"
 
 
+class RecordStatus(str, Enum):
+    """How much standing an advisory has as a *claim*.
+
+    Deliberately separate from severity: a ``DISPUTED`` critical and a ``PUBLISHED``
+    critical have the same severity and a different standing, and a remediation queue
+    that cannot tell them apart will spend real effort on a contested claim.
+
+    ``None`` (not a member) means the provider said nothing.  It is not modelled as an
+    ``UNKNOWN`` member so that "we never asked" and "the source declared nothing" stay
+    distinguishable through the nullable field.
+    """
+
+    #: Asserted normally; the default for a well-formed record.
+    PUBLISHED = "published"
+    #: A stakeholder contests the claim (NVD ``cveTags: disputed``).
+    DISPUTED = "disputed"
+    #: NVD has not finished enrichment; fields may still change.
+    UNDERGOING_ANALYSIS = "undergoing_analysis"
+    #: Withdrawn or rejected.  The advisory is not a live claim.
+    REJECTED = "rejected"
+
+
+#: Ordering used when sources disagree about standing: the **most cautious**
+#: description wins.  A record one source has withdrawn is not presented as
+#: confidently published just because another source has not caught up — acting on a
+#: rejected CVE wastes effort, whereas hesitating over a live one is recoverable.
+_STATUS_PRECEDENCE: tuple[RecordStatus, ...] = (
+    RecordStatus.REJECTED,
+    RecordStatus.DISPUTED,
+    RecordStatus.UNDERGOING_ANALYSIS,
+    RecordStatus.PUBLISHED,
+)
+
+
+def strictest_status(values: Iterable[RecordStatus | None]) -> RecordStatus | None:
+    """The most cautious non-``None`` status, or ``None`` if all are ``None``."""
+    present = [v for v in values if v is not None]
+    if not present:
+        return None
+    return min(present, key=lambda s: _STATUS_PRECEDENCE.index(s))
+
+
 class Severity(str, Enum):
     """CVSS v3 qualitative rating. ``UNKNOWN`` means "not stated by the source"."""
 
@@ -269,6 +311,11 @@ class NormalizedVulnerability:
     #: stakeholder-specific and cannot come from a feed, so it is never invented
     #: here.  ``None`` means the provider said nothing, never "no exploitation".
     ssvc: tuple[tuple[str, str], ...] = ()
+    #: How much standing the advisory has.  ``None`` = the provider declared nothing.
+    record_status: RecordStatus | None = None
+    #: When a source withdrew the record (OSV ``withdrawn``).  Kept because "withdrawn
+    #: in 2021" and "withdrawn yesterday" are different operational situations.
+    withdrawn: datetime | None = None
     provenance: tuple[ProvenanceRecord, ...] = ()
     sources: tuple[str, ...] = ()
     conflict_notes: tuple[str, ...] = ()
@@ -282,12 +329,31 @@ class NormalizedVulnerability:
         _ensure_aware(self.published, field_name="published")
         _ensure_aware(self.modified, field_name="modified")
         _ensure_aware(self.kev_date_added, field_name="kev_date_added")
+        _ensure_aware(self.withdrawn, field_name="withdrawn")
+        if self.record_status is not None and not isinstance(
+            self.record_status, RecordStatus
+        ):
+            raise ValidationError(
+                "record_status must be a RecordStatus or None", field="record_status"
+            )
         if self.epss_score is not None and not 0.0 <= self.epss_score <= 1.0:
             raise ValidationError("EPSS score must be within 0.0-1.0", field="epss_score")
         if self.epss_percentile is not None and not 0.0 <= self.epss_percentile <= 1.0:
             raise ValidationError(
                 "EPSS percentile must be within 0.0-1.0", field="epss_percentile"
             )
+
+    @property
+    def is_actionable_claim(self) -> bool | None:
+        """Whether the record can be treated as a live claim.
+
+        ``False`` for a rejected/withdrawn advisory: remediating one is wasted work.
+        ``None`` when the provider declared nothing — which must not be read as
+        ``True``, because that would promote silence to a guarantee.
+        """
+        if self.record_status is None:
+            return None
+        return self.record_status is not RecordStatus.REJECTED
 
     # -- convenience ------------------------------------------------------
     # `cached_property` is safe here because the dataclass is frozen: the `cvss`
@@ -542,6 +608,43 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
         (i.verification for i in items if i.verification == "verified"), "unverified"
     )
 
+    # Standing is merged by taking the *most cautious* description, not the first
+    # or the loudest. If one source has withdrawn a record and another has not yet
+    # caught up, presenting it as confidently published would be the wrong way to
+    # resolve the disagreement: acting on a rejected CVE wastes effort, while
+    # hesitating over a live one is recoverable.
+    statuses = [i.record_status for i in items if i.record_status is not None]
+    record_status = strictest_status(statuses)
+    if len(set(statuses)) > 1:
+        notes.append(
+            "sources disagree on record standing: "
+            + ", ".join(sorted(s.value for s in set(statuses)))
+            + f" (most cautious kept: {record_status.value if record_status else 'none'})"
+        )
+    withdrawn = min(
+        (i.withdrawn for i in items if i.withdrawn is not None), default=None
+    )
+
+    # SSVC inputs are provider assertions; the union is a merge, but a *conflicting*
+    # value for the same key is a real disagreement and must be reported rather than
+    # silently resolved by whichever record happened to come first.
+    ssvc_values: dict[str, set[str]] = {}
+    for item in items:
+        for key, value in item.ssvc:
+            ssvc_values.setdefault(key, set()).add(value)
+    for key, values in sorted(ssvc_values.items()):
+        if len(values) > 1:
+            notes.append(
+                f"SSVC input '{key}' disagrees across sources: "
+                + ", ".join(sorted(values))
+                + " (input dropped rather than guessed)"
+            )
+    ssvc = tuple(
+        (key, next(iter(values)))
+        for key, values in sorted(ssvc_values.items())
+        if len(values) == 1
+    )
+
     return replace(
         base,
         severity=severity,
@@ -565,6 +668,13 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
             (i.epss_percentile for i in items if i.epss_percentile is not None), default=None
         ),
         epss_model_date=pick("epss_model_date"),
+        # Previously omitted from the merged record: a merged record silently lost
+        # every SSVC input, so CISA's assessment vanished as soon as two sources
+        # corroborated the same CVE. Found by reading the merge against the field
+        # list rather than by a failing test.
+        ssvc=ssvc,
+        record_status=record_status,
+        withdrawn=withdrawn,
         conflict_notes=tuple(dict.fromkeys([*base.conflict_notes, *notes])),
         verification=verification,
     )

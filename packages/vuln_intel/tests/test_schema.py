@@ -12,10 +12,12 @@ from vuln_intel.schema import (
     CvssScore,
     NormalizedVulnerability,
     Origin,
+    RecordStatus,
     Severity,
     compute_freshness,
     merge_records,
     parse_timestamp,
+    strictest_status,
 )
 
 from .conftest import FIXED_NOW
@@ -166,3 +168,125 @@ def test_as_summary_never_fabricates_scores() -> None:
     assert summary["cvss_base_score"] is None
     assert summary["epss_score"] is None
     assert summary["origin"] == "fixture"
+
+
+class TestRecordStanding:
+    """Disputed, withdrawn and in-analysis records are a different kind of claim.
+
+    The failure this prevents is quiet: a record every source has withdrawn still
+    merges, still scores, and still appears in a remediation queue, because nothing
+    in the pipeline knew it was no longer a claim.
+    """
+
+    @staticmethod
+    def _record(**kwargs):
+        base = dict(cve=CveId.parse("CVE-2026-5000"), origin=Origin.FIXTURE)
+        base.update(kwargs)
+        return NormalizedVulnerability(**base)
+
+    def test_default_is_unstated_not_published(self) -> None:
+        """Silence must not be promoted to a guarantee."""
+        record = self._record()
+        assert record.record_status is None
+        assert record.is_actionable_claim is None
+
+    def test_rejected_is_not_an_actionable_claim(self) -> None:
+        record = self._record(record_status=RecordStatus.REJECTED)
+        assert record.is_actionable_claim is False
+
+    def test_published_is_actionable(self) -> None:
+        assert self._record(record_status=RecordStatus.PUBLISHED).is_actionable_claim is True
+
+    def test_disputed_is_still_actionable_but_flagged(self) -> None:
+        asserted = self._record(record_status=RecordStatus.DISPUTED)
+        assert asserted.is_actionable_claim is True
+
+    def test_invalid_status_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            self._record(record_status="probably_fine")  # type: ignore[arg-type]
+
+    def test_strictest_status_prefers_the_cautious_reading(self) -> None:
+        assert (
+            strictest_status([RecordStatus.PUBLISHED, RecordStatus.DISPUTED])
+            is RecordStatus.DISPUTED
+        )
+        assert (
+            strictest_status([RecordStatus.DISPUTED, RecordStatus.REJECTED])
+            is RecordStatus.REJECTED
+        )
+
+    def test_strictest_status_ignores_unspecified_sources(self) -> None:
+        assert strictest_status([None, RecordStatus.PUBLISHED]) is RecordStatus.PUBLISHED
+        assert strictest_status([None, None]) is None
+
+    def test_merge_keeps_the_most_cautious_standing(self) -> None:
+        merged = merge_records(
+            [
+                self._record(record_status=RecordStatus.PUBLISHED, sources=("nvd",)),
+                self._record(record_status=RecordStatus.REJECTED, sources=("osv",)),
+            ]
+        )
+        assert merged.record_status is RecordStatus.REJECTED
+        assert any("standing" in n for n in merged.conflict_notes)
+
+    def test_merge_does_not_invent_standing_from_silence(self) -> None:
+        merged = merge_records([self._record(sources=("nvd",)), self._record(sources=("osv",))])
+        assert merged.record_status is None
+
+    def test_merge_keeps_the_earliest_withdrawal(self) -> None:
+        from datetime import datetime, timezone
+
+        early = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        late = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        merged = merge_records(
+            [
+                self._record(withdrawn=late, sources=("osv",)),
+                self._record(withdrawn=early, sources=("nvd",)),
+            ]
+        )
+        assert merged.withdrawn == early
+
+
+class TestMergeKeepsSsvc:
+    def test_ssvc_survives_corroboration(self) -> None:
+        """Merging used to drop every SSVC input, losing CISA's assessment."""
+        inputs = (("automatable", "yes"), ("exploitation", "active"),
+                  ("technical_impact", "total"))
+        merged = merge_records(
+            [
+                NormalizedVulnerability(
+                    cve=CveId.parse("CVE-2026-5001"), origin=Origin.FIXTURE,
+                    ssvc=inputs, sources=("nvd",),
+                ),
+                NormalizedVulnerability(
+                    cve=CveId.parse("CVE-2026-5001"), origin=Origin.FIXTURE,
+                    ssvc=inputs, sources=("osv",),
+                ),
+            ]
+        )
+        assert dict(merged.ssvc) == {
+            "automatable": "yes",
+            "exploitation": "active",
+            "technical_impact": "total",
+        }
+
+    def test_conflicting_ssvc_input_is_dropped_and_reported(self) -> None:
+        """A disagreement must not be resolved by whichever record came first."""
+        merged = merge_records(
+            [
+                NormalizedVulnerability(
+                    cve=CveId.parse("CVE-2026-5002"), origin=Origin.FIXTURE,
+                    ssvc=(("exploitation", "active"), ("automatable", "yes")),
+                    sources=("nvd",),
+                ),
+                NormalizedVulnerability(
+                    cve=CveId.parse("CVE-2026-5002"), origin=Origin.FIXTURE,
+                    ssvc=(("exploitation", "none"), ("automatable", "yes")),
+                    sources=("osv",),
+                ),
+            ]
+        )
+        merged_inputs = dict(merged.ssvc)
+        assert "exploitation" not in merged_inputs
+        assert merged_inputs["automatable"] == "yes"
+        assert any("SSVC input 'exploitation' disagrees" in n for n in merged.conflict_notes)

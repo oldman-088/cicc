@@ -14,7 +14,14 @@ from vuln_intel.priorities import (
     rank_vulnerabilities,
     score_vulnerability,
 )
-from vuln_intel.schema import CveId, CvssScore, NormalizedVulnerability, Origin, Severity
+from vuln_intel.schema import (
+    CveId,
+    CvssScore,
+    NormalizedVulnerability,
+    Origin,
+    RecordStatus,
+    Severity,
+)
 
 from .conftest import FIXED_NOW
 
@@ -201,7 +208,13 @@ class TestRankingPolicy:
     """
 
     def _record(self, **kwargs):
-        from vuln_intel.schema import CveId, CvssScore, NormalizedVulnerability, Origin, Severity
+        from vuln_intel.schema import (
+    CveId,
+    CvssScore,
+    NormalizedVulnerability,
+    Origin,
+    Severity,
+)
 
         defaults = {
             "cve": CveId.parse("CVE-2026-0001"),
@@ -552,3 +565,41 @@ class TestSsvcInScoring:
     def test_bad_context_values_fail_at_construction(self) -> None:
         with pytest.raises(ValidationError):
             PriorityContext(mission_prevalence="enormous", public_wellbeing="minimal")
+
+
+class TestStandingChangesTheExplanation:
+    """A withdrawn advisory must not read like settled work."""
+
+    @staticmethod
+    def _record(**kwargs):
+        base = dict(
+            cve=CveId.parse("CVE-2026-6100"),
+            origin=Origin.FIXTURE,
+            cvss=(CvssScore(version="3.1", base_score=9.8, severity=Severity.CRITICAL),),
+            modified=FIXED_NOW - timedelta(days=1),
+            sources=("nvd", "osv"),
+        )
+        base.update(kwargs)
+        return NormalizedVulnerability(**base)
+
+    def test_no_standing_adds_no_reason(self) -> None:
+        result = score_vulnerability(self._record(), context=PriorityContext(), now=FIXED_NOW)
+        assert not any("standing" in r for r in result.reasons)
+
+    def test_rejected_record_is_flagged_and_warned(self) -> None:
+        result = score_vulnerability(
+            self._record(record_status=RecordStatus.REJECTED),
+            context=PriorityContext(),
+            now=FIXED_NOW,
+        )
+        assert any("not a live claim" in r for r in result.reasons)
+        assert any("withdrawn/rejected" in w for w in result.warnings)
+
+    def test_disputed_record_is_named_as_unsettled(self) -> None:
+        result = score_vulnerability(
+            self._record(record_status=RecordStatus.DISPUTED),
+            context=PriorityContext(),
+            now=FIXED_NOW,
+        )
+        assert any("not settled" in r for r in result.reasons)
+        assert not any("withdrawn/rejected" in w for w in result.warnings)
