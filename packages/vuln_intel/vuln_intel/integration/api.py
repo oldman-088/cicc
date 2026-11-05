@@ -249,6 +249,11 @@ def shape_record(row: Mapping[str, Any]) -> dict[str, Any]:
         "epss": pick("epss"),
         "sources": sources,
         "summary": details.get("summary"),
+        # Confidence was computed for ranking and then discarded, so a consumer of the
+        # stored record saw nothing. It now travels with its basis and inputs, because
+        # a bare float 0.7 cannot be distinguished from a provider's assertion.
+        # `None` remains `None`: absent confidence is not confidence zero.
+        "confidence": _pick_confidence(details, enrichment),
         "affected": details.get("affected") or [],
         "references": details.get("references") or [],
         "freshness": enrichment.get("freshness"),
@@ -261,6 +266,23 @@ def shape_record(row: Mapping[str, Any]) -> dict[str, Any]:
         "conflicts": enrichment.get("conflicts") or [],
         "ssvc": enrichment.get("ssvc") or {},
     }
+
+
+def _pick_confidence(
+    details: Mapping[str, Any], enrichment: Mapping[str, Any]
+) -> Mapping[str, Any] | None:
+    """The stored confidence object, preferring the enrichment block.
+
+    The enrichment copy carries ``basis`` and ``inputs``; the ``details`` copy is the
+    same object. Enrichment is preferred because it is the package-owned block, and a
+    host that strips unknown keys from ``details`` still leaves it intact.
+    """
+    candidate = enrichment.get("confidence")
+    if candidate is None:
+        candidate = details.get("confidence")
+    if isinstance(candidate, Mapping):
+        return candidate
+    return None
 
 
 class VulnerabilityApi:

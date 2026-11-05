@@ -68,10 +68,30 @@ def _require_aware(moment: datetime) -> datetime:
     return moment.astimezone(timezone.utc)
 
 
-def to_entity_payload(record: NormalizedVulnerability) -> dict[str, Any]:
-    """Entity row fields (mirrors ``NvdImport``'s ``Entity(...)`` construction)."""
+def to_entity_payload(
+    record: NormalizedVulnerability, *, confidence: Any = None
+) -> dict[str, Any]:
+    """Entity row fields (mirrors ``NvdImport``'s ``Entity(...)`` construction).
+
+    ``Entity.confidence`` is 0-100 in the host schema and is populated from a supplied
+    :class:`~vuln_intel.confidence.ConfidenceValue` **only when the provider published
+    it**. An internally calculated confidence deliberately does not go here: the host
+    column is read as a provider assertion, and writing our own arithmetic into it
+    would launder a judgement as a source statement. Computed values stay in the
+    enrichment block, where their basis travels with them.
+    """
     primary = record.sources[0] if record.sources else "unknown"
     provenance = record.provenance[0] if record.provenance else None
+    stored_confidence: int | None = None
+    if confidence is not None:
+        from ..confidence import ConfidenceBasis
+
+        if (
+            getattr(confidence, "basis", None) == ConfidenceBasis.SOURCE_PROVIDED
+            and getattr(confidence, "value", None) is not None
+        ):
+            # 0-1 locally, 0-100 in the host column.
+            stored_confidence = round(float(confidence.value) * 100)
     return {
         "kind": ENTITY_KIND,
         "title": str(record.cve),
@@ -84,14 +104,20 @@ def to_entity_payload(record: NormalizedVulnerability) -> dict[str, Any]:
             "aliases": list(record.aliases),
             "contributing_sources": list(record.sources),
         },
-        # The host stores 0-100; the normalizer deliberately does not invent a
-        # confidence, so it stays NULL and the record remains unverified.
-        "confidence": None,
+        # The host stores 0-100. NULL unless a provider published the value; see the
+        # docstring. Staying NULL is the honest default and the record remains
+        # unverified.
+        "confidence": stored_confidence,
         "verification_status": record.verification,
     }
 
 
-def to_source_details(record: NormalizedVulnerability) -> dict[str, Any]:
+def to_source_details(
+    record: NormalizedVulnerability,
+    *,
+    confidence: Any = None,
+    freshness: Any = None,
+) -> dict[str, Any]:
     """Source-specific ``details`` body plus the cross-source enrichment block.
 
     The enrichment block never replaces source fields; it sits beside them, so an
@@ -134,15 +160,39 @@ def to_source_details(record: NormalizedVulnerability) -> dict[str, Any]:
         "conflict_notes": list(record.conflict_notes),
         "record_status": record.record_status.value if record.record_status else None,
         "withdrawn": record.withdrawn.isoformat() if record.withdrawn else None,
+        # Observation freshness, so a reader of `details` does not have to reach into
+        # the enrichment block to find out whether this row is current.
+        "freshness": freshness.as_dict() if freshness is not None else None,
+        "confidence": confidence.as_dict() if confidence is not None else None,
     }
-    details[ENRICHMENT_KEY] = to_enrichment(record)
+    details[ENRICHMENT_KEY] = to_enrichment(
+        record, confidence=confidence, freshness=freshness
+    )
     return details
 
 
-def to_enrichment(record: NormalizedVulnerability) -> dict[str, Any]:
-    """Fields owned by this package (safe to ignore in host code that predates it)."""
+def to_enrichment(
+    record: NormalizedVulnerability,
+    *,
+    confidence: Any = None,
+    freshness: Any = None,
+    policy: Any = None,
+    seen: Any = None,
+) -> dict[str, Any]:
+    """Fields owned by this package (safe to ignore in host code that predates it).
+
+    ``confidence``, ``freshness``, ``policy`` and ``seen`` are the persistence fix for a
+    real defect: :func:`api.shape_record` has always read ``freshness`` and ``policy`` out
+    of this block, and **nothing ever wrote them**, so both were permanently ``null``
+    through the API. The enrichment block is the documented home for package-owned
+    fields, so this is where they belong; the alternative — new columns — would have
+    been a host contract change.
+
+    Each accepts an object with ``as_dict()``. ``None`` means "not supplied", which
+    renders as ``null`` and must not be read as "fresh" or "zero confidence".
+    """
     best = record.best_cvss
-    return {
+    payload: dict[str, Any] = {
         "schema": "cicc.vuln_intel.v1",
         "origin": record.origin.value,
         "contributing_sources": list(record.sources),
@@ -166,7 +216,15 @@ def to_enrichment(record: NormalizedVulnerability) -> dict[str, Any]:
         "withdrawn": record.withdrawn.isoformat() if record.withdrawn else None,
         "ssvc": dict(record.ssvc),
         "verification": record.verification,
+        # Present as explicit nulls rather than omitted: a consumer reading
+        # `enrichment["confidence"]` should get null, not a KeyError, and the key's
+        # presence tells it the field exists and is unset.
+        "confidence": confidence.as_dict() if confidence is not None else None,
+        "freshness": freshness.as_dict() if freshness is not None else None,
+        "policy": policy.as_dict() if policy is not None else None,
+        "seen": seen.as_dict() if seen is not None else None,
     }
+    return payload
 
 
 def to_provenance(
@@ -201,16 +259,29 @@ def to_store_payload(
     *,
     tenant_id: str,
     collected_at: datetime | None = None,
+    confidence: Any = None,
+    freshness: Any = None,
+    policy: Any = None,
+    seen: Any = None,
 ) -> dict[str, Any]:
-    """Complete payload for :meth:`VulnerabilityStore.upsert`."""
+    """Complete payload for :meth:`VulnerabilityStore.upsert`.
+
+    ``confidence``, ``freshness``, ``policy`` and ``seen`` are optional and additive, so
+    an existing caller that passes only ``tenant_id`` keeps working and an existing host
+    adapter needs no change: the values travel inside the enrichment block, which is
+    already part of the payload.
+    """
     moment = _require_aware(collected_at or utcnow())
+    enrichment = to_enrichment(
+        record, confidence=confidence, freshness=freshness, policy=policy, seen=seen
+    )
     return {
         "tenant_id": tenant_id,
         "cve": str(record.cve),
         "origin": record.origin.value,
-        "entity": to_entity_payload(record),
-        "details": to_source_details(record),
-        "enrichment": to_enrichment(record),
+        "entity": to_entity_payload(record, confidence=confidence),
+        "details": to_source_details(record, confidence=confidence, freshness=freshness),
+        "enrichment": enrichment,
         "provenance": to_provenance(record, fetched_at=moment),
         "collected_at": moment,
     }

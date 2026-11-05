@@ -12,6 +12,7 @@
         }
       ],
       "collected_at": "2026-11-04T09:00:00+00:00",
+      "confidence": null,
       "conflicts": [],
       "cve": "CVE-2026-1001",
       "cvss": {
@@ -65,6 +66,7 @@
         }
       ],
       "collected_at": "2026-11-04T09:00:00+00:00",
+      "confidence": null,
       "conflicts": [
         {
           "discarded": [
@@ -110,6 +112,7 @@
     {
       "affected": [],
       "collected_at": "2026-11-04T09:00:00+00:00",
+      "confidence": null,
       "conflicts": [],
       "cve": "CVE-2026-1003",
       "cvss": null,
@@ -136,6 +139,7 @@
     {
       "affected": [],
       "collected_at": "2026-11-04T09:00:00+00:00",
+      "confidence": null,
       "conflicts": [],
       "cve": "CVE-2026-1004",
       "cvss": null,
@@ -171,6 +175,7 @@
         }
       ],
       "collected_at": "2026-11-04T09:00:00+00:00",
+      "confidence": null,
       "conflicts": [],
       "cve": "CVE-2026-1005",
       "cvss": {

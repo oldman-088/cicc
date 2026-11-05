@@ -497,6 +497,10 @@ def to_source_state(
         status=outcome.status,
         checked_at=now or utcnow(),
         last_success=outcome.checkpoint.completed_at,
+        # Separate from the success: a failed run advances ``attempted_at`` and leaves
+        # ``completed_at`` alone, so this pair reports both facts and the gap between
+        # them is the outage duration.
+        last_attempt=outcome.checkpoint.attempted_at,
         error="; ".join(outcome.warnings[:3]) or None,
         records=len(outcome.records),
     )

@@ -148,6 +148,31 @@ def _ensure_aware(value: datetime | None, *, field_name: str) -> datetime | None
     return value.astimezone(timezone.utc)
 
 
+def _parse_moment(value: object, field_name: str) -> datetime | None:
+    """Parse an ISO 8601 string (or accept a datetime) into an aware UTC datetime.
+
+    Deserialisation needs this: everything on the wire is a string, and silently
+    returning ``None`` for an unparseable timestamp would turn "we do not know when
+    this last succeeded" into "it never has" — a distinguishable fact turned into a
+    wrong one. So a malformed value raises instead of being swallowed.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return _ensure_aware(value, field_name=field_name)
+    if not isinstance(value, str):
+        raise ValidationError(
+            f"{field_name} must be an ISO 8601 string or a datetime", field=field_name
+        )
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValidationError(
+            f"{field_name} is not a valid ISO 8601 timestamp: {value!r}", field=field_name
+        ) from exc
+    return _ensure_aware(parsed, field_name=field_name)
+
+
 @dataclass(frozen=True, order=True)
 class CveId:
     """A validated CVE identifier.
@@ -469,6 +494,21 @@ class SourceState:
     error: str | None = None
     retry_after: float | None = None
     records: int = 0
+    #: When the source was last *attempted*, success or failure. Added as a separate
+    #: field because Master Prompt §7 lists "last successful synchronization" and
+    #: "last attempted synchronization" as two requirements, and the gap between them
+    #: is the outage signal: attempted a minute ago but last succeeded a week ago is a
+    #: source in trouble, whereas no attempt at all is a scheduler that has stopped.
+    #:
+    #: It also has to survive *serialisation*. A value preserved in the collector and
+    #: dropped by ``as_dict`` is exactly the failure this milestone exists to close:
+    #: the lower layer keeps it, the upper layer discards it, and the operator sees a
+    #: healthy source.
+    last_attempt: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if self.last_attempt is not None:
+            _ensure_aware(self.last_attempt, field_name="last_attempt")
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -476,10 +516,43 @@ class SourceState:
             "status": self.status.value,
             "checked_at": self.checked_at.isoformat(),
             "last_success": self.last_success.isoformat() if self.last_success else None,
+            "last_attempt": self.last_attempt.isoformat() if self.last_attempt else None,
             "error": self.error,
             "retry_after": self.retry_after,
             "records": self.records,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> SourceState:
+        """Restore a serialised state.
+
+        ``last_attempt`` absent means the payload predates the field, in which case it
+        falls back to ``checked_at`` — which *is* the attempt time for any state that
+        was ever serialised. It never falls back to ``last_success``, because that
+        would invent an attempt that did not happen.
+        """
+        checked = _parse_moment(payload.get("checked_at"), "checked_at")
+        if checked is None:
+            raise ValidationError("source state needs checked_at", field="checked_at")
+        attempt_raw = payload.get("last_attempt")
+        return cls(
+            kind=SourceKind(str(payload.get("kind") or SourceKind.NVD.value)),
+            status=CollectionStatus(str(payload.get("status") or CollectionStatus.FAILED.value)),
+            checked_at=checked,
+            last_success=_parse_moment(payload.get("last_success"), "last_success"),
+            error=(str(payload["error"]) if payload.get("error") else None),
+            retry_after=(
+                float(payload["retry_after"])
+                if isinstance(payload.get("retry_after"), (int, float))
+                else None
+            ),
+            records=int(payload.get("records") or 0),
+            last_attempt=(
+                _parse_moment(attempt_raw, "last_attempt")
+                if attempt_raw
+                else checked
+            ),
+        )
 
 
 @dataclass(frozen=True)
