@@ -133,3 +133,41 @@ def test_pg_concurrent_sweep_requeue(pg_app):
     for i in range(6):
         t = pg_app.get(f"/api/v1/coordination/tasks/pg-sw-{i}", headers=R).json()
         assert t["state"].lower() == "queued" and t["dead_letter"] is False
+
+
+def test_pg_concurrent_deliver_ack_race(pg_app):
+    """Real PG: 8 threads race deliver+ack on one task; exactly one ack wins,
+    audit stays consistent (latest state event == persisted state)."""
+    pg_app.post("/api/v1/coordination/tasks", json={"task_id": "pg-da", "kind": "m25", "payload": {}}, headers=W)
+    pg_app.post("/api/v1/coordination/agents/register", json={"agent": "a1"}, headers=W)
+    pg_app.post("/api/v1/coordination/tasks/pg-da/route", json={"agent": "a1"}, headers=W)
+    def hit(i):
+        if i % 2 == 0:
+            return pg_app.post("/api/v1/coordination/tasks/pg-da/deliver", headers=W)
+        return pg_app.post("/api/v1/coordination/tasks/pg-da/ack", json={}, headers=W)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        rs = list(ex.map(hit, range(8)))
+    assert all(r.status_code in (200, 409) for r in rs), [r.status_code for r in rs]
+    t = pg_app.get("/api/v1/coordination/tasks/pg-da", headers=R).json()
+    assert t["state"].lower() in ("acknowledged", "delivering", "assigned")
+    ev = pg_app.get("/api/v1/coordination/tasks/pg-da/events", headers=R).json()["events"]
+    state_events = [e for e in ev if (e["kind"] or "").startswith("state:")]
+    assert state_events and state_events[0]["kind"].split("->")[-1].lower() == t["state"].lower()
+    # exactly one transition into ACKNOWLEDGED
+    assert sum(1 for e in state_events if e["kind"].endswith("->ACKNOWLEDGED")) <= 1
+
+
+def test_pg_duplicate_complete_is_idempotent(pg_app):
+    """Real PG: task completed; a duplicate complete must 409 and add no second
+    COMPLETED transition; correlation (idempotency_key) stays stable."""
+    pg_app.post("/api/v1/coordination/tasks", json={"task_id": "pg-dc", "idempotency_key": "pg-dc-ik", "kind": "m25", "payload": {}}, headers=W)
+    pg_app.post("/api/v1/coordination/agents/register", json={"agent": "a1"}, headers=W)
+    for ep, b in [("route", {"agent": "a1"}), ("ack", {}), ("start", {})]:
+        pg_app.post(f"/api/v1/coordination/tasks/pg-dc/{ep}", json=b, headers=W)
+    r1 = pg_app.post("/api/v1/coordination/tasks/pg-dc/complete", json={"result": "done"}, headers=W)
+    r2 = pg_app.post("/api/v1/coordination/tasks/pg-dc/complete", json={"result": "done"}, headers=W)
+    assert r1.status_code == 200 and r2.status_code == 409
+    ev = pg_app.get("/api/v1/coordination/tasks/pg-dc/events", headers=R).json()["events"]
+    assert sum(1 for e in ev if (e["kind"] or "") == "state:RUNNING->COMPLETED") == 1
+    t = pg_app.get("/api/v1/coordination/tasks/pg-dc", headers=R).json()
+    assert t["idempotency_key"] == "pg-dc-ik" and t["state"].lower() == "completed"

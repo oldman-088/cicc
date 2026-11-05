@@ -115,3 +115,52 @@ test("M26: client Authorization header is stripped; write token comes from env o
   assert.equal(coordWriteToken({ WEB_BFF_WRITE_TOKEN: "  w-tok " }), "w-tok");
   assert.equal(coordWriteToken({}), "");
 });
+
+// ---- M27: write-boundary hardening ----
+
+test("M27: path/method variations of the write route are rejected", () => {
+  const env = { WEB_BFF_ALLOW_COORD_WRITE: "1", WEB_BFF_WRITE_TOKEN: "w" };
+  // exact route only
+  assert.equal(isCoordWriteAllowed("POST", ["v1", "coordination", "tasks"], env), true);
+  assert.equal(isCoordWriteAllowed("PUT", ["v1", "coordination", "tasks"], env), false);
+  assert.equal(isCoordWriteAllowed("DELETE", ["v1", "coordination", "tasks"], env), false);
+  assert.equal(isCoordWriteAllowed("POST", ["v1", "coordination", "tasks", "extra"], env), false);
+  assert.equal(isCoordWriteAllowed("POST", ["v1", "coordination", "tasks/"], env), false);
+  assert.equal(isCoordWriteAllowed("POST", ["v1", "coordination"], env), false);
+  assert.equal(isCoordWriteAllowed("POST", ["v1", "coordination", "Tasks"], env), false); // case-sensitive
+  assert.equal(isCoordWriteAllowed("POST", ["v1", "ops", "tasks"], env), false);
+  // and the generic write gate stays off even with coord write enabled
+  assert.equal(isWriteAllowed("POST", env), false);
+  assert.equal(isWriteAllowed("DELETE", env), false);
+});
+
+test("M27: DTO validation rejects malformed/unknown/nested-evil payloads", () => {
+  let n = 0; const gen = () => `g${++n}`;
+  const bad = [
+    null, 42, "str", [],
+    { kind: "ok", payload: "not-an-object" },          // payload must be object -> coerced, but check unknown field
+    { kind: "ok", unknown_field: 1 },
+    { kind: "ok", priority: 5.5 },
+    { kind: "ok", priority: "5" },
+    { kind: "ok", depends_on: "notalist" },
+    { kind: "ok", depends_on: Array(51).fill("a") },
+    { kind: "ok", timeout_s: 0 },
+    { kind: "ok", timeout_s: 86400 * 31 },
+    { kind: "ok", requires_approval: "yes" },
+    { kind: "x".repeat(65) },
+    { kind: "ok", task_id: "bad id with spaces" },
+  ];
+  for (const b of bad) assert.equal(validateCoordTaskBody(b, gen).ok, false, JSON.stringify(b)?.slice(0, 60));
+  const good = validateCoordTaskBody({ kind: "frontend_e2e", priority: 3, title: "t", payload: { a: [1, 2] }, depends_on: ["x-1"], timeout_s: 60, requires_approval: false }, gen);
+  assert.equal(good.ok, true);
+  assert.equal(good.value.kind, "frontend_e2e");
+  assert.ok(good.value.idempotency_key.startsWith("g"));
+});
+
+test("M27: read token is injected for GETs; write token is separate and never mixed", () => {
+  const h = new Headers();
+  const out = buildUpstreamHeaders(h, { WEB_BFF_API_TOKEN: "read-tok", WEB_BFF_WRITE_TOKEN: "write-tok" });
+  assert.equal(out.get("Authorization"), "Bearer read-tok"); // GET path uses read token
+  assert.equal(coordWriteToken({ WEB_BFF_API_TOKEN: "read-tok", WEB_BFF_WRITE_TOKEN: "write-tok" }), "write-tok");
+  assert.equal(coordWriteToken({ WEB_BFF_API_TOKEN: "read-tok" }), ""); // no write token configured -> write path disabled
+});

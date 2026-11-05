@@ -171,3 +171,16 @@ def test_heartbeat_documented_fields_persisted(client):
     assert a["meta"]["heartbeat"]["active_tasks"] == 3
     assert a["meta"]["heartbeat"]["meta"] == {"note": "scanning"}
     assert a["meta"]["v"] == 1  # registration meta preserved
+
+
+def test_task_dto_includes_idempotency_key_on_reads(client):
+    """M27: Backup Agent 4 found idempotency_key missing from GET /tasks/{id};
+    it must be serialized so the correlation key is traceable on reads."""
+    r = client.post("/api/v1/coordination/tasks", json={"task_id": "m27-ik", "idempotency_key": "m27-ik-key", "kind": "m27", "payload": {}}, headers=W)
+    assert r.status_code == 201
+    t = client.get("/api/v1/coordination/tasks/m27-ik", headers=R).json()
+    assert t.get("idempotency_key") == "m27-ik-key"
+    lst = client.get("/api/v1/coordination/tasks", headers=R).json()["tasks"]
+    assert any(x["task_id"] == "m27-ik" and x.get("idempotency_key") == "m27-ik-key" for x in lst)
+    ev = client.get("/api/v1/coordination/tasks/m27-ik/events", headers=R).json()["events"]
+    assert ev and ev[0]["kind"] == "created"

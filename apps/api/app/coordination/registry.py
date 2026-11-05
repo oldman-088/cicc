@@ -246,6 +246,7 @@ def list_tasks(s, state: str | None = None, agent: str | None = None, kind: str 
     for t in s.execute(q).scalars().all():
         out.append({
             "id": t.id, "task_id": t.task_id, "event_id": t.event_id, "source": t.source,
+            "idempotency_key": t.idempotency_key,  # M27: correlation key visible on reads (Backup Agent 4 finding)
             "kind": t.kind, "agent": t.agent, "state": normalize_state(t.state), "priority": t.priority,
             "repo": t.repo, "pr_ref": t.pr_ref, "branch_ref": t.branch_ref, "title": t.title,
             "attempts": t.attempts, "result": t.result, "owner": t.owner,

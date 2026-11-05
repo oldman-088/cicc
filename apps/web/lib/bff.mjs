@@ -71,7 +71,8 @@ export function validateCoordTaskBody(obj, genId) {
   const allowed = new Set(["task_id", "idempotency_key", "kind", "priority", "title", "payload", "repo", "pr_ref", "branch_ref", "owner", "depends_on", "timeout_s", "ttl_s", "requires_approval"]);
   for (const k of Object.keys(obj)) if (!allowed.has(k)) return { ok: false, error: `field not allowed: ${k}` };
   if (typeof obj.kind !== "string" || !KIND_RE.test(obj.kind)) return { ok: false, error: "kind invalid" };
-  const out = { kind: obj.kind, payload: obj.payload && typeof obj.payload === "object" && !Array.isArray(obj.payload) ? obj.payload : {} };
+  if (obj.payload !== undefined && (typeof obj.payload !== "object" || obj.payload === null || Array.isArray(obj.payload))) return { ok: false, error: "payload must be an object" };
+  const out = { kind: obj.kind, payload: obj.payload ?? {} };
   if (obj.priority !== undefined) {
     if (!Number.isInteger(obj.priority) || obj.priority < 1 || obj.priority > 10) return { ok: false, error: "priority must be int 1-10" };
     out.priority = obj.priority;
