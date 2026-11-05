@@ -32,3 +32,6 @@ Suite grew to **30 tests** (`e2e/journeys.spec.ts`: investigation create/annotat
 
 ## Update — health/trace + import journeys (2026-11-05)
 Suite grew to **34 tests** (coordination-health unavailable journey; malformed-import rejection journey). First run (42035492189) was 30/34: the health on-demand note only rendered on success (now always visible — a genuine UX fix) and the import alert needed a scoped locator. Run **42035974098: full success (34/34)**, typecheck + 108 unit tests + build green.
+
+## Update — local search journey (2026-11-05)
+Suite grew to **36 tests** (+local cross-data search journey). Run **42038523984: full success (36/36)** with typecheck, 114 unit tests, and build green.
