@@ -30,9 +30,11 @@ ALLOWED_TRANSITIONS = {
     "VALIDATING": {"QUEUED", "WAITING_FOR_APPROVAL", "BLOCKED", "FAILED", "CANCELLED", "EXPIRED"},
     "QUEUED": {"ASSIGNED", "DELIVERING", "ACKNOWLEDGED", "WAITING_FOR_APPROVAL", "FAILED", "RETRYING", "BLOCKED", "CANCELLED", "EXPIRED"},
     "WAITING_FOR_APPROVAL": {"QUEUED", "ASSIGNED", "BLOCKED", "CANCELLED", "EXPIRED", "FAILED"},
-    "ASSIGNED": {"DELIVERING", "ACKNOWLEDGED", "BLOCKED", "FAILED", "CANCELLED", "RETRYING"},
-    "DELIVERING": {"ACKNOWLEDGED", "RUNNING", "FAILED", "RETRYING", "CANCELLED"},
-    "ACKNOWLEDGED": {"RUNNING", "FAILED", "BLOCKED", "CANCELLED"},
+    # M28: QUEUED added to ASSIGNED/DELIVERING/ACKNOWLEDGED — delivery-lease
+    # recovery (recover_abandoned) re-queues abandoned tasks. Additive only.
+    "ASSIGNED": {"DELIVERING", "ACKNOWLEDGED", "BLOCKED", "FAILED", "CANCELLED", "RETRYING", "QUEUED"},
+    "DELIVERING": {"ACKNOWLEDGED", "RUNNING", "FAILED", "RETRYING", "CANCELLED", "QUEUED"},
+    "ACKNOWLEDGED": {"RUNNING", "FAILED", "BLOCKED", "CANCELLED", "QUEUED"},
     "RUNNING": {"COMPLETED", "FAILED", "WAITING_FOR_APPROVAL", "BLOCKED", "CANCELLED", "EXPIRED"},
     "RETRYING": {"QUEUED", "FAILED", "BLOCKED", "CANCELLED"},
     "COMPLETED": set(),
@@ -216,6 +218,31 @@ def backoff_seconds(attempts: int) -> int:
     Base configurable via CICC_COORD_RETRY_BACKOFF_S (default 30)."""
     base = max(0, int(os.getenv("CICC_COORD_RETRY_BACKOFF_S", "30")))
     return min(3600, base * (2 ** max(0, (attempts or 1) - 1)))
+
+
+def lease_seconds(task) -> int:
+    """Delivery/ack lease: per-task timeout_s if set, else CICC_COORD_LEASE_S (default 600)."""
+    if task.timeout_s:
+        return int(task.timeout_s)
+    return max(1, int(os.getenv("CICC_COORD_LEASE_S", "600")))
+
+
+def recover_abandoned(s, now: datetime | None = None) -> list[str]:
+    """M28: delivery-lease recovery. A task in ASSIGNED/DELIVERING/ACKNOWLEDGED
+    whose lease elapsed (worker crashed or never acked) is re-queued exactly
+    once via the guarded transition; a concurrent ack loses the race (409).
+    Returns recovered task_ids."""
+    now = now or utcnow()
+    recovered = []
+    rows = s.execute(select(models.CoordinationTask).where(
+        models.CoordinationTask.state.in_(["ASSIGNED", "DELIVERING", "ACKNOWLEDGED"])
+    )).scalars().all()
+    for t in rows:
+        last = t.updated_at
+        if last and (now - last.replace(tzinfo=timezone.utc)).total_seconds() > lease_seconds(t):
+            if transition(s, t, "QUEUED", f"delivery lease expired after {lease_seconds(t)}s (worker crash/abandon); re-queued"):
+                recovered.append(t.task_id)
+    return recovered
 
 
 def requeue_ready(s, now: datetime | None = None) -> list[str]:

@@ -397,11 +397,12 @@ def sweep(_gate: None = Depends(read_token_dependency), authorization: str | Non
     require_write_token(authorization)
     with ops.SessionLocal() as s:
         expired_tasks = registry.sweep_timeouts(s)
+        recovered = registry.recover_abandoned(s)  # M28: delivery-lease recovery
         requeued = registry.requeue_ready(s)
         expired_approvals = approvals.sweep_expired(s)
         stale_agents = agent_registry.sweep_stale(s)
         s.commit()
-        return {"expired_tasks": expired_tasks, "requeued": requeued,
+        return {"expired_tasks": expired_tasks, "requeued": requeued, "recovered_abandoned": recovered,
                 "expired_approvals": expired_approvals, "stale_agents": stale_agents}
 
 

@@ -98,7 +98,11 @@ def deliver(s, task: models.CoordinationTask) -> dict:
                     "state": task.state, "error": type(e).__name__}
     # no broker: prepare copy-ready payload, record honestly, stay QUEUED
     _record_delivery(s, task.task_id, "human_assisted", None, message_id, "published", (task.attempts or 0) + 1)
-    registry.transition(s, task, "QUEUED", "copy-ready handoff payload prepared (no broker configured)")
+    # M28: re-assert QUEUED only from QUEUED/BLOCKED (historic no-broker paths);
+    # QUEUED is also a lease-recovery target, so deliver() on e.g. ACKNOWLEDGED
+    # must not silently re-queue an already-acked task
+    if registry.normalize_state(task.state) in ("QUEUED", "BLOCKED"):
+        registry.transition(s, task, "QUEUED", "copy-ready handoff payload prepared (no broker configured)")
     return {"delivered": False, "via": "human_assisted", "handoff": handoff, "state": task.state,
             "note": "message prepared, NOT delivered — human/operator handoff required"}
 

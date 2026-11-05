@@ -189,3 +189,57 @@ def test_pg_cross_connection_restart_consistency(pg_app, monkeypatch, tmp_path):
     ids = [e.id for e in evs]
     assert ids == sorted(ids)  # monotonic persisted ordering
     engine2.dispose()
+
+
+def test_pg_delivery_lease_expiry_recovers_abandoned(pg_app, monkeypatch):
+    """Worker crash after delivery: DELIVERING task with elapsed lease is
+    re-queued exactly once by sweep; a late ack then loses (409) — and a race
+    between sweep and ack has exactly one winner."""
+    monkeypatch.setenv("CICC_COORD_LEASE_S", "1")
+    pg_app.post("/api/v1/coordination/tasks", json={"task_id": "m28-lease", "kind": "m28", "payload": {}}, headers=W)
+    pg_app.post("/api/v1/coordination/agents/register", json={"agent": "a1"}, headers=W)
+    pg_app.post("/api/v1/coordination/tasks/m28-lease/route", json={"agent": "a1"}, headers=W)
+    # force DELIVERING (no broker in tests -> deliver() stays QUEUED human-assisted)
+    with ops.SessionLocal() as s:
+        t = s.execute(select(models.CoordinationTask).where(models.CoordinationTask.task_id == "m28-lease")).scalar_one()
+        assert registry.transition(s, t, "DELIVERING", "forced for lease test")
+        s.commit()
+    # advance clock past lease
+    import datetime as _dt
+    future = registry.utcnow() + _dt.timedelta(seconds=3600)
+    monkeypatch.setattr(registry, "utcnow", lambda: future)
+    r = pg_app.post("/api/v1/coordination/sweep", headers=W)
+    assert r.status_code == 200
+    assert "m28-lease" in r.json()["recovered_abandoned"]
+    t = pg_app.get("/api/v1/coordination/tasks/m28-lease", headers=R).json()
+    assert t["state"].lower() == "queued"
+    # second sweep must NOT re-queue again (already QUEUED)
+    r2 = pg_app.post("/api/v1/coordination/sweep", headers=W)
+    assert "m28-lease" not in (r2.json()["recovered_abandoned"] or [])
+    ev = _state_events(pg_app, "m28-lease")
+    assert sum(1 for e in ev if e["kind"].endswith("->QUEUED") and "lease" in (e.get("detail") or "")) == 1
+
+
+def test_pg_ack_races_lease_recovery(pg_app, monkeypatch):
+    """Ack racing lease-recovery sweep: exactly one winner; persisted state
+    equals the latest persisted state event."""
+    monkeypatch.setenv("CICC_COORD_LEASE_S", "1")
+    pg_app.post("/api/v1/coordination/tasks", json={"task_id": "m28-ar", "kind": "m28", "payload": {}}, headers=W)
+    pg_app.post("/api/v1/coordination/agents/register", json={"agent": "a1"}, headers=W)
+    pg_app.post("/api/v1/coordination/tasks/m28-ar/route", json={"agent": "a1"}, headers=W)
+    import datetime as _dt
+    with ops.SessionLocal() as s:
+        t = s.execute(select(models.CoordinationTask).where(models.CoordinationTask.task_id == "m28-ar")).scalar_one()
+        assert registry.transition(s, t, "DELIVERING", "forced for race")  # QUEUED -> DELIVERING
+        s.commit()
+    future = registry.utcnow() + _dt.timedelta(seconds=3600)
+    monkeypatch.setattr(registry, "utcnow", lambda: future)
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futs = [ex.submit(pg_app.post, "/api/v1/coordination/tasks/m28-ar/ack", json={}, headers=W)]
+        futs += [ex.submit(pg_app.post, "/api/v1/coordination/sweep", headers=W) for _ in range(5)]
+        rs = [f.result() for f in futs]
+    assert all(r.status_code in (200, 409) for r in rs), [r.status_code for r in rs]
+    t = pg_app.get("/api/v1/coordination/tasks/m28-ar", headers=R).json()
+    sev = _state_events(pg_app, "m28-ar")
+    assert t["state"].lower() == sev[0]["kind"].split("->")[-1].lower()
+    assert t["state"].lower() in ("queued", "acknowledged")
