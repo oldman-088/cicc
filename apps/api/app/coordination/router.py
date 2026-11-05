@@ -182,6 +182,23 @@ def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None =
         return {"tasks": registry.list_tasks(s, state, agent, kind, limit, dead_letter)}
 
 
+@router.get("/health")
+def coordination_health(_gate: None = Depends(read_token_dependency)):
+    """M28: actionable health with explicit statuses + reasons (read-only)."""
+    with ops.SessionLocal() as s:
+        return registry.health(s)
+
+
+@router.get("/tasks/{task_id}/trace")
+def get_task_trace(task_id: str, _gate: None = Depends(read_token_dependency)):
+    """M28: full correlation trace (ids, events, deliveries, approval)."""
+    with ops.SessionLocal() as s:
+        tr = registry.trace(s, task_id)
+        if tr is None:
+            raise HTTPException(status_code=404, detail="task_not_found")
+        return tr
+
+
 @router.get("/tasks/dag")
 def get_dag(_gate: None = Depends(read_token_dependency), limit: int = Query(500, ge=1, le=2000)):
     with ops.SessionLocal() as s:

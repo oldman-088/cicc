@@ -76,6 +76,8 @@ def contract_v1() -> dict:
             "DecisionIn": ["decided_by", "note?"],
             "AgentRegisterIn": ["agent", "specialization?", "capabilities?", "version?", "meta?"],
             "AgentHeartbeatIn": ["status?", "active_tasks?", "meta?"],
+            "GET /health component": ["key", "status", "detail", "reasons"],
+            "GET /tasks/{id}/trace": ["task_id", "correlation.idempotency_key", "correlation.event_id", "state", "agent", "attempts", "dead_letter", "events[]", "deliveries[]", "approvals[]"],
             "TaskDTO (GET /tasks, /tasks/{id})": ["id", "task_id", "event_id", "source", "idempotency_key", "kind", "agent", "state", "priority", "repo", "pr_ref", "branch_ref", "title", "attempts", "result", "owner", "depends_on", "timeout_s", "expires_at", "dead_letter", "routing_explanation", "progress", "next_retry_at", "payload", "handoff", "created_at", "updated_at"],
             "AgentDTO (GET /agents)": ["agent", "specialization", "capabilities", "status", "stale", "health", "version", "meta", "last_heartbeat", "registered_at", "active_tasks", "completed", "failed", "retries", "by_state"],
         },

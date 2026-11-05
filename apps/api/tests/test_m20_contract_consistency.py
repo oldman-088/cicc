@@ -184,3 +184,46 @@ def test_task_dto_includes_idempotency_key_on_reads(client):
     assert any(x["task_id"] == "m27-ik" and x.get("idempotency_key") == "m27-ik-key" for x in lst)
     ev = client.get("/api/v1/coordination/tasks/m27-ik/events", headers=R).json()["events"]
     assert ev and ev[0]["kind"] == "created"
+
+
+def test_m28_health_endpoint_actionable(client):
+    """M28: /coordination/health exposes explicit per-component status + reasons."""
+    client.post("/api/v1/coordination/agents/register", json={"agent": "h1"}, headers=W)
+    r = client.get("/api/v1/coordination/health", headers=R)
+    assert r.status_code == 200
+    h = r.json()
+    assert h["overall"] in ("healthy", "degraded", "not_configured", "unknown", "stale", "failed", "unavailable")
+    keys = {c["key"]: c for c in h["components"]}
+    assert {"agents", "tasks", "broker", "deliveries", "approvals"} <= set(keys)
+    assert keys["broker"]["status"] == "not_configured"  # no RabbitMQ in tests
+    assert any("no broker" in x for x in keys["broker"]["reasons"])
+    assert isinstance(h["reasons"], list)
+    # stale agent -> degraded with a concrete reason
+    import datetime as _dt
+    from app import ops as _ops
+    from app import models as _m
+    from sqlalchemy import select as _sel
+    with _ops.SessionLocal() as s:
+        a = s.execute(_sel(_m.CoordinationAgent).where(_m.CoordinationAgent.agent == "h1")).scalar_one()
+        a.last_heartbeat = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=3600)
+        s.commit()
+    h2 = client.get("/api/v1/coordination/health", headers=R).json()
+    assert h2["components"][[c["key"] for c in h2["components"]].index("agents")]["status"] == "degraded"
+    assert any("h1" in x for x in h2["reasons"])
+
+
+def test_m28_task_trace_endpoint(client):
+    """M28: /tasks/{id}/trace correlates id, idempotency key, events, deliveries."""
+    client.post("/api/v1/coordination/tasks", json={"task_id": "m28-tr", "idempotency_key": "m28-tr-ik", "kind": "m28", "payload": {}}, headers=W)
+    client.post("/api/v1/coordination/agents/register", json={"agent": "a1"}, headers=W)
+    client.post("/api/v1/coordination/tasks/m28-tr/route", json={"agent": "a1"}, headers=W)
+    client.post("/api/v1/coordination/tasks/m28-tr/deliver", headers=W)
+    r = client.get("/api/v1/coordination/tasks/m28-tr/trace", headers=R)
+    assert r.status_code == 200
+    tr = r.json()
+    assert tr["task_id"] == "m28-tr"
+    assert tr["correlation"]["idempotency_key"] == "m28-tr-ik"
+    kinds = [e["kind"] for e in tr["events"]]
+    assert kinds[0] == "created" and any(k.startswith("state:") for k in kinds)
+    assert isinstance(tr["deliveries"], list) and len(tr["deliveries"]) >= 1
+    assert client.get("/api/v1/coordination/tasks/nope/trace", headers=R).status_code == 404

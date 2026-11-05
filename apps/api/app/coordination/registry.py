@@ -324,6 +324,112 @@ def progress(s, task_id: str, percent: int, note: str | None = None) -> dict | N
     return {"task_id": task_id, "progress": percent, "state": normalize_state(t.state)}
 
 
+def health(s) -> dict:
+    """M28 P1: actionable coordination health. Every component carries an
+    explicit status (healthy|degraded|stale|failed|unavailable|not_configured|
+    unknown) plus human-readable `reasons` — never a bare generic indicator."""
+    from sqlalchemy import func as _func
+    now = utcnow()
+    components = []
+    reasons = []
+
+    def comp(key, status, detail="", comp_reasons=None):
+        components.append({"key": key, "status": status, "detail": detail,
+                           "reasons": comp_reasons or []})
+        for r in (comp_reasons or []):
+            reasons.append(f"{key}: {r}")
+
+    # --- agents ---
+    agents = s.execute(select(models.CoordinationAgent)).scalars().all()
+    active = [a for a in agents if a.last_heartbeat and (now - a.last_heartbeat.replace(tzinfo=timezone.utc)).total_seconds() <= 300]
+    stale = [a.agent for a in agents if a.agent not in {x.agent for x in active}]
+    comp("agents", "healthy" if agents and not stale else ("degraded" if agents else "not_configured"),
+         f"{len(active)} active, {len(stale)} stale/unknown of {len(agents)} registered",
+         [f"agent '{a}' has no fresh heartbeat (stale/unavailable)" for a in stale])
+
+    # --- tasks ---
+    tasks = s.execute(select(models.CoordinationTask)).scalars().all()
+    by_state = {}
+    dead = []
+    overdue_retry = []
+    for t in tasks:
+        st = normalize_state(t.state)
+        by_state[st] = by_state.get(st, 0) + 1
+        if t.dead_letter:
+            dead.append(t.task_id)
+        if st == "RETRYING" and t.next_retry_at and t.next_retry_at.replace(tzinfo=timezone.utc) <= now:
+            overdue_retry.append(t.task_id)
+    t_reasons = ([f"dead-lettered task(s): {', '.join(dead[:10])}" for _ in [0] if dead]
+                 + [f"retry overdue (backoff elapsed, not re-queued): {', '.join(overdue_retry[:10])}" for _ in [0] if overdue_retry])
+    comp("tasks", "degraded" if (dead or overdue_retry) else "healthy",
+         f"{len(tasks)} total; by state: {by_state}", t_reasons)
+
+    # --- broker ---
+    broker = os.getenv("RABBITMQ_AMQP_URL")
+    comp("broker", "not_configured" if not broker else "unknown",
+         "RABBITMQ_AMQP_URL not set — human-assisted delivery only" if not broker else "configured; live check not performed here",
+         [] if broker else ["no broker configured: deliveries are prepared (human-assisted), NOT broker-delivered"])
+
+    # --- deliveries ---
+    deliv = s.execute(select(models.CoordinationDelivery)).scalars().all()
+    unconfirmed = [d.task_id for d in deliv if d.status != "confirmed"]
+    comp("deliveries", "degraded" if unconfirmed else "healthy",
+         f"{len(deliv)} attempts; {sum(1 for d in deliv if d.status == 'confirmed')} confirmed",
+         [f"unconfirmed delivery attempt(s) on: {', '.join(unconfirmed[:10])}" for _ in [0] if unconfirmed])
+
+    # --- approvals ---
+    appr = s.execute(select(models.CoordinationApproval)).scalars().all()
+    pending = [a for a in appr if a.status == "pending"]
+    overdue_appr = []
+    for a in pending:
+        exp = getattr(a, "expires_at", None)
+        if exp and exp.replace(tzinfo=timezone.utc) <= now:
+            overdue_appr.append(a.task_id)
+    comp("approvals", "degraded" if overdue_appr else ("healthy" if pending or appr else "not_configured"),
+         f"{len(pending)} pending of {len(appr)} total",
+         [f"approval pending past expiry on: {', '.join(overdue_appr[:10])}" for _ in [0] if overdue_appr])
+
+    sev = {"healthy": 0, "not_configured": 1, "unknown": 2, "unavailable": 3, "stale": 3,
+           "degraded": 4, "failed": 5}
+    overall = max((sev.get(c["status"], 2) for c in components), default=0)
+    overall = {v: k for k, v in sev.items()}[overall]
+    return {"overall": overall, "components": components, "reasons": reasons,
+            "at": _iso(now)}
+
+
+def trace(s, task_id: str) -> dict | None:
+    """M28 P1: full correlation trace for one task — identifiers, lifecycle
+    events (chronological), delivery attempts, approval decision. Read-only."""
+    t = s.execute(select(models.CoordinationTask).where(models.CoordinationTask.task_id == task_id)).scalar_one_or_none()
+    if t is None:
+        return None
+    evs = s.execute(
+        select(models.CoordinationTaskEvent).where(models.CoordinationTaskEvent.task_id == task_id)
+        .order_by(models.CoordinationTaskEvent.id)
+    ).scalars().all()
+    dls = s.execute(
+        select(models.CoordinationDelivery).where(models.CoordinationDelivery.task_id == task_id)
+        .order_by(models.CoordinationDelivery.id)
+    ).scalars().all()
+    appr = s.execute(
+        select(models.CoordinationApproval).where(models.CoordinationApproval.task_id == task_id)
+        .order_by(models.CoordinationApproval.id)
+    ).scalars().all()
+    return {
+        "task_id": t.task_id,
+        "correlation": {"idempotency_key": t.idempotency_key, "event_id": t.event_id},
+        "state": normalize_state(t.state),
+        "agent": t.agent,
+        "attempts": t.attempts,
+        "dead_letter": bool(t.dead_letter),
+        "events": [{"id": e.id, "at": _iso(e.at), "kind": e.kind, "detail": e.detail} for e in evs],
+        "deliveries": [{"id": d.id, "channel": d.channel, "queue": d.queue, "message_id": d.message_id,
+                        "status": d.status, "attempt": d.attempt, "at": _iso(d.at)} for d in dls],
+        "approvals": [{"id": a.id, "status": a.status, "requested_by": a.requested_by,
+                       "decided_by": a.decided_by, "at": _iso(a.decided_at or a.created_at)} for a in appr],
+    }
+
+
 def metrics(s) -> dict:
     """Aggregate coordination metrics (read-only, honest counts from DB)."""
     from sqlalchemy import func as _func

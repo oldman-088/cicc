@@ -160,7 +160,9 @@ def report(s, task_id: str, action: str, result: str | None = None) -> dict | No
         applied = registry.transition(s, t, to, result or action)  # authoritative
     if not applied:
         registry.record_event(s, task_id, f"report:{action}", f"ignored in state {cur}")
-    if action == "fail":
+    if action == "fail" and applied:
+        # M28 fix: dead-letter policy only when the fail was actually applied;
+        # a rejected duplicate fail must not record a second dead_letter event
         dead_letter(s, t, result or "reported failure")
     if result:
         t.result = result
