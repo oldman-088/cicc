@@ -89,23 +89,31 @@ class InMemoryVulnerabilityStore:
             for (tenant, cve), row in self.rows.items()
             if tenant == tenant_id
         ]
+        # Severity/KEV are written into `details` by the mapping layer; the enrichment
+        # block may carry them on rows from hosts that only fill it. Read details
+        # first, enrichment as fallback (same dual-read rule as shape_record).
+        def _field(row: _Row, key: str) -> object:
+            value = row.details.get(key)
+            if value is None:
+                value = (row.details.get(ENRICHMENT_KEY) or {}).get(key)
+            return value
+
         if severity is not None:
             wanted = severity.strip().lower()
             rows = [
                 (cve, row)
                 for cve, row in rows
-                if str((row.details.get(ENRICHMENT_KEY) or {}).get("severity", "")).lower()
-                == wanted
+                if str(_field(row, "severity") or "").lower() == wanted
             ]
         if kev_only:
             rows = [
                 (cve, row)
                 for cve, row in rows
-                if bool((row.details.get(ENRICHMENT_KEY) or {}).get("kev"))
+                if bool(_field(row, "kev"))
             ]
 
         def severity_key(row: _Row) -> str:
-            return str((row.details.get(ENRICHMENT_KEY) or {}).get("severity", ""))
+            return str(_field(row, "severity") or "")
 
         reverse = order.startswith("-")
         rows.sort(

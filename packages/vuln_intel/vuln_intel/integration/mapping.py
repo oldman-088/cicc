@@ -29,7 +29,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from ..schema import NormalizedVulnerability, Origin, utcnow
+from ..schema import NormalizedVulnerability, Origin, Severity, utcnow
 
 __all__ = [
     "ENRICHMENT_KEY",
@@ -132,7 +132,7 @@ def to_source_details(
         if record.details
         else [],
         "summary": record.summary,
-        "severity": record.effective_severity.value,
+        "severity": (record.effective_severity or Severity.UNKNOWN).value,
         "cvss": [score.as_dict() for score in record.cvss],
         "cwe": list(record.cwe),
         "references": [{"url": r.url, "kind": r.kind} for r in record.references],
