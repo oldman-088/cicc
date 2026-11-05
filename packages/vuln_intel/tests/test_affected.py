@@ -61,14 +61,18 @@ class TestVersionOrdering:
             ("1.0-rc1", "1.0.1", VersionScheme.MAVEN, -1),
             ("1.0-sp1", "1.0", VersionScheme.MAVEN, 1),
             ("2.0", "1.9", VersionScheme.MAVEN, 1),
-            # go: v-prefix and pseudo-versions
+            # go: v-prefix, prereleases and pseudo-versions.
+            # A pseudo-version is a *pre-release* of the tag it follows (see
+            # go.dev/ref/mod: "Pre-release versions sort before the corresponding
+            # release versions", and a pseudo-version is a pre-release "that encodes
+            # a revision identifier"), so v0.0.0-... sorts BELOW v0.0.0.  This
+            # assertion used to expect +1, which asserted that a commit carrying a
+            # fix sorted above that same release tag -- it would have reported the
+            # vulnerable pseudo-version as fixed.
             ("v1.2.3", "v1.2.4", VersionScheme.GO, -1),
-            (
-                "v0.0.0-20210101120000-abcdef123456",
-                "v0.0.0",
-                VersionScheme.GO,
-                1,
-            ),
+            ("v0.0.0-20210101120000-abcdef123456", "v0.0.0", VersionScheme.GO, -1),
+            ("v1.2.3-pre", "v1.2.3", VersionScheme.GO, -1),
+            ("v1.2.3", "v2.0.0+incompatible", VersionScheme.GO, -1),
         ],
     )
     def test_ordering_rules(self, left, right, scheme, expected):
