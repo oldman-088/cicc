@@ -30,6 +30,14 @@ from .nvd import LAST_VERIFIED_LIVE as NVD_LAST_VERIFIED_LIVE
 from .nvd import NVD_API, NvdConnector
 from .osv import LAST_VERIFIED_LIVE as OSV_LAST_VERIFIED_LIVE
 from .osv import OSV_API, AdvisoryOnly, OsvConnector, OsvResult
+from .ubuntu import (
+    LAST_VERIFIED_LIVE as UBUNTU_LAST_VERIFIED_LIVE,
+)
+from .ubuntu import (
+    USN_DB_URL,
+    UbuntuSnapshot,
+    UbuntuUsnConnector,
+)
 
 __all__ = [
     "DEBIAN_LAST_VERIFIED_LIVE",
@@ -40,6 +48,8 @@ __all__ = [
     "NVD_LAST_VERIFIED_LIVE",
     "OSV_API",
     "OSV_LAST_VERIFIED_LIVE",
+    "UBUNTU_LAST_VERIFIED_LIVE",
+    "USN_DB_URL",
     "AdvisoryOnly",
     "DebianTrackerConnector",
     "DebianTrackerSnapshot",
@@ -51,6 +61,8 @@ __all__ = [
     "NvdConnector",
     "OsvConnector",
     "OsvResult",
+    "UbuntuSnapshot",
+    "UbuntuUsnConnector",
     "UnavailableEpssProvider",
     "debian_to_vulnerability_records",
     "parse_epss_response",
