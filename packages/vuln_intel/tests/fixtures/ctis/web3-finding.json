@@ -1,0 +1,376 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openctem.io/ctis/2.0/web3-finding.json",
+  "title": "Web3 Vulnerability Details",
+  "description": "Web3 profile: details of a smart-contract finding (a vulnerability or weakness finding with a web3 block). Vendor and product vocabularies are open tokens.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "vulnerability_class": {
+      "$ref": "#/$defs/Web3VulnerabilityClass"
+    },
+    "swc_id": {
+      "type": "string",
+      "pattern": "^SWC-\\d{3}$",
+      "description": "SWC Registry ID (e.g., SWC-107)"
+    },
+    "contract_address": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{40}$"
+    },
+    "chain_id": {
+      "type": "integer",
+      "description": "EVM Chain ID"
+    },
+    "chain": {
+      "type": "string",
+      "description": "Chain name",
+      "maxLength": 1024
+    },
+    "function_signature": {
+      "type": "string",
+      "description": "Affected function signature (e.g., withdraw(uint256))",
+      "maxLength": 1024
+    },
+    "function_selector": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{8}$",
+      "description": "Function selector (4 bytes)"
+    },
+    "vulnerable_pattern": {
+      "type": "string",
+      "description": "Vulnerable code pattern",
+      "maxLength": 4096
+    },
+    "bytecode_offset": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Bytecode offset"
+    },
+    "is_exploitable_on_mainnet": {
+      "type": "boolean"
+    },
+    "estimated_impact_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "affected_value_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "attack_vector": {
+      "type": "string",
+      "description": "Attack vector description",
+      "maxLength": 1024
+    },
+    "poc": {
+      "$ref": "#/$defs/Web3POC"
+    },
+    "related_tx_hashes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^0x[a-fA-F0-9]{64}$"
+      },
+      "maxItems": 1000
+    },
+    "attacker_addresses": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^0x[a-fA-F0-9]{40}$"
+      },
+      "maxItems": 1000
+    },
+    "detection_tool": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "description": "Open token (vendor neutral since 2.0). Known values: slither, mythril, securify, manticore, echidna, foundry, aderyn, wake, 4naly3er, solhint, mythx, certora, custom"
+    },
+    "detection_confidence": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "is_false_positive": {
+      "type": "boolean"
+    },
+    "gas_issue": {
+      "$ref": "#/$defs/GasIssue"
+    },
+    "access_control": {
+      "$ref": "#/$defs/AccessControlIssue"
+    },
+    "reentrancy": {
+      "$ref": "#/$defs/ReentrancyIssue"
+    },
+    "oracle_manipulation": {
+      "$ref": "#/$defs/OracleManipulationIssue"
+    },
+    "flash_loan": {
+      "$ref": "#/$defs/FlashLoanIssue"
+    }
+  },
+  "$defs": {
+    "Web3VulnerabilityClass": {
+      "type": "string",
+      "description": "Web3 vulnerability classification",
+      "enum": [
+        "reentrancy",
+        "integer_overflow",
+        "integer_underflow",
+        "access_control",
+        "unchecked_call",
+        "delegate_call",
+        "self_destruct",
+        "tx_origin",
+        "timestamp_dependence",
+        "blockhash_dependence",
+        "flash_loan_attack",
+        "oracle_manipulation",
+        "front_running",
+        "sandwich_attack",
+        "slippage_attack",
+        "price_manipulation",
+        "governance_attack",
+        "liquidity_drain",
+        "mev_vulnerability",
+        "honeypot",
+        "hidden_mint",
+        "hidden_fee",
+        "blacklist_abuse",
+        "fake_renounce",
+        "storage_collision",
+        "uninitialized_proxy",
+        "upgrade_vulnerability",
+        "weak_randomness",
+        "signature_malleability",
+        "replay_attack",
+        "dos_gas_limit",
+        "unbounded_loop",
+        "dos_block_stuffing",
+        "business_logic",
+        "invariant_violation"
+      ]
+    },
+    "Web3POC": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Proof of concept details",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "transaction",
+            "script",
+            "foundry_test",
+            "hardhat_test"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "description": "POC code or script",
+          "maxLength": 65536
+        },
+        "tx_data": {
+          "type": "string",
+          "description": "Transaction data",
+          "maxLength": 65536
+        },
+        "expected_outcome": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "tested_on": {
+          "type": "string",
+          "enum": [
+            "mainnet_fork",
+            "testnet",
+            "local"
+          ]
+        },
+        "fork_block_number": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "GasIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Gas optimization issue details",
+      "properties": {
+        "current_gas": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "optimized_gas": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "savings_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "suggestion": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "AccessControlIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Access control vulnerability details",
+      "properties": {
+        "missing_modifier": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "unprotected_function": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "callable_by": {
+          "type": "string",
+          "enum": [
+            "anyone",
+            "owner_only",
+            "role_based",
+            "whitelist"
+          ]
+        },
+        "escalation_path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "missing_role_check": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      }
+    },
+    "ReentrancyIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Reentrancy vulnerability details",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "cross_function",
+            "cross_contract",
+            "read_only",
+            "single_function"
+          ]
+        },
+        "external_call": {
+          "type": "string",
+          "description": "Vulnerable external call",
+          "maxLength": 1024
+        },
+        "state_modified_after_call": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "entry_point": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "callback": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "OracleManipulationIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Oracle manipulation vulnerability details",
+      "properties": {
+        "oracle_type": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Open token (vendor neutral since 2.0). Known values: chainlink, uniswap_twap, uniswap_spot, band, tellor, custom"
+        },
+        "oracle_address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "manipulation_method": {
+          "type": "string",
+          "enum": [
+            "flash_loan",
+            "sandwich",
+            "time_manipulation",
+            "multi_block"
+          ]
+        },
+        "price_impact_percent": {
+          "type": "number",
+          "minimum": 0
+        },
+        "missing_checks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "staleness_check",
+              "min_answer_check",
+              "max_answer_check",
+              "sequencer_check",
+              "deviation_check"
+            ]
+          },
+          "maxItems": 1000
+        }
+      }
+    },
+    "FlashLoanIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Flash loan attack vulnerability details",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Open token (vendor neutral since 2.0). Known values: aave, dydx, uniswap, balancer, compound, maker"
+        },
+        "attack_type": {
+          "type": "string",
+          "enum": [
+            "price_manipulation",
+            "governance_attack",
+            "collateral_theft",
+            "arbitrage",
+            "liquidation"
+          ]
+        },
+        "required_capital_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "potential_profit_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "attack_steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "maxItems": 1000
+        }
+      }
+    }
+  }
+}

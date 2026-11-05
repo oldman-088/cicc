@@ -1,0 +1,1047 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openctem.io/ctis/2.0/asset.json",
+  "title": "CTIS Asset",
+  "description": "An observed asset. Its identity is AssetKey(type, canonical value); receivers compute the key and never trust a producer's.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "value"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "Document-local reference (required): findings, relationships, dependencies and endpoints name the asset by it"
+    },
+    "type": {
+      "$ref": "#/$defs/AssetType"
+    },
+    "value": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "The asset's value in the canonical form of its type (spec section Canonical forms)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name",
+      "maxLength": 512
+    },
+    "description": {
+      "type": "string",
+      "description": "Asset description",
+      "maxLength": 32768
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "description": "Categorization tags",
+      "maxItems": 1000
+    },
+    "criticality": {
+      "$ref": "#/$defs/Criticality"
+    },
+    "confidence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Confidence score (0-100)"
+    },
+    "technical": {
+      "$ref": "#/$defs/AssetTechnical"
+    },
+    "compliance": {
+      "$ref": "#/$defs/AssetCompliance"
+    },
+    "is_internet_accessible": {
+      "type": "boolean",
+      "description": "Whether the asset is reachable from the internet. Absent means unknown; false means verified not reachable."
+    },
+    "identifiers": {
+      "$ref": "#/$defs/AssetIdentifiers"
+    },
+    "identity_hints": {
+      "$ref": "#/$defs/IdentityHints"
+    },
+    "technologies": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "Technologies the asset runs, as a fingerprinting tool identified them",
+      "items": {
+        "$ref": "#/$defs/Technology"
+      }
+    },
+    "environment": {
+      "$ref": "#/$defs/Environment"
+    },
+    "owners": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "Who owns the asset",
+      "items": {
+        "$ref": "#/$defs/AssetOwner"
+      }
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the producer first observed the asset",
+      "maxLength": 64
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the producer last observed the asset",
+      "maxLength": 64
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "active",
+        "gone"
+      ],
+      "description": "State of the asset. gone only on an authoritative signal named by state_reason; every other absence is not seen"
+    },
+    "state_reason": {
+      "type": "string",
+      "enum": [
+        "name_gone",
+        "resource_deleted",
+        "inventory_removed"
+      ],
+      "description": "The authoritative signal behind state gone"
+    },
+    "source_refs": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "report.json#/$defs/SourceRef"
+      },
+      "description": "The producer's own identifiers of the asset in its own systems"
+    },
+    "properties": {
+      "$ref": "report.json#/$defs/Properties"
+    },
+    "extensions": {
+      "$ref": "report.json#/$defs/Extensions"
+    }
+  },
+  "$defs": {
+    "Environment": {
+      "type": "string",
+      "enum": [
+        "production",
+        "staging",
+        "development",
+        "test",
+        "unknown"
+      ],
+      "description": "Deployment environment; unknown is the fallback"
+    },
+    "AssetOwner": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One owner of the asset",
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "team",
+            "person",
+            "group"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "x-ctis-pii": true,
+          "description": "Name, handle or e-mail of the owner; personal data when kind is person"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "technical",
+            "business",
+            "security"
+          ]
+        }
+      }
+    },
+    "Technology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "cpe": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "CPE 2.3 name"
+        },
+        "categories": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "confidence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "AssetType": {
+      "type": "string",
+      "enum": [
+        "domain_name",
+        "ip_address",
+        "ip_range",
+        "certificate",
+        "autonomous_system",
+        "web_origin",
+        "web_application",
+        "api",
+        "mobile_app",
+        "saas_application",
+        "service",
+        "repository",
+        "package",
+        "container_image",
+        "ai_model",
+        "cloud_account",
+        "cloud_resource",
+        "storage",
+        "database",
+        "serverless",
+        "container_registry",
+        "host",
+        "container",
+        "kubernetes_cluster",
+        "kubernetes_namespace",
+        "kubernetes_workload",
+        "endpoint_device",
+        "iot_device",
+        "ot_device",
+        "network_device",
+        "vpc",
+        "subnet",
+        "load_balancer",
+        "firewall",
+        "identity",
+        "smart_contract",
+        "wallet",
+        "nft_collection",
+        "defi_protocol",
+        "token",
+        "blockchain",
+        "unclassified"
+      ],
+      "description": "Asset type. Each type has one canonical value form (spec section Canonical forms)."
+    },
+    "Criticality": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "description": "Business criticality of the asset"
+    },
+    "AssetTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Type-specific technical details",
+      "properties": {
+        "domain": {
+          "$ref": "#/$defs/DomainTechnical"
+        },
+        "ip_address": {
+          "$ref": "#/$defs/IPAddressTechnical"
+        },
+        "repository": {
+          "$ref": "#/$defs/RepositoryTechnical"
+        },
+        "certificate": {
+          "$ref": "#/$defs/CertificateTechnical"
+        },
+        "cloud": {
+          "$ref": "#/$defs/CloudTechnical"
+        },
+        "service": {
+          "$ref": "#/$defs/ServiceTechnical"
+        },
+        "http": {
+          "$ref": "#/$defs/HTTPTechnical"
+        },
+        "identity": {
+          "$ref": "#/$defs/IdentityTechnical"
+        },
+        "network_device": {
+          "$ref": "#/$defs/NetworkDeviceTechnical"
+        },
+        "web3": {
+          "$ref": "web3-asset.json"
+        }
+      }
+    },
+    "DomainTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "registrar": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "registered_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "nameservers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "maxItems": 1000
+        },
+        "dns_records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DNSRecord"
+          },
+          "maxItems": 1000
+        },
+        "whois": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "x-ctis-pii": true,
+          "maxProperties": 1000
+        }
+      }
+    },
+    "DNSRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name",
+        "value"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{1,16}$",
+          "description": "RR type mnemonic verbatim (A, AAAA, CNAME, MX, TXT, NS, SOA, PTR, SRV, CAA ...)"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "ttl": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time to live in seconds"
+        }
+      }
+    },
+    "IPAddressTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "integer",
+          "enum": [
+            4,
+            6
+          ]
+        },
+        "hostname": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "asn": {
+          "type": "integer"
+        },
+        "asn_org": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "country": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO 3166-1 alpha-2 country code"
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "geolocation": {
+          "$ref": "#/$defs/Geolocation"
+        }
+      }
+    },
+    "Geolocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "accuracy": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "RepositoryTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Source-code host, an open token (github, gitlab, bitbucket, azure_devops)"
+        },
+        "owner": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "default_branch": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "visibility": {
+          "type": "string",
+          "enum": [
+            "public",
+            "private",
+            "internal"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "description": "Repository web URL (http or https)"
+        },
+        "languages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "maxProperties": 1000
+        },
+        "stars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "forks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_commit_sha": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "last_commit_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      }
+    },
+    "CertificateTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serial_number": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "subject_cn": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "subject_alt_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "Subject alternative names",
+          "maxItems": 1000
+        },
+        "issuer_cn": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "issuer_org": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "not_before": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "not_after": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "signature_algorithm": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "key_algorithm": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "key_size": {
+          "type": "integer"
+        },
+        "sha256_fingerprint": {
+          "type": "string",
+          "description": "SHA-256 of the DER, 64 lowercase hex digits; equals the asset value",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "is_self_signed": {
+          "type": "boolean"
+        },
+        "is_wildcard": {
+          "type": "boolean"
+        }
+      }
+    },
+    "CloudTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Cloud provider, an open token (aws, azure, gcp, oci, alibaba)"
+        },
+        "account_id": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "region": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "zone": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "resource_type": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "resource_id": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "arn": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "maxProperties": 1000
+        }
+      }
+    },
+    "IdentityHints": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a scanner observed about a host that helps match it to the same host seen by another tool. Remote observations, weaker than identifiers.",
+      "properties": {
+        "fqdn": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "netbios_name": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "mac_addresses": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "os_cpe": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "CPE of the detected operating system"
+        },
+        "cloud_resource_id": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "agent_id": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "Id of the scanner's agent on the host; unique per scanner, not across scanners"
+        }
+      }
+    },
+    "AssetIdentifiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Identifiers that stay the same when the asset is renamed or readdressed. In order of trust: machine_id, cloud_resource_id, bios_uuid, serial_number, mac_addresses. scm_repo_id identifies a repository.",
+      "properties": {
+        "machine_id": {
+          "type": "string",
+          "description": "Host ID read by a sensor on the host: /etc/machine-id (Linux), MachineGuid (Windows), IOPlatformUUID (macOS)",
+          "maxLength": 1024
+        },
+        "cloud_resource_id": {
+          "type": "string",
+          "description": "Cloud instance ID, VM ID or resource ARN",
+          "maxLength": 1024
+        },
+        "bios_uuid": {
+          "type": "string",
+          "description": "SMBIOS system UUID",
+          "maxLength": 1024
+        },
+        "serial_number": {
+          "type": "string",
+          "description": "Hardware serial number",
+          "maxLength": 1024
+        },
+        "mac_addresses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "MAC addresses of the host's network interfaces. Receivers ignore locally administered, multicast and known shared addresses.",
+          "maxItems": 1000
+        },
+        "scm_repo_id": {
+          "type": "string",
+          "description": "Repository ID assigned by the source-code host (GitHub repository ID, GitLab project ID)",
+          "maxLength": 1024
+        }
+      }
+    },
+    "AssetCompliance": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "CTEM compliance context for an asset",
+      "properties": {
+        "frameworks": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "finding.json#/$defs/ComplianceFramework"
+          },
+          "description": "Compliance frameworks the asset is in scope for (framework registry tokens)"
+        },
+        "data_classification": {
+          "type": "string",
+          "enum": [
+            "public",
+            "internal",
+            "confidential",
+            "restricted"
+          ],
+          "description": "Data classification level"
+        },
+        "has_pii": {
+          "type": "boolean",
+          "description": "The asset holds personally identifiable information"
+        },
+        "has_phi": {
+          "type": "boolean",
+          "description": "The asset holds protected health information"
+        }
+      }
+    },
+    "ServiceTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The one shape of a network service: technical details of a service asset (value host:port/transport), linked from its host or address by an exposes relationship",
+      "required": [
+        "port",
+        "transport"
+      ],
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Port number"
+        },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "tcp",
+            "udp",
+            "sctp"
+          ],
+          "description": "Transport protocol"
+        },
+        "app_protocol": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,13}[a-z0-9])?$",
+          "description": "Application protocol, an IANA service name (http, https, ssh, smtp, domain, microsoft-ds ...)",
+          "maxLength": 1024
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed",
+            "filtered"
+          ],
+          "description": "Port state"
+        },
+        "product": {
+          "type": "string",
+          "description": "Product name (OpenSSH, nginx)",
+          "maxLength": 1024
+        },
+        "version": {
+          "type": "string",
+          "description": "Product version",
+          "maxLength": 1024
+        },
+        "cpe": {
+          "type": "string",
+          "description": "CPE 2.3 name",
+          "maxLength": 1024
+        },
+        "banner": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Banner as the probe saw it (plain text)"
+        },
+        "extra_info": {
+          "type": "string",
+          "description": "Extra information from the probe (plain text)",
+          "maxLength": 4096
+        },
+        "is_tls": {
+          "type": "boolean",
+          "description": "The service speaks TLS"
+        },
+        "tls_version": {
+          "$ref": "#/$defs/TLSVersion"
+        },
+        "is_auth_required": {
+          "type": "boolean",
+          "description": "Authentication is required"
+        },
+        "auth_methods": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "description": "Authentication methods offered (password, publickey)"
+        },
+        "has_default_credentials": {
+          "type": "boolean",
+          "description": "Default credentials work"
+        },
+        "has_anonymous_access": {
+          "type": "boolean",
+          "description": "Anonymous access is allowed"
+        },
+        "response_time_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Response time in milliseconds"
+        },
+        "details": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "maxLength": 64
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "Protocol-dependent details as strings (SSH algorithms, SMTP extensions)"
+        }
+      }
+    },
+    "TLSVersion": {
+      "type": "string",
+      "enum": [
+        "ssl3",
+        "tls1.0",
+        "tls1.1",
+        "tls1.2",
+        "tls1.3"
+      ],
+      "description": "TLS or SSL protocol version"
+    },
+    "HTTPTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a probe saw on a web origin",
+      "properties": {
+        "status_code": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599,
+          "description": "Status code of the probe's response"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Page title (plain text)"
+        },
+        "web_server": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "Server header (plain text)"
+        },
+        "content_type": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "Content type of the response"
+        },
+        "tls_version": {
+          "$ref": "#/$defs/TLSVersion"
+        },
+        "redirect_url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "description": "Where the origin redirects to (http or https, redacted)"
+        },
+        "cdn": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Content delivery network in front of the origin, an open token"
+        },
+        "waf": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Web application firewall in front of the origin, an open token"
+        },
+        "jarm": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{62}$",
+          "description": "JARM TLS server fingerprint (62 hex digits)"
+        },
+        "favicon_mmh3": {
+          "type": "string",
+          "pattern": "^-?[0-9]{1,10}$",
+          "description": "MurmurHash3 of the base64 favicon body, a signed 32-bit decimal"
+        },
+        "security_headers": {
+          "$ref": "#/$defs/SecurityHeaders"
+        }
+      }
+    },
+    "SecurityHeaders": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Security posture of a web origin's response headers. Each value is the header as received, absent when the origin does not send it.",
+      "properties": {
+        "strict_transport_security": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Strict-Transport-Security"
+        },
+        "content_security_policy": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Content-Security-Policy"
+        },
+        "x_frame_options": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "X-Frame-Options"
+        },
+        "x_content_type_options": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "X-Content-Type-Options"
+        },
+        "referrer_policy": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Referrer-Policy"
+        },
+        "permissions_policy": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Permissions-Policy"
+        },
+        "access_control_allow_origin": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Access-Control-Allow-Origin"
+        },
+        "access_control_allow_credentials": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Access-Control-Allow-Credentials"
+        },
+        "cookies": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/CookieFlags"
+          },
+          "description": "Cookies the origin sets: names and flags, never values"
+        }
+      }
+    },
+    "CookieFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a Set-Cookie header says about a cookie, without its value",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Cookie name (RFC 6265 token)"
+        },
+        "is_secure": {
+          "type": "boolean",
+          "description": "Secure attribute"
+        },
+        "is_http_only": {
+          "type": "boolean",
+          "description": "HttpOnly attribute"
+        },
+        "is_persistent": {
+          "type": "boolean",
+          "description": "Expires or Max-Age set"
+        },
+        "same_site": {
+          "type": "string",
+          "enum": [
+            "strict",
+            "lax",
+            "none"
+          ],
+          "description": "SameSite attribute"
+        }
+      }
+    },
+    "IdentityTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Technical details of an identity asset",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "user",
+            "service_account",
+            "role",
+            "group",
+            "workload"
+          ],
+          "description": "Kind of identity"
+        },
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Identity provider, an open token (aws, azure, gcp, okta, ldap)"
+        }
+      }
+    },
+    "NetworkDeviceTechnical": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Technical details of a network_device asset",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "router",
+            "switch",
+            "firewall",
+            "load_balancer",
+            "wireless_access_point",
+            "vpn_gateway",
+            "other"
+          ],
+          "description": "Kind of network device; other is the fallback"
+        }
+      }
+    }
+  }
+}

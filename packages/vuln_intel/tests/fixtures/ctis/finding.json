@@ -1,0 +1,1729 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openctem.io/ctis/2.0/finding.json",
+  "title": "CTIS Finding",
+  "description": "A security finding on one asset of the report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "title",
+    "severity",
+    "asset_ref"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "Document-local reference"
+    },
+    "type": {
+      "$ref": "#/$defs/FindingType"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short title",
+      "maxLength": 1024
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description",
+      "maxLength": 32768
+    },
+    "message": {
+      "type": "string",
+      "description": "Primary message to display (the main human-readable finding message). If not set, title will be used as the message.",
+      "maxLength": 32768
+    },
+    "severity": {
+      "$ref": "#/$defs/Severity"
+    },
+    "confidence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Confidence score (0-100)"
+    },
+    "category": {
+      "type": "string",
+      "description": "Finding category/class",
+      "maxLength": 1024
+    },
+    "vulnerability_classes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "description": "Vulnerability classes (e.g., SQL Injection, XSS)",
+      "maxItems": 1000
+    },
+    "subcategories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "description": "Subcategories (e.g., audit, vuln, secure default)",
+      "maxItems": 1000
+    },
+    "rule_id": {
+      "type": "string",
+      "description": "Rule/check ID that detected this finding",
+      "maxLength": 1024
+    },
+    "rule_name": {
+      "type": "string",
+      "description": "Rule name",
+      "maxLength": 1024
+    },
+    "rule_ref": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "The rule of the report's rules[] that detected the finding; rule_id is then required and equal to the rule's rule_id"
+    },
+    "asset_ref": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "The asset of this report the finding is on"
+    },
+    "location": {
+      "$ref": "#/$defs/FindingLocation"
+    },
+    "network": {
+      "$ref": "#/$defs/NetworkLocation"
+    },
+    "vulnerability": {
+      "$ref": "#/$defs/VulnerabilityDetails"
+    },
+    "secret": {
+      "$ref": "#/$defs/SecretDetails"
+    },
+    "misconfiguration": {
+      "$ref": "#/$defs/MisconfigurationDetails"
+    },
+    "compliance": {
+      "$ref": "#/$defs/ComplianceDetails"
+    },
+    "web3": {
+      "$ref": "web3-finding.json"
+    },
+    "remediation": {
+      "$ref": "#/$defs/Remediation"
+    },
+    "references": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$"
+      },
+      "description": "References (http or https URLs). Receivers never fetch them."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "maxItems": 1000
+    },
+    "fingerprint": {
+      "type": "string",
+      "description": "The producer's fingerprint (recipe ctis-fp/2). Receivers recompute it and never trust it as a key.",
+      "maxLength": 1024
+    },
+    "partial_fingerprints": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "description": "Contributing identity components for fingerprint calculation",
+      "maxProperties": 1000
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "Groups logically identical results across runs",
+      "maxLength": 1024
+    },
+    "baseline_state": {
+      "type": "string",
+      "enum": [
+        "new",
+        "unchanged",
+        "updated",
+        "absent"
+      ],
+      "description": "Status relative to previous scan (SARIF baselineState)"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "not_applicable",
+        "pass",
+        "fail",
+        "review",
+        "open",
+        "informational"
+      ],
+      "description": "Evaluation state of the finding (SARIF kind)"
+    },
+    "rank": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Priority/importance score (0-100, SARIF rank)"
+    },
+    "occurrence_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of times this result was observed"
+    },
+    "related_locations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FindingLocation"
+      },
+      "description": "Additional locations related to this finding",
+      "maxItems": 1000
+    },
+    "stacks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StackTrace"
+      },
+      "description": "Call stacks relevant to the finding",
+      "maxItems": 1000
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Attachment"
+      },
+      "description": "Relevant artifacts or evidence files",
+      "maxItems": 1000
+    },
+    "work_item_uris": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$"
+      },
+      "description": "Associated tickets (SARIF workItemUris), http or https"
+    },
+    "hosted_viewer_uri": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+      "description": "Hosted viewer URL (SARIF hostedViewerUri), http or https"
+    },
+    "status": {
+      "$ref": "#/$defs/FindingStatus"
+    },
+    "data_flow": {
+      "$ref": "#/$defs/DataFlow"
+    },
+    "suppression": {
+      "$ref": "#/$defs/Suppression"
+    },
+    "exposure": {
+      "$ref": "#/$defs/FindingExposure"
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "native": {
+      "$ref": "#/$defs/NativeIdentity"
+    },
+    "scores": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/Score"
+      },
+      "description": "Every score of the finding with its source and date (CVSS v3.1 and v4.0 together, vendor scores, EPSS, SSVC). vulnerability.cvss_* stays the primary CVSS score."
+    },
+    "vex": {
+      "$ref": "#/$defs/VEX"
+    },
+    "source_lifecycle": {
+      "$ref": "#/$defs/SourceLifecycle"
+    },
+    "attack_technique_ids": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "MITRE ATT&CK techniques the finding enables (T1190, T1595.002)",
+      "items": {
+        "type": "string",
+        "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$",
+        "maxLength": 1024
+      }
+    },
+    "capec_ids": {
+      "type": "array",
+      "maxItems": 32,
+      "description": "CAPEC attack pattern ids",
+      "items": {
+        "type": "string",
+        "pattern": "^CAPEC-[1-9][0-9]{0,5}$"
+      }
+    },
+    "web": {
+      "$ref": "#/$defs/WebLocation"
+    },
+    "evidence_items": {
+      "type": "array",
+      "maxItems": 20,
+      "description": "Typed evidence of the finding; sensitive values only inside marked spans",
+      "items": {
+        "$ref": "evidence-item.json"
+      }
+    },
+    "source_extra": {
+      "type": "object",
+      "maxProperties": 64,
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "description": "Source fields no CTIS member holds, as strings. At most 64 entries, keys of 128 characters, values of 4096, 32 KiB in all (the total is checked by receivers)."
+    },
+    "tool": {
+      "$ref": "report.json#/$defs/Tool"
+    },
+    "technique": {
+      "$ref": "report.json#/$defs/Technique"
+    },
+    "validation": {
+      "$ref": "#/$defs/FindingValidation"
+    },
+    "dependency_ref": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "The dependency of this report the finding affects"
+    },
+    "source_refs": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "report.json#/$defs/SourceRef"
+      },
+      "description": "The producer's own identifiers of the finding in its own systems"
+    },
+    "properties": {
+      "$ref": "report.json#/$defs/Properties"
+    },
+    "extensions": {
+      "$ref": "report.json#/$defs/Extensions"
+    }
+  },
+  "$defs": {
+    "FindingValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Whether and how the finding was shown to be exploitable: pentest, attack simulation, retest, manual review",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "exploited",
+            "not_exploited",
+            "blocked",
+            "detected",
+            "not_reproducible",
+            "not_tested"
+          ]
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "pentest",
+            "bas",
+            "automated_exploit",
+            "retest",
+            "manual_review"
+          ]
+        },
+        "validated_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "validator": {
+          "type": "string",
+          "maxLength": 256,
+          "x-ctis-pii": true,
+          "description": "Who validated: a person, team or tool name; personal data"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "maxItems": 20,
+          "description": "Evidence of the validation: the content_sha256 of an evidence item (sha256:<hex>) or an attachment id",
+          "items": {
+            "$ref": "report.json#/$defs/DocumentRef"
+          }
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "ThreatSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A threat assertion by a named source at a date. Receivers SHOULD prefer their own intelligence",
+      "required": [
+        "type",
+        "source"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "kev",
+            "exploited_in_wild",
+            "public_exploit",
+            "ransomware_use",
+            "weaponized"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Who asserts it (a catalog, a feed, the producer)"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the source asserted it",
+          "maxLength": 64
+        },
+        "ref": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "External reference (catalog id or URL); never fetched"
+        },
+        "due_on": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+          "description": "Remediation due date (YYYY-MM-DD), such as a KEV due date",
+          "maxLength": 1024
+        }
+      }
+    },
+    "WebLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Where on a web origin the finding was observed; the URL carries no query value, user info or fragment",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "OPTIONS",
+            "TRACE",
+            "CONNECT",
+            "ANY"
+          ]
+        },
+        "endpoint_ref": {
+          "$ref": "report.json#/$defs/DocumentRef",
+          "description": "The endpoint of this report the finding is on"
+        },
+        "parameter": {
+          "$ref": "#/$defs/WebParameter"
+        },
+        "request_ref": {
+          "$ref": "report.json#/$defs/DocumentRef",
+          "description": "Reference to the evidence item that holds the request"
+        },
+        "status_code": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 599
+        }
+      }
+    },
+    "WebParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "location",
+        "name"
+      ],
+      "properties": {
+        "location": {
+          "$ref": "endpoint.json#/$defs/ParamLocation"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "NativeIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The finding as the source tool names it. The normalized values stay in severity, status and source_lifecycle.state.",
+      "properties": {
+        "scheme": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Vocabulary of the native values, an open token. Known values: nessus, qualys, defectdojo, sarif, other"
+        },
+        "vuln_id": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Tool id of the vulnerability or check: Nessus plugin ID, Qualys QID, DefectDojo vuln_id_from_tool, SARIF rule id"
+        },
+        "instance_id": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Tool id of this occurrence (DefectDojo unique_id_from_tool, a detection id)"
+        },
+        "family": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Tool family or category of the check"
+        },
+        "severity": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Severity exactly as the tool reported it (\"4\", \"5\", \"High\", \"error\")"
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Status exactly as the tool reported it (\"Re-Opened\", \"fixed\", \"risk_accepted\")"
+        },
+        "detection_type": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "potential",
+            "info"
+          ],
+          "description": "Whether the tool confirmed the issue, only suspects it, or gathered information"
+        },
+        "is_credentialed": {
+          "type": "boolean",
+          "description": "The scan was authenticated on the target. Absent means unknown."
+        },
+        "raw_ref": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Where the raw record can be found again (a URL into the source, a locator in the imported file). Receivers never fetch it."
+        }
+      }
+    },
+    "Score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system"
+      ],
+      "description": "One score with its source and date. cvss needs version and a value or a vector; cvss and vpr values are 0-10, epss and epss_percentile 0-1 (FIRST fractions); ssvc has no value and needs a vector or a label.",
+      "properties": {
+        "system": {
+          "type": "string",
+          "enum": [
+            "cvss",
+            "epss",
+            "epss_percentile",
+            "ssvc",
+            "vendor"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "vector": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "value": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Qualitative rating as the source states it"
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Who assigned it: nvd, ghsa, vendor, tenable, qualys, first, cisa, ..."
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      }
+    },
+    "VEX": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "description": "Exploitability statement (CSAF / OpenVEX vocabulary). not_affected needs a justification or a statement; a justification is only for not_affected.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "not_affected",
+            "affected",
+            "fixed",
+            "under_investigation"
+          ]
+        },
+        "justification": {
+          "type": "string",
+          "enum": [
+            "component_not_present",
+            "vulnerable_code_not_present",
+            "vulnerable_code_not_in_execute_path",
+            "vulnerable_code_cannot_be_controlled_by_adversary",
+            "inline_mitigations_already_exist"
+          ]
+        },
+        "native_justification": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "The justification as the source document states it (a CycloneDX analysis.justification)"
+        },
+        "statement": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Impact or action statement, plain text"
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Who made the statement: a document id or URL, a vendor, a team"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      }
+    },
+    "SourceLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The finding's history as the source tracks it, separate from the receiver's own lifecycle",
+      "properties": {
+        "first_found_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "last_found_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "last_fixed_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "times_found": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "new",
+            "active",
+            "reopened",
+            "fixed"
+          ]
+        }
+      }
+    },
+    "VulnerabilityID": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "description": "One identifier of a vulnerability with its namespace",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "cve",
+            "ghsa",
+            "osv",
+            "vendor"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+\\-]*$"
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Issuer of a vendor id (redhat, microsoft, ...)"
+        }
+      }
+    },
+    "Advisory": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A vendor advisory that addresses the finding (an id or a url)",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "description": "Advisory URL (http or https)"
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 64
+        }
+      }
+    },
+    "FindingType": {
+      "type": "string",
+      "enum": [
+        "vulnerability",
+        "weakness",
+        "secret",
+        "misconfiguration",
+        "compliance",
+        "exposure",
+        "malware",
+        "license"
+      ],
+      "description": "Finding type. Web3 is a profile (the web3 block), not a type."
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info",
+        "unknown"
+      ],
+      "description": "Severity level. unknown: the source gave none that maps; also the fallback for an unknown value"
+    },
+    "FindingStatus": {
+      "type": "string",
+      "enum": [
+        "open",
+        "resolved",
+        "suppressed",
+        "false_positive",
+        "accepted_risk",
+        "in_progress"
+      ],
+      "description": "Finding status"
+    },
+    "FindingLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Location information for code-based findings",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File path",
+          "maxLength": 4096
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Start line (1-indexed)"
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "snippet": {
+          "type": "string",
+          "description": "Code snippet",
+          "maxLength": 65536
+        },
+        "context_snippet": {
+          "type": "string",
+          "description": "Broader context snippet",
+          "maxLength": 65536
+        },
+        "branch": {
+          "type": "string",
+          "description": "Git branch",
+          "maxLength": 1024
+        },
+        "commit": {
+          "$ref": "#/$defs/CommitInfo"
+        },
+        "logical_location": {
+          "$ref": "#/$defs/LogicalLocation"
+        },
+        "context_start_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Line where context_snippet starts"
+        }
+      }
+    },
+    "NetworkLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Where a network/host finding was observed (Nessus/Tenable and other network scanners)",
+      "properties": {
+        "host": {
+          "type": "string",
+          "maxLength": 253,
+          "description": "Host (canonical IP address or domain name); optional when the finding's asset is the host"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "Port (0: not port-specific)"
+        },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "tcp",
+            "udp",
+            "sctp"
+          ],
+          "description": "Transport protocol"
+        },
+        "app_protocol": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,13}[a-z0-9])?$",
+          "description": "Application protocol, an IANA service name",
+          "maxLength": 1024
+        }
+      }
+    },
+    "LogicalLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Logical location within code structure",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Symbol name (function, class, method)",
+          "maxLength": 512
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "function",
+            "method",
+            "class",
+            "module",
+            "namespace",
+            "type",
+            "property"
+          ],
+          "description": "Symbol kind"
+        },
+        "fully_qualified_name": {
+          "type": "string",
+          "description": "Fully qualified name",
+          "maxLength": 1024
+        },
+        "parent_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Index of the enclosing logical location (SARIF logicalLocation.parentIndex)"
+        }
+      }
+    },
+    "DataFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Taint tracking data flow from source to sink (SARIF codeFlows)",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DataFlowLocation"
+          },
+          "description": "Taint source locations (where untrusted data enters)",
+          "maxItems": 1000
+        },
+        "intermediates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DataFlowLocation"
+          },
+          "description": "Intermediate propagation steps",
+          "maxItems": 1000
+        },
+        "sinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DataFlowLocation"
+          },
+          "description": "Taint sink locations (where data reaches dangerous function)",
+          "maxItems": 1000
+        },
+        "sanitizers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DataFlowLocation"
+          },
+          "description": "Sanitizer locations (where data is cleaned/escaped)",
+          "maxItems": 1000
+        },
+        "is_tainted": {
+          "type": "boolean",
+          "description": "Whether data is still tainted at the sink (false if properly sanitized)"
+        },
+        "taint_type": {
+          "type": "string",
+          "enum": [
+            "user_input",
+            "file_read",
+            "env_var",
+            "network",
+            "database",
+            "header",
+            "cookie",
+            "session",
+            "argv",
+            "external"
+          ],
+          "description": "Type of taint origin"
+        },
+        "confidence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Flow confidence score (0-100)"
+        },
+        "is_interprocedural": {
+          "type": "boolean",
+          "description": "Whether flow crosses function boundaries"
+        },
+        "is_cross_file": {
+          "type": "boolean",
+          "description": "Whether data flows across multiple files"
+        },
+        "call_path": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "Call graph path (function names in order)",
+          "maxItems": 1000
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary of the flow",
+          "maxLength": 16384
+        }
+      }
+    },
+    "DataFlowLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Location in data flow trace (SARIF threadFlowLocation)",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File path",
+          "maxLength": 4096
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Line number (1-indexed)"
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "End line for multi-line spans"
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Column number (1-indexed)"
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "End column"
+        },
+        "content": {
+          "type": "string",
+          "description": "Code content at this location",
+          "maxLength": 16384
+        },
+        "label": {
+          "type": "string",
+          "description": "Variable or expression name being tracked",
+          "maxLength": 1024
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Step index in the flow (0-indexed)"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "source",
+            "sink",
+            "propagator",
+            "sanitizer",
+            "transform"
+          ],
+          "description": "Location type in the flow"
+        },
+        "function": {
+          "type": "string",
+          "description": "Function/method name containing this location",
+          "maxLength": 1024
+        },
+        "class_name": {
+          "type": "string",
+          "description": "Class/struct name (if applicable)",
+          "maxLength": 1024
+        },
+        "module": {
+          "type": "string",
+          "description": "Module/namespace",
+          "maxLength": 1024
+        },
+        "operation": {
+          "type": "string",
+          "description": "Operation performed: assignment, call, return, parameter, concat, etc.",
+          "maxLength": 1024
+        },
+        "called_function": {
+          "type": "string",
+          "description": "For function calls: the function being called",
+          "maxLength": 1024
+        },
+        "parameter_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "For parameters: the parameter index (0-indexed)"
+        },
+        "taint_state": {
+          "type": "string",
+          "enum": [
+            "tainted",
+            "sanitized",
+            "unknown"
+          ],
+          "description": "Taint state at this location"
+        },
+        "transformation": {
+          "type": "string",
+          "description": "Transformation applied: encode, decode, escape, hash, encrypt, etc.",
+          "maxLength": 1024
+        },
+        "notes": {
+          "type": "string",
+          "description": "Notes for human understanding",
+          "maxLength": 4096
+        }
+      }
+    },
+    "Suppression": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Finding suppression information (follows SARIF suppression: kind + status)",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "in_source",
+            "external"
+          ],
+          "description": "in_source: suppressed by a comment or annotation in the code; external: suppressed outside the code (a baseline file, a scanner console)"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "accepted",
+            "under_review",
+            "rejected"
+          ],
+          "description": "Review state of the suppression"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Short reason code or phrase (false_positive, test_code, risk_accepted, ...)",
+          "maxLength": 1024
+        },
+        "justification": {
+          "type": "string",
+          "description": "Detailed justification",
+          "maxLength": 4096
+        },
+        "suppressed_by": {
+          "type": "string",
+          "x-ctis-pii": true,
+          "description": "Who suppressed (user/email)",
+          "maxLength": 1024
+        },
+        "suppressed_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When suppression expires",
+          "maxLength": 64
+        }
+      }
+    },
+    "VulnerabilityDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Vulnerability-specific details",
+      "properties": {
+        "ids": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/VulnerabilityID"
+          },
+          "description": "Every id of the vulnerability with its namespace (CVE, GHSA, OSV, vendor)"
+        },
+        "cwe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^CWE-[1-9][0-9]{0,5}$"
+          },
+          "description": "All related CWE identifiers",
+          "maxItems": 1000
+        },
+        "owasp_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^A(0[1-9]|10):20[0-9]{2}$"
+          },
+          "description": "OWASP Top 10 identifiers (e.g., A01:2021, A03:2021)",
+          "maxItems": 1000
+        },
+        "package_name": {
+          "type": "string",
+          "description": "Affected package name",
+          "maxLength": 1024
+        },
+        "purl": {
+          "type": "string",
+          "description": "Package URL (purl spec)",
+          "maxLength": 1024
+        },
+        "installed_version": {
+          "type": "string",
+          "description": "The installed (affected) version of the package",
+          "maxLength": 1024
+        },
+        "affected_version_range": {
+          "type": "string",
+          "description": "Affected version range, e.g. \">=1.0.0, <1.2.5\"",
+          "maxLength": 1024
+        },
+        "fixed_versions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "All versions that fix the vulnerability",
+          "maxItems": 1000
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Vulnerability published date",
+          "maxLength": 64
+        },
+        "modified_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Vulnerability last modified date",
+          "maxLength": 64
+        },
+        "cpe": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "is_direct": {
+          "type": "boolean",
+          "description": "The vulnerable package is a direct dependency (not transitive)"
+        },
+        "dependency_path": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "Dependency path from root to vulnerable package",
+          "maxItems": 1000
+        },
+        "data_source": {
+          "$ref": "#/$defs/VulnDataSource"
+        },
+        "layer": {
+          "$ref": "#/$defs/ContainerLayer"
+        },
+        "threat_signals": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "Threat assertions with source and date",
+          "items": {
+            "$ref": "#/$defs/ThreatSignal"
+          }
+        }
+      }
+    },
+    "VulnDataSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Vulnerability data source information",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Data source, an open token (nvd, ghsa, osv)",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Data source name",
+          "maxLength": 512
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "description": "Data source URL (http or https)"
+        }
+      }
+    },
+    "ContainerLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Container layer information for image scans",
+      "properties": {
+        "digest": {
+          "type": "string",
+          "description": "Layer digest (sha256:...)",
+          "maxLength": 1024
+        },
+        "diff_id": {
+          "type": "string",
+          "description": "Layer diff ID",
+          "maxLength": 1024
+        }
+      }
+    },
+    "SecretDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Secret-specific details",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "password",
+            "token",
+            "certificate",
+            "private_key",
+            "oauth",
+            "jwt",
+            "ssh_key",
+            "aws_key",
+            "gcp_key",
+            "azure_key",
+            "generic_secret",
+            "database_credential",
+            "encryption_key"
+          ]
+        },
+        "service": {
+          "type": "string",
+          "description": "Service the secret belongs to, an open token (aws, github, stripe)",
+          "maxLength": 1024
+        },
+        "masked_value": {
+          "type": "string",
+          "description": "Masked value (first/last chars)",
+          "maxLength": 256
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "entropy": {
+          "type": "number",
+          "minimum": 0
+        },
+        "is_valid": {
+          "type": "boolean",
+          "description": "Verification result; absent means not verified"
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When validity was checked",
+          "maxLength": 64
+        },
+        "is_revoked": {
+          "type": "boolean"
+        },
+        "revoked_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the secret was revoked",
+          "maxLength": 64
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "API scopes/permissions associated with the secret",
+          "x-ctis-pii": true,
+          "maxItems": 1000
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the secret expires",
+          "maxLength": 64
+        },
+        "rotation_due_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When secret rotation is due",
+          "maxLength": 64
+        },
+        "is_history_only": {
+          "type": "boolean",
+          "description": "Secret only exists in git history (not current code)"
+        },
+        "age_days": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Age of the secret in days, if known"
+        },
+        "commit_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of commits the secret appears in"
+        }
+      }
+    },
+    "MisconfigurationDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Misconfiguration-specific details",
+      "properties": {
+        "policy_id": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "policy_name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "resource_type": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "resource_name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "provider": {
+          "type": "string",
+          "description": "Provider, an open token (aws, azure, gcp, kubernetes)",
+          "maxLength": 1024
+        },
+        "service": {
+          "type": "string",
+          "description": "Service name (S3, EC2, IAM)",
+          "maxLength": 1024
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Policy namespace (builtin.aws.s3)",
+          "maxLength": 1024
+        },
+        "query": {
+          "type": "string",
+          "description": "Rego query path",
+          "maxLength": 4096
+        },
+        "expected": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "actual": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "cause": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "ComplianceDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The control a compliance finding evaluates. The result is the finding's kind (pass, fail, review, not_applicable).",
+      "properties": {
+        "framework": {
+          "$ref": "#/$defs/ComplianceFramework"
+        },
+        "framework_version": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "control_id": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "control_name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "control_description": {
+          "type": "string",
+          "maxLength": 16384
+        }
+      }
+    },
+    "Remediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The one remediation object of a finding",
+      "properties": {
+        "recommendation": {
+          "type": "string",
+          "maxLength": 16384,
+          "description": "Short recommendation (plain text)"
+        },
+        "steps": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "description": "Fix steps"
+        },
+        "solution_type": {
+          "type": "string",
+          "enum": [
+            "vendor_fix",
+            "workaround",
+            "mitigation",
+            "no_fix_planned",
+            "none_available",
+            "config_change",
+            "upgrade"
+          ],
+          "description": "Kind of fix: the CSAF remediation categories (vendor_fix, workaround, mitigation, no_fix_planned, none_available) plus config_change and upgrade"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "trivial",
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "Effort of the fix"
+        },
+        "estimated_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000,
+          "description": "Estimated time to fix in minutes"
+        },
+        "is_fix_available": {
+          "type": "boolean",
+          "description": "A fix exists. Absent means unknown; false means verified no fix."
+        },
+        "is_auto_fixable": {
+          "type": "boolean",
+          "description": "The tool can apply the fix itself"
+        },
+        "fix_code": {
+          "type": "string",
+          "maxLength": 65536,
+          "description": "Replacement code"
+        },
+        "fix_regex": {
+          "$ref": "#/$defs/FixRegex"
+        },
+        "patch_published_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64,
+          "description": "When the vendor published the patch"
+        },
+        "advisories": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/Advisory"
+          },
+          "description": "Vendor advisories that address the finding"
+        }
+      }
+    },
+    "FixRegex": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Regex-based auto-fix pattern (for tools like Semgrep)",
+      "properties": {
+        "regex": {
+          "type": "string",
+          "description": "Regular expression pattern to match",
+          "maxLength": 4096
+        },
+        "replacement": {
+          "type": "string",
+          "description": "Replacement string (may contain capture group references like $1, $2)",
+          "maxLength": 4096
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of replacements to make (0 = all)"
+        }
+      }
+    },
+    "StackTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Call stack trace (SARIF stack)",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Stack description",
+          "maxLength": 32768
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackFrame"
+          },
+          "description": "Stack frames from innermost to outermost",
+          "maxItems": 1000
+        }
+      }
+    },
+    "StackFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single frame in a call stack",
+      "properties": {
+        "location": {
+          "$ref": "#/$defs/FindingLocation"
+        },
+        "module": {
+          "type": "string",
+          "description": "Module/library name",
+          "maxLength": 1024
+        },
+        "thread_id": {
+          "type": "integer"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "Function parameters",
+          "maxItems": 1000
+        }
+      }
+    },
+    "Attachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Artifact or evidence attachment (SARIF attachment)",
+      "properties": {
+        "description": {
+          "type": "string",
+          "maxLength": 32768
+        },
+        "artifact_location": {
+          "$ref": "#/$defs/ArtifactLocation"
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FindingLocation"
+          },
+          "description": "Relevant regions within the artifact",
+          "maxItems": 1000
+        }
+      }
+    },
+    "ArtifactLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Location of an artifact (SARIF artifactLocation)",
+      "properties": {
+        "uri": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Artifact URI as the source tool wrote it (a relative path or a URL); never fetched"
+        },
+        "uri_base_id": {
+          "type": "string",
+          "description": "Base URI id the uri is relative to",
+          "maxLength": 1024
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Index within the producer's artifacts list"
+        }
+      }
+    },
+    "FindingExposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "CTEM exposure information for a finding",
+      "properties": {
+        "vector": {
+          "type": "string",
+          "enum": [
+            "network",
+            "adjacent",
+            "local",
+            "physical"
+          ],
+          "description": "Attack vector (CVSS AV vocabulary)"
+        },
+        "is_network_accessible": {
+          "type": "boolean",
+          "description": "Reachable from a network. Absent means unknown."
+        },
+        "is_internet_accessible": {
+          "type": "boolean",
+          "description": "Reachable from the internet. Absent means unknown."
+        },
+        "attack_prerequisites": {
+          "type": "string",
+          "description": "Prerequisites for exploitation: auth_required, mfa_required, local_access, etc.",
+          "maxLength": 4096
+        }
+      }
+    },
+    "CommitInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The commit that introduced the finding. Author fields are personal data; producers SHOULD omit author_email unless asked to send it.",
+      "properties": {
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{7,64}$",
+          "description": "Commit SHA"
+        },
+        "author": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Commit author",
+          "x-ctis-pii": true
+        },
+        "author_email": {
+          "type": "string",
+          "maxLength": 320,
+          "description": "Commit author e-mail",
+          "x-ctis-pii": true
+        },
+        "committed_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64,
+          "description": "Commit time"
+        }
+      }
+    },
+    "ComplianceFramework": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "examples": [
+        "pci_dss",
+        "hipaa",
+        "soc2",
+        "iso27001",
+        "nist_csf",
+        "nist_800_53",
+        "cis",
+        "gdpr",
+        "fedramp",
+        "owasp_asvs"
+      ],
+      "description": "Compliance framework, an open token. Registry of known values: pci_dss, hipaa, soc2, iso27001, nist_csf, nist_800_53, cis, gdpr, fedramp, owasp_asvs."
+    }
+  }
+}

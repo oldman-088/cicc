@@ -1,0 +1,700 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openctem.io/ctis/2.0/web3-asset.json",
+  "title": "Web3 Asset Technical Details",
+  "description": "Web3 profile: technical details of web3 assets. Vendor and product vocabularies are open tokens.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "chain": {
+      "type": "string",
+      "description": "Blockchain network name",
+      "enum": [
+        "ethereum",
+        "polygon",
+        "bsc",
+        "arbitrum",
+        "optimism",
+        "avalanche",
+        "fantom",
+        "base",
+        "solana",
+        "near",
+        "cosmos"
+      ]
+    },
+    "chain_id": {
+      "type": "integer",
+      "description": "EVM Chain ID (1=mainnet, 137=polygon, 56=bsc, etc.)"
+    },
+    "network_type": {
+      "type": "string",
+      "enum": [
+        "mainnet",
+        "testnet",
+        "devnet"
+      ],
+      "description": "Network type"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{40}$",
+      "description": "Contract/wallet address (EVM format)"
+    },
+    "contract": {
+      "$ref": "#/$defs/SmartContractDetails"
+    },
+    "wallet": {
+      "$ref": "#/$defs/WalletDetails"
+    },
+    "token": {
+      "$ref": "#/$defs/TokenDetails"
+    },
+    "defi": {
+      "$ref": "#/$defs/DeFiDetails"
+    },
+    "nft": {
+      "$ref": "#/$defs/NFTCollectionDetails"
+    }
+  },
+  "$defs": {
+    "SmartContractDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Smart contract-specific details",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "deployer_address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "deployment_tx_hash": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{64}$"
+        },
+        "deployment_block": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deployed_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "is_verified": {
+          "type": "boolean",
+          "description": "Verified on block explorer"
+        },
+        "compiler_version": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "evm_version": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "is_optimization_enabled": {
+          "type": "boolean"
+        },
+        "optimization_runs": {
+          "type": "integer"
+        },
+        "contract_type": {
+          "type": "string",
+          "enum": [
+            "erc20",
+            "erc721",
+            "erc1155",
+            "proxy",
+            "multisig",
+            "defi",
+            "governance",
+            "custom"
+          ]
+        },
+        "is_proxy": {
+          "type": "boolean"
+        },
+        "implementation_address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "proxy_type": {
+          "type": "string",
+          "enum": [
+            "transparent",
+            "uups",
+            "beacon",
+            "diamond",
+            "minimal"
+          ]
+        },
+        "is_upgradeable": {
+          "type": "boolean"
+        },
+        "owner_address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "is_ownership_renounced": {
+          "type": "boolean"
+        },
+        "source_code_url": {
+          "type": "string",
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "maxLength": 2048
+        },
+        "abi": {
+          "type": "string",
+          "description": "Contract ABI (JSON string)",
+          "maxLength": 1048576
+        },
+        "bytecode_hash": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "source_code_hash": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "license": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "libraries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "address"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "address": {
+                "type": "string",
+                "pattern": "^0x[a-fA-F0-9]{40}$"
+              }
+            }
+          },
+          "maxItems": 1000
+        },
+        "interfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "Implemented interfaces (ERC20, ERC721, etc.)",
+          "maxItems": 1000
+        },
+        "balance": {
+          "type": "string",
+          "description": "Contract balance in wei",
+          "maxLength": 1024
+        },
+        "tx_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "WalletDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Wallet-specific details",
+      "properties": {
+        "wallet_type": {
+          "type": "string",
+          "enum": [
+            "eoa",
+            "multisig",
+            "smart_wallet",
+            "mpc"
+          ]
+        },
+        "required_signatures": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "total_owners": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$"
+          },
+          "maxItems": 1000
+        },
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Open token (vendor neutral since 2.0). Known values: metamask, ledger, safe, argent, coinbase, rainbow, trustwallet"
+        },
+        "balance": {
+          "type": "string",
+          "description": "Native token balance in wei",
+          "maxLength": 1024
+        },
+        "token_balances": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TokenBalance"
+          },
+          "maxItems": 1000
+        },
+        "nft_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "first_tx_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "last_tx_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "tx_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ens_name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "exchange",
+              "whale",
+              "hacker",
+              "contract",
+              "bridge",
+              "defi",
+              "nft_trader"
+            ]
+          },
+          "maxItems": 1000
+        }
+      }
+    },
+    "TokenBalance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_address",
+        "balance"
+      ],
+      "properties": {
+        "contract_address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "symbol": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18
+        },
+        "balance": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "balance_formatted": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "usd_value": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "TokenDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Token-specific details",
+      "properties": {
+        "standard": {
+          "type": "string",
+          "enum": [
+            "erc20",
+            "erc721",
+            "erc1155",
+            "bep20",
+            "spl"
+          ]
+        },
+        "symbol": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18
+        },
+        "total_supply": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "max_supply": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "is_mintable": {
+          "type": "boolean"
+        },
+        "is_burnable": {
+          "type": "boolean"
+        },
+        "is_pausable": {
+          "type": "boolean"
+        },
+        "has_blacklist": {
+          "type": "boolean"
+        },
+        "has_transfer_fee": {
+          "type": "boolean"
+        },
+        "transfer_fee_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "holder_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "market_cap_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "price_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "liquidity_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "trading_pairs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TradingPair"
+          },
+          "maxItems": 1000
+        },
+        "is_honeypot": {
+          "type": "boolean"
+        },
+        "honeypot_reason": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      }
+    },
+    "TradingPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dex",
+        "pair_address",
+        "quote_token"
+      ],
+      "properties": {
+        "dex": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Open token (vendor neutral since 2.0). Known values: uniswap_v2, uniswap_v3, sushiswap, pancakeswap, curve, balancer"
+        },
+        "pair_address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "quote_token": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "liquidity_usd": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "DeFiDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "DeFi protocol-specific details",
+      "properties": {
+        "protocol_name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "protocol_type": {
+          "type": "string",
+          "enum": [
+            "dex",
+            "lending",
+            "yield",
+            "bridge",
+            "derivatives",
+            "insurance",
+            "staking",
+            "liquid_staking"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "tvl_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "supported_chains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "maxItems": 1000
+        },
+        "core_contracts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoreContract"
+          },
+          "maxItems": 1000
+        },
+        "governance_token": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "is_audited": {
+          "type": "boolean"
+        },
+        "audit_reports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AuditReport"
+          },
+          "maxItems": 1000
+        },
+        "has_bug_bounty": {
+          "type": "boolean"
+        },
+        "bug_bounty_platform": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Open token (vendor neutral since 2.0). Known values: immunefi, hackerone, code4rena, sherlock, hats"
+        },
+        "max_bounty_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "timelock_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Governance timelock in seconds"
+        },
+        "is_paused": {
+          "type": "boolean"
+        }
+      }
+    },
+    "CoreContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "address"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "router",
+            "factory",
+            "vault",
+            "controller",
+            "oracle",
+            "governance",
+            "timelock"
+          ]
+        }
+      }
+    },
+    "AuditReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auditor"
+      ],
+      "properties": {
+        "auditor": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "Open token (vendor neutral since 2.0). Known values: trail_of_bits, openzeppelin, consensys_diligence, certik, hacken, peckshield, slowmist, quantstamp, cyfrin"
+        },
+        "report_url": {
+          "type": "string",
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "maxLength": 2048
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the audit report was published",
+          "maxLength": 64
+        },
+        "scope": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "critical_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "NFTCollectionDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "NFT collection-specific details",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "symbol": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "standard": {
+          "type": "string",
+          "enum": [
+            "erc721",
+            "erc1155"
+          ]
+        },
+        "total_supply": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_supply": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "holder_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "floor_price": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "floor_price_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "total_volume": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "total_volume_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "royalty_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "royalty_recipient": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "marketplaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+            "description": "Open token (vendor neutral since 2.0). Known values: opensea, blur, looksrare, x2y2, rarible, foundation"
+          },
+          "maxItems": 1000
+        },
+        "is_revealed": {
+          "type": "boolean"
+        },
+        "base_uri": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "metadata_storage": {
+          "type": "string",
+          "enum": [
+            "ipfs",
+            "arweave",
+            "centralized",
+            "onchain"
+          ]
+        },
+        "creator": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        }
+      }
+    }
+  }
+}
