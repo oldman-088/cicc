@@ -39,6 +39,7 @@ from .schema import (
     CollectionStatus,
     NormalizedVulnerability,
     Origin,
+    RecordStatus,
     utcnow,
 )
 from .threat_intel import (
@@ -87,6 +88,44 @@ class AssessmentReport:
 
     # -- derived views ----------------------------------------------------
     @property
+    def contested(self) -> tuple[NormalizedVulnerability, ...]:
+        """Merged records whose sources disagreed about *any* field.
+
+        Distinct from ``incomplete``: that says whether the report is missing
+        information, this says whether the information it *has* is disputed. A report
+        can be complete and thoroughly contested at the same time.
+        """
+        return tuple(c.merged for c in self.clusters if c.merged.conflicts)
+
+    @property
+    def disputed(self) -> tuple[NormalizedVulnerability, ...]:
+        """Merged records whose standing is disputed or withdrawn.
+
+        Kept separate from ``contested``: "the sources give different CVSS scores" and
+        "the vendor says this CVE is not real" are different problems for whoever has
+        to action the report.
+        """
+        return tuple(
+            c.merged
+            for c in self.clusters
+            if c.merged.record_status is not None
+            and c.merged.record_status is not RecordStatus.PUBLISHED
+        )
+
+    def conflicts_by_field(self) -> dict[str, int]:
+        """How many records disagree on each field, most contested first.
+
+        This is the question the free-text notes could not answer: a dashboard needs
+        "severity is contested on 12 records", not a paragraph to parse.
+        """
+        counts: dict[str, int] = {}
+        for cluster in self.clusters:
+            fields = {c.field for c in cluster.merged.conflicts}
+            for name in fields:
+                counts[name] = counts.get(name, 0) + 1
+        return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+    @property
     def affected(self) -> tuple[Remediation, ...]:
         return tuple(r for r in self.remediations if r.action.is_actionable)
 
@@ -121,6 +160,22 @@ class AssessmentReport:
                 "incomplete": self.incomplete,
                 "mitre_mapped": sum(1 for c in self.threat_intel if c.mapped),
                 "mitre_consulted": bool(self.threat_intel and self.threat_intel[0].consulted),
+                "contested": len(self.contested),
+                "disputed": len(self.disputed),
+            },
+            # Both directions are reported. A count of 0 is a real statement
+            # ("the sources agreed"), not an absence to be inferred from a missing key.
+            "conflicts": {
+                "records": len(self.contested),
+                "by_field": self.conflicts_by_field(),
+                "disputed_standing": [
+                    {
+                        "cve": str(r.cve),
+                        "status": r.record_status.value if r.record_status else None,
+                        "sources": list(r.sources),
+                    }
+                    for r in self.disputed
+                ],
             },
             "threat_intel": technique_rollup(self.threat_intel).as_dict()
             if self.threat_intel
@@ -216,6 +271,28 @@ class AssessmentWorkflow:
                     f"{mapped}/{len(threat_intel)} record(s) correlate to MITRE ATT&CK "
                     f"(mapping {self.attack_mapping.source} v{self.attack_mapping.version})"
                 )
+
+        not_settled = [
+            record for record in distinct
+            if record.record_status is not None
+            and record.record_status is not RecordStatus.PUBLISHED
+        ]
+        if not_settled:
+            by_status: dict[str, int] = {}
+            for record in not_settled:
+                key = record.record_status.value if record.record_status else "unknown"
+                by_status[key] = by_status.get(key, 0) + 1
+            warnings.append(
+                f"{len(not_settled)} record(s) are not settled claims ("
+                + ", ".join(f"{v} {k}" for k, v in sorted(by_status.items()))
+                + "); they remain in the report for completeness"
+            )
+        contested = [record for record in distinct if record.conflicts]
+        if contested:
+            warnings.append(
+                f"{len(contested)} record(s) have source disagreements; "
+                "see report.conflicts.by_field"
+            )
 
         exposure: ExposureReport | None = None
         if self.inventory is not None:

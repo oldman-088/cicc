@@ -269,3 +269,83 @@ class TestAttackCorrelationInTheReport:
         mapping = load_ctid_mapping(self.MAPPING)
         report = workflow_for(records=[self._record("CVE-2026-0002")], attack_mapping=mapping)
         assert any("mitre-ctid" in w for w in report.warnings)
+
+
+class TestConflictsReachTheReport:
+    """A dashboard needs counts, not prose.
+
+    `conflict_notes` existed but never reached the report at all, so the frontend had
+    no way to show "severity is contested on 12 records" or to filter out advisories
+    the vendor has withdrawn.
+    """
+
+    @staticmethod
+    def _workflow(records):
+        return AssessmentWorkflow(collectors={"fixture": lambda: records})
+
+    @staticmethod
+    def _rec(cve, **kwargs):
+        from vuln_intel.schema import CveId, NormalizedVulnerability, Origin
+
+        base = dict(cve=CveId.parse(cve), origin=Origin.FIXTURE)
+        base.update(kwargs)
+        return NormalizedVulnerability(**base)
+
+    def test_a_clean_run_reports_zero_contested(self) -> None:
+        report = self._workflow([self._rec("CVE-2026-9001", sources=("nvd",))]).run()
+        payload = report.as_dict()
+        assert payload["summary"]["contested"] == 0
+        assert payload["summary"]["disputed"] == 0
+        # A zero must be present, not an omitted key: "the sources agreed" is a fact.
+        assert payload["conflicts"]["by_field"] == {}
+        assert payload["conflicts"]["disputed_standing"] == []
+
+    def test_contested_records_are_counted_by_field(self) -> None:
+        from vuln_intel.schema import Severity
+
+        records = [
+            self._rec("CVE-2026-9002", severity=Severity.CRITICAL, sources=("nvd",)),
+            self._rec("CVE-2026-9002", severity=Severity.HIGH, sources=("osv",)),
+        ]
+        payload = self._workflow(records).run().as_dict()
+        assert payload["summary"]["contested"] == 1
+        assert payload["conflicts"]["by_field"]["severity"] == 1
+
+    def test_withdrawn_standing_is_listed_not_just_counted(self) -> None:
+        from vuln_intel.schema import RecordStatus
+
+        records = [
+            self._rec(
+                "CVE-2026-9003", sources=("nvd",),
+                record_status=RecordStatus.REJECTED,
+            )
+        ]
+        report = self._workflow(records).run()
+        payload = report.as_dict()
+        assert payload["summary"]["disputed"] == 1
+        entry = payload["conflicts"]["disputed_standing"][0]
+        assert entry["cve"] == "CVE-2026-9003"
+        assert entry["status"] == "rejected"
+        # It stays in the report: withdrawing a record is not the same as deleting it.
+        assert any("not settled" in w for w in report.warnings)
+
+    def test_contested_and_disputed_are_different_questions(self) -> None:
+        from vuln_intel.schema import RecordStatus
+
+        # Disputed standing, but every source agrees on severity.
+        report = self._workflow([
+            self._rec("CVE-2026-9004", sources=("nvd",),
+                      record_status=RecordStatus.DISPUTED),
+        ]).run()
+        assert len(report.disputed) == 1
+        assert len(report.contested) == 0
+
+    def test_published_standing_is_not_counted_as_disputed(self) -> None:
+        from vuln_intel.schema import RecordStatus
+
+        report = self._workflow([
+            self._rec("CVE-2026-9005", sources=("nvd",),
+                      record_status=RecordStatus.PUBLISHED),
+        ]).run()
+        assert report.disputed == ()
+

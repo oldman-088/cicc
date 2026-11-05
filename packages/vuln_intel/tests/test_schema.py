@@ -10,6 +10,7 @@ from vuln_intel.errors import MixedOriginError, ValidationError
 from vuln_intel.schema import (
     CveId,
     CvssScore,
+    FieldConflict,
     NormalizedVulnerability,
     Origin,
     RecordStatus,
@@ -290,3 +291,189 @@ class TestMergeKeepsSsvc:
         assert "exploitation" not in merged_inputs
         assert merged_inputs["automatable"] == "yes"
         assert any("SSVC input 'exploitation' disagrees" in n for n in merged.conflict_notes)
+
+
+class TestStructuredConflicts:
+    """Disagreements are data, not only prose.
+
+    `conflict_notes` said what happened but nothing could *count* it: "how many
+    records have a disputed severity?" needed an English parser, and a UI could not
+    filter by field. `FieldConflict` is the structured half, generated from the same
+    decision so the two views cannot drift.
+    """
+
+    @staticmethod
+    def _rec(**kwargs):
+        base = dict(cve=CveId.parse("CVE-2026-8000"), origin=Origin.FIXTURE)
+        base.update(kwargs)
+        return NormalizedVulnerability(**base)
+
+    def test_a_conflict_requires_something_discarded(self) -> None:
+        """An entry with nothing discarded would describe unanimity."""
+        with pytest.raises(ValidationError):
+            FieldConflict(field="severity", kept="high", discarded=())
+
+    def test_a_conflict_requires_a_field_name(self) -> None:
+        with pytest.raises(ValidationError):
+            FieldConflict(field="", kept="high", discarded=("critical",))
+
+    def test_agreement_produces_no_conflict(self) -> None:
+        merged = merge_records(
+            [
+                self._rec(severity=Severity.HIGH, sources=("nvd",)),
+                self._rec(severity=Severity.HIGH, sources=("osv",)),
+            ]
+        )
+        assert merged.conflicts == ()
+
+    def test_severity_disagreement_is_structured_with_dissenters(self) -> None:
+        merged = merge_records(
+            [
+                self._rec(severity=Severity.CRITICAL, sources=("nvd",)),
+                self._rec(severity=Severity.HIGH, sources=("osv",)),
+            ]
+        )
+        conflict = next(c for c in merged.conflicts if c.field == "severity")
+        assert conflict.kept == "critical"
+        assert conflict.discarded == ("high",)
+        # The source that said "high" disagreed with what was kept.
+        assert conflict.dissenters == ("osv",)
+
+    def test_discarded_values_are_retained_not_just_counted(self) -> None:
+        """`pick()` kept the earliest and threw the rest away entirely."""
+        merged = merge_records(
+            [
+                self._rec(summary="first", sources=("nvd",)),
+                self._rec(summary="second", sources=("osv",)),
+                self._rec(summary="third", sources=("ghsa",)),
+            ]
+        )
+        conflict = next(c for c in merged.conflicts if c.field == "summary")
+        assert conflict.kept == "first"
+        assert conflict.discarded == ("second", "third")
+        assert conflict.dissenters == ("ghsa", "osv")
+
+    def test_notes_and_conflicts_describe_the_same_disagreements(self) -> None:
+        """The invariant that keeps the two views honest.
+
+        Every structured conflict must have a prose note and vice versa. Without
+        this, a future field could get one form and not the other.
+        """
+        merged = merge_records(
+            [
+                self._rec(
+                    severity=Severity.CRITICAL, summary="a", epss_score=0.9,
+                    kev=True, sources=("nvd",),
+                ),
+                self._rec(
+                    severity=Severity.HIGH, summary="b", epss_score=0.2,
+                    kev=False, sources=("osv",),
+                ),
+            ]
+        )
+        assert merged.conflicts, "expected disagreements"
+        assert merged.conflict_notes
+        joined = " ".join(merged.conflict_notes).lower()
+        for conflict in merged.conflicts:
+            root = conflict.field.split(".")[0]
+            assert root.lower() in joined, f"{conflict.field} has no note"
+
+    def test_conflict_serialises_for_the_api(self) -> None:
+        conflict = FieldConflict(
+            field="severity", kept="critical", discarded=("high",), dissenters=("osv",)
+        )
+        assert conflict.as_dict() == {
+            "field": "severity",
+            "kept": "critical",
+            "discarded": ["high"],
+            "dissenters": ["osv"],
+        }
+
+
+class TestMergeHandlesMoreThanTwoSources:
+    """Three-source corroboration crashed, and nothing tested it.
+
+    `_merge_cvss(left, right)` was called as `_merge_cvss(*(i.cvss for i in items))`,
+    so any CVE confirmed by three sources raised TypeError. Two is the convenient
+    number for a test; three is the normal number for a widely-reported CVE.
+    """
+
+    def test_three_records_merge(self) -> None:
+        merged = merge_records(
+            [
+                NormalizedVulnerability(
+                    cve=CveId.parse("CVE-2026-8100"), origin=Origin.FIXTURE,
+                    sources=(name,), summary=name,
+                )
+                for name in ("nvd", "osv", "ghsa")
+            ]
+        )
+        assert merged.sources == ("ghsa", "nvd", "osv")
+        assert merged.cvss == ()
+
+    def test_ten_records_merge(self) -> None:
+        merged = merge_records(
+            [
+                NormalizedVulnerability(
+                    cve=CveId.parse("CVE-2026-8101"), origin=Origin.FIXTURE,
+                    sources=(f"src{index}",),
+                )
+                for index in range(10)
+            ]
+        )
+        assert len(merged.sources) == 10
+
+    def test_three_sources_with_three_different_cvss_scores(self) -> None:
+        def rec(score, source):
+            return NormalizedVulnerability(
+                cve=CveId.parse("CVE-2026-8102"), origin=Origin.FIXTURE,
+                sources=(source,),
+                cvss=(CvssScore(
+                    version="3.1", base_score=score, severity=Severity.HIGH,
+                    source=source,
+                ),),
+            )
+
+        merged = merge_records([rec(5.0, "a"), rec(7.5, "b"), rec(9.8, "c")])
+        conflict = next(c for c in merged.conflicts if c.field.startswith("cvss"))
+        assert conflict.kept == "9.8"
+        assert set(conflict.discarded) == {"5.0", "7.5"}
+        # Highest is what ranking reads, so it must be what survives.
+        assert max(s.base_score for s in merged.cvss) == 9.8
+
+
+class TestSilentCvssUnderReporting:
+    """Two scores differing only by value were collapsed as duplicates.
+
+    Same version, no vector, no source set: the second score was silently dropped, so
+    a record could under-report its own severity with no note and no conflict entry.
+    """
+
+    @staticmethod
+    def _rec(score):
+        return NormalizedVulnerability(
+            cve=CveId.parse("CVE-2026-8200"), origin=Origin.FIXTURE, sources=("x",),
+            cvss=(CvssScore(version="3.1", base_score=score, severity=Severity.HIGH),),
+        )
+
+    def test_differing_scores_are_not_collapsed(self) -> None:
+        merged = merge_records([self._rec(7.1), self._rec(9.8)])
+        assert {s.base_score for s in merged.cvss} == {7.1, 9.8}
+
+    def test_the_disagreement_is_reported(self) -> None:
+        merged = merge_records([self._rec(7.1), self._rec(9.8)])
+        assert any("CVSS 3.1 disagreement" in n for n in merged.conflict_notes)
+        assert any(c.field == "cvss.3.1" for c in merged.conflicts)
+
+    def test_identical_scores_are_still_deduplicated(self) -> None:
+        """Deduplication is correct; it was only wrong when values differed."""
+        merged = merge_records([self._rec(9.8), self._rec(9.8)])
+        assert len(merged.cvss) == 1
+        assert merged.conflicts == ()
+
+    def test_the_specification_version_is_not_mistaken_for_a_score(self) -> None:
+        """Regression: a regex recovery step put "3.1" among the discarded scores."""
+        merged = merge_records([self._rec(7.1), self._rec(9.8)])
+        conflict = next(c for c in merged.conflicts if c.field.startswith("cvss"))
+        assert conflict.kept == "9.8"
+        assert "3.1" not in conflict.discarded

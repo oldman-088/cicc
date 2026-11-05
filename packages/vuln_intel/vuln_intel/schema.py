@@ -275,6 +275,49 @@ class ProvenanceRecord:
 
 
 @dataclass(frozen=True)
+class FieldConflict:
+    """A structured record of one disagreement between sources.
+
+    ``conflict_notes`` already described disagreements, but only in English, so no
+    consumer could *count* them: "how many records have a disputed severity?" required
+    parsing prose, and a UI could not filter by field. Both forms are now produced from
+    the same decision, so they cannot drift apart.
+
+    ``discarded`` is the part that matters most. ``pick()`` keeps the earliest value
+    and previously retained the losing values nowhere retrievable, which made the
+    merge lossy in a way nobody could audit: the record said the sources disagreed but
+    could not say what either said.
+    """
+
+    #: Name of the field on :class:`NormalizedVulnerability`.
+    field: str
+    #: The value retained in the merged record, rendered for display.
+    kept: str
+    #: Every other value a source asserted, in the order encountered.
+    discarded: tuple[str, ...]
+    #: Sources asserting a value that was *not* kept. Empty when unknown.
+    dissenters: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.field:
+            raise ValidationError("a field conflict must name the field", field="field")
+        if not self.discarded:
+            raise ValidationError(
+                "a field conflict must record what was discarded, "
+                "otherwise it describes unanimity",
+                field="field",
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "field": self.field,
+            "kept": self.kept,
+            "discarded": list(self.discarded),
+            "dissenters": list(self.dissenters),
+        }
+
+
+@dataclass(frozen=True)
 class NormalizedVulnerability:
     """One vulnerability, normalized across sources.
 
@@ -318,7 +361,12 @@ class NormalizedVulnerability:
     withdrawn: datetime | None = None
     provenance: tuple[ProvenanceRecord, ...] = ()
     sources: tuple[str, ...] = ()
+    #: Human-readable disagreements, kept for logs and report prose.
     conflict_notes: tuple[str, ...] = ()
+    #: The same disagreements, structured, so they can be counted and filtered.
+    #: A record with an empty ``conflicts`` and non-empty ``conflict_notes`` would be
+    #: a rendering that escaped the structured path; a test asserts they agree.
+    conflicts: tuple[FieldConflict, ...] = ()
     verification: str = "unverified"
 
     def __post_init__(self) -> None:
@@ -506,14 +554,32 @@ def compute_freshness(
 
 
 def _merge_cvss(
-    left: Sequence[CvssScore], right: Sequence[CvssScore]
-) -> tuple[tuple[CvssScore, ...], list[str]]:
-    """Union by (version, vector, source); flag divergent scores for one version."""
+    *collections: Sequence[CvssScore],
+) -> tuple[tuple[CvssScore, ...], list[str], list[tuple[str, float, list[float]]]]:
+    """Union by (version, vector, source); flag divergent scores for one version.
+
+    Variadic on purpose. It used to take exactly ``left, right`` while
+    ``merge_records`` called ``_merge_cvss(*(i.cvss for i in items))``, so merging
+    **three or more** records raised ``TypeError`` — and every test merged exactly
+    two, so nothing failed. Corroboration by three sources is the normal case for a
+    widely-reported CVE, which makes this the worst possible place for that bug.
+
+    Returns the merged scores, human-readable notes, and the conflicts as
+    ``(version, kept_score, discarded_scores)``. The structured form is returned
+    rather than re-parsed from the notes: an earlier version recovered scores with a
+    regex that also matched the *specification version*, so "CVSS 3.1 ... 7.1, 9.8"
+    yielded a kept score of 9.8 with 3.1 among the discarded values.
+    """
     merged: list[CvssScore] = []
     notes: list[str] = []
-    seen: set[tuple[str, str | None, str | None]] = set()
-    for score in list(left) + list(right):
-        key = (score.version, score.vector, score.source)
+    disagreed: list[tuple[str, float, list[float]]] = []
+    # Keyed on the score too: two records asserting the *same* version, vector and
+    # source but different scores were previously collapsed as duplicates, so the
+    # higher score vanished with no note at all — the record quietly under-reported
+    # its own severity.
+    seen: set[tuple[str, str | None, str | None, float | None]] = set()
+    for score in [score for collection in collections for score in collection]:
+        key = (score.version, score.vector, score.source, score.base_score)
         if key in seen:
             continue
         seen.add(key)
@@ -524,11 +590,14 @@ def _merge_cvss(
             by_version.setdefault(score.version, set()).add(score.base_score)
     for version, values in sorted(by_version.items()):
         if len(values) > 1:
+            highest = max(values)
             notes.append(
                 f"CVSS {version} disagreement across sources: "
                 + ", ".join(f"{v:.1f}" for v in sorted(values))
+                + f" (highest kept: {highest:.1f})"
             )
-    return tuple(merged), notes
+            disagreed.append((version, highest, sorted(v for v in values if v != highest)))
+    return tuple(merged), notes, disagreed
 
 
 def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulnerability:
@@ -559,28 +628,80 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
 
     base = items[0]
     notes: list[str] = []
+    conflicts: list[FieldConflict] = []
+
+    def record_conflict(
+        field_name: str, kept: object, discarded: Iterable[object], *,
+        dissenters: Iterable[str] = (), note: str | None = None,
+    ) -> None:
+        """Record one disagreement as data **and** prose, from one decision.
+
+        Generating the note from the conflict (rather than writing both by hand)
+        is what keeps the two views from drifting: a future field cannot be given a
+        prose note without also producing a structured one.
+        """
+        rendered = tuple(str(v) for v in discarded)
+        if not rendered:
+            return
+        conflicts.append(
+            FieldConflict(
+                field=field_name,
+                kept=str(kept),
+                discarded=rendered,
+                dissenters=tuple(sorted(set(dissenters))),
+            )
+        )
+        notes.append(
+            note
+            or f"{field_name} disagreement across sources: "
+            + ", ".join(sorted({*rendered, str(kept)}))
+            + f" (kept: {kept})"
+        )
+
+    def sources_saying(attr: str, value: object) -> tuple[str, ...]:
+        return tuple(
+            s for i in items if getattr(i, attr) == value for s in i.sources
+        )
+
     severity_values = {i.effective_severity for i in items if i.effective_severity is not Severity.UNKNOWN}
     severity = base.effective_severity
     if len(severity_values) > 1:
         ranked = sorted(severity_values, key=lambda s: list(Severity).index(s))
         severity = ranked[-1]
-        notes.append(
-            "severity disagreement across sources: "
+        losers = [v for v in severity_values if v is not severity]
+        record_conflict(
+            "severity", severity.value, [v.value for v in losers],
+            dissenters=[src for v in losers for src in sources_saying("effective_severity", v)],
+            note="severity disagreement across sources: "
             + ", ".join(sorted(s.value for s in severity_values))
-            + f" (highest kept: {severity.value})"
+            + f" (highest kept: {severity.value})",
         )
 
-    cvss, cvss_notes = _merge_cvss(*(i.cvss for i in items))
+    cvss, cvss_notes, cvss_conflicts = _merge_cvss(*(i.cvss for i in items))
     notes.extend(cvss_notes)
+    for version, kept_score, discarded_scores in cvss_conflicts:
+        conflicts.append(
+            FieldConflict(
+                field=f"cvss.{version}",
+                kept=f"{kept_score:.1f}",
+                discarded=tuple(f"{v:.1f}" for v in discarded_scores),
+            )
+        )
 
     def pick(attr: str):
         values = [getattr(i, attr) for i in items if getattr(i, attr) is not None]
         if not values:
             return None
-        unique = {str(v) for v in values}
-        if len(unique) > 1:
-            notes.append(f"{attr} disagreement across sources; earliest kept")
-        return values[0]
+        kept = values[0]
+        # Previously this noted "earliest kept" and threw the rest away, so the
+        # merged record could say sources disagreed but not what any of them said.
+        losers = [v for v in values[1:] if str(v) != str(kept)]
+        record_conflict(
+            attr, kept, losers,
+            dissenters=[s for v in losers for s in sources_saying(attr, v)],
+            note=f"{attr} disagreement across sources; earliest kept",
+        )
+        return kept
 
     def union(attr: str) -> tuple:
         out: list = []
@@ -595,14 +716,25 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
 
     epss_scores = {i.epss_score for i in items if i.epss_score is not None}
     if len(epss_scores) > 1:
-        notes.append("EPSS disagreement across sources; highest kept")
+        top = max(epss_scores)
+        record_conflict(
+            "epss_score", f"{top:.4f}", [f"{v:.4f}" for v in epss_scores if v != top],
+            dissenters=[s for i in items if i.epss_score is not None
+                        and i.epss_score != top for s in i.sources],
+            note="epss_score disagreement across sources; highest kept",
+        )
 
     kev_values = {i.kev for i in items if i.kev is not None}
     kev = None
     if kev_values:
         kev = True in kev_values
         if len(kev_values) > 1:
-            notes.append("sources disagree on CISA KEV membership; presence kept")
+            record_conflict(
+                "kev", kev, [not kev],
+                dissenters=[s for i in items if i.kev is not None
+                            and i.kev is not kev for s in i.sources],
+                note="kev disagreement across sources: CISA KEV membership asserted by some, denied by others (presence kept)",
+            )
 
     verification = next(
         (i.verification for i in items if i.verification == "verified"), "unverified"
@@ -616,10 +748,15 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
     statuses = [i.record_status for i in items if i.record_status is not None]
     record_status = strictest_status(statuses)
     if len(set(statuses)) > 1:
-        notes.append(
-            "sources disagree on record standing: "
+        kept_status = record_status.value if record_status else "none"
+        record_conflict(
+            "record_status", kept_status,
+            sorted({s.value for s in set(statuses)} - {kept_status}),
+            dissenters=[s for i in items if i.record_status is not None
+                        and i.record_status is not record_status for s in i.sources],
+            note="sources disagree on record standing: "
             + ", ".join(sorted(s.value for s in set(statuses)))
-            + f" (most cautious kept: {record_status.value if record_status else 'none'})"
+            + f" (most cautious kept: {kept_status})",
         )
     withdrawn = min(
         (i.withdrawn for i in items if i.withdrawn is not None), default=None
@@ -634,10 +771,13 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
             ssvc_values.setdefault(key, set()).add(value)
     for key, values in sorted(ssvc_values.items()):
         if len(values) > 1:
-            notes.append(
-                f"SSVC input '{key}' disagrees across sources: "
+            record_conflict(
+                f"ssvc.{key}", "dropped", sorted(values),
+                dissenters=[s for i in items for k, v in i.ssvc
+                            if k == key and v in values for s in i.sources],
+                note=f"SSVC input '{key}' disagrees across sources: "
                 + ", ".join(sorted(values))
-                + " (input dropped rather than guessed)"
+                + " (input dropped rather than guessed)",
             )
     ssvc = tuple(
         (key, next(iter(values)))
@@ -675,6 +815,9 @@ def merge_records(records: Iterable[NormalizedVulnerability]) -> NormalizedVulne
         ssvc=ssvc,
         record_status=record_status,
         withdrawn=withdrawn,
+        conflicts=tuple(
+            dict.fromkeys([*base.conflicts, *conflicts])
+        ),
         conflict_notes=tuple(dict.fromkeys([*base.conflict_notes, *notes])),
         verification=verification,
     )
