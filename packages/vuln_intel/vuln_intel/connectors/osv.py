@@ -39,6 +39,7 @@ Normalization rules worth stating explicitly:
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -867,7 +868,18 @@ def _spec_fidelity_notes(
 
     for field in _UNMODELLED_FIELDS:
         if body.get(field):
-            notes.append(f"OSV field {field!r} is present but not modelled; ignored")
+            # B-00: name the field AND preserve a capped copy of its raw content in
+            # the note, so the evidence is not lost even though the typed model
+            # does not carry it (adding typed fields needs owner sign-off).
+            try:
+                raw = json.dumps(body[field], sort_keys=True, default=str)
+            except (TypeError, ValueError):
+                raw = repr(body[field])
+            if len(raw) > 400:
+                raw = raw[:397] + "..."
+            notes.append(
+                f"OSV field {field!r} present but not modelled; raw evidence: {raw}"
+            )
 
     # The schema states that if any ``affected[].severity`` is set then the
     # top-level ``severity`` must not be.  A record doing both is malformed, and
