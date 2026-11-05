@@ -11,6 +11,7 @@ import {
   parseCoordinationTaskEvents,
   parseCoordinationHealth,
   parseCoordinationTaskTrace,
+  parseProviderTimestamp,
   coordinationTaskEventsEndpoint,
   coordinationTaskTraceEndpoint,
   readIntegrationResource,
@@ -109,6 +110,11 @@ type Messages = {
   deliveryStatus: string;
   deliveryChannel: string;
   approvalStatus: string;
+  lastOperations: string;
+  lastWebhook: string;
+  lastSyncSuccess: string;
+  lastSyncAttempt: string;
+  lastTaskEvent: string;
   requestedBy: string;
   decidedBy: string;
   eventName: string;
@@ -183,6 +189,11 @@ const copy: Record<Locale, Messages> = {
     deliveryStatus: "Delivery status",
     deliveryChannel: "Channel",
     approvalStatus: "Approval status",
+    lastOperations: "Last recorded operations",
+    lastWebhook: "Last webhook received",
+    lastSyncSuccess: "Last successful GitHub sync",
+    lastSyncAttempt: "Last GitHub sync attempt",
+    lastTaskEvent: "Last task event",
     requestedBy: "Requested by",
     decidedBy: "Decided by",
     sortBy: "Sort tasks", sortNewest: "Newest first", sortPriority: "Highest priority", sortState: "State (A–Z)", previousPage: "Previous page", nextPage: "Next page", pageLabel: "Page", copyLink: "Copy task link", linkCopied: "Link copied",
@@ -266,6 +277,11 @@ const copy: Record<Locale, Messages> = {
     deliveryStatus: "حالة التسليم",
     deliveryChannel: "القناة",
     approvalStatus: "حالة الموافقة",
+    lastOperations: "آخر العمليات المسجّلة",
+    lastWebhook: "آخر ويب هوك مستلم",
+    lastSyncSuccess: "آخر مزامنة ناجحة مع GitHub",
+    lastSyncAttempt: "آخر محاولة مزامنة مع GitHub",
+    lastTaskEvent: "آخر حدث مهمة",
     requestedBy: "طلبها",
     decidedBy: "بتّ فيها",
     sortBy: "ترتيب المهام", sortNewest: "الأحدث أولاً", sortPriority: "الأولوية الأعلى", sortState: "الحالة (أ–ي)", previousPage: "الصفحة السابقة", nextPage: "الصفحة التالية", pageLabel: "صفحة", copyLink: "نسخ رابط المهمة", linkCopied: "نُسخ الرابط",
@@ -349,6 +365,11 @@ const copy: Record<Locale, Messages> = {
     deliveryStatus: "وضعیت تحویل",
     deliveryChannel: "کانال",
     approvalStatus: "وضعیت تأیید",
+    lastOperations: "آخرین عملیات ثبت‌شده",
+    lastWebhook: "آخرین وب‌هوک دریافتی",
+    lastSyncSuccess: "آخرین همگام‌سازی موفق GitHub",
+    lastSyncAttempt: "آخرین تلاش همگام‌سازی GitHub",
+    lastTaskEvent: "آخرین رویداد وظیفه",
     requestedBy: "درخواست‌کننده",
     decidedBy: "تصمیم‌گیرنده",
     sortBy: "مرتب‌سازی وظایف", sortNewest: "تازه‌ترین اول", sortPriority: "بالاترین اولویت", sortState: "وضعیت (الفبا)", previousPage: "صفحهٔ قبل", nextPage: "صفحهٔ بعد", pageLabel: "صفحه", copyLink: "کپی پیوند وظیفه", linkCopied: "پیوند کپی شد",
@@ -394,10 +415,9 @@ function formatNumber(value: number, locale: Locale): string {
 }
 
 function formatTimestamp(value: string | null, locale: Locale, fallback: string): string {
-  if (!value) return fallback;
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return value;
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date);
+  const date = parseProviderTimestamp(value);
+  if (!date) return fallback;
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(date);
 }
 
 function MetricContent({ data, locale, messages }: { data: CoordinationMetrics; locale: Locale; messages: Messages }) {
@@ -594,6 +614,18 @@ function HealthContent({ data, locale, messages }: { data: CoordinationHealth; l
           </li>
         ))}
       </ul>
+      {data.last_operations && (
+        <>
+          <h3>{messages.lastOperations}</h3>
+          <dl className={styles.smallMeta}>
+            <div><dt>{messages.lastWebhook}</dt><dd>{formatTimestamp(data.last_operations.last_webhook_received, locale, messages.noValue)}</dd></div>
+            <div><dt>{messages.lastSyncSuccess}</dt><dd>{formatTimestamp(data.last_operations.last_github_sync_success, locale, messages.noValue)}</dd></div>
+            <div><dt>{messages.lastSyncAttempt}</dt><dd>{formatTimestamp(data.last_operations.last_github_sync_attempt, locale, messages.noValue)}</dd></div>
+            <div><dt>{messages.lastTaskEvent}</dt><dd>{formatTimestamp(data.last_operations.last_task_event, locale, messages.noValue)}</dd></div>
+          </dl>
+          {data.last_operations.note && <p className={styles.scopeNote}><bdi dir="auto">{data.last_operations.note}</bdi></p>}
+        </>
+      )}
       {data.reasons.length > 0 && (
         <>
           <h3>{messages.healthReasons}</h3>

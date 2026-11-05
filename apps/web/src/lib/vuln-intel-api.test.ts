@@ -9,6 +9,12 @@ describe("vulnerability adapter (prepared, not bound)", () => {
     expect(parsed.data[0]).toMatchObject({ cve_id: "CVE-2026-0001", kev: null, epss_score: null });
     expect(vulnDataPresentation("not_mounted", "live")).toBe("unavailable");
   });
+  it("fail-closed presentation matrix: only mounted+verified+live is live", () => {
+    expect(vulnDataPresentation("not_mounted", "live")).toBe("unavailable");
+    expect(vulnDataPresentation("mounted_unverified", "live")).toBe("unavailable");
+    expect(vulnDataPresentation("mounted_verified", "fixture")).toBe("fixture");
+    expect(vulnDataPresentation("mounted_verified", "live")).toBe("live");
+  });
   it("rejects non-canonical CVE ids and malformed scores", () => {
     expect(() => parseVulnList({ ...fixture, data: [{ ...fixture.data[0], cve_id: "not-a-cve" }] })).toThrow(/CVE/);
     expect(() => parseVulnList({ ...fixture, data: [{ ...fixture.data[0], cvss_score: "8.1" }] })).toThrow(/cvss_score/);

@@ -160,3 +160,12 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - **Investigations import feedback:** malformed/non-list/empty imports now show a localized visible error (`role=alert`) and leave local state unchanged; successful imports report the added count (`role=status`). Previously malformed files were silently rejected.
 - **Playwright:** suite now 34 tests — added coordination-health unavailable journey and malformed-import journey (rejection visible, state persists across reload).
 - Coordination requests posted: PR #6 comment 6659120763 (explicit Agent 2 domain-owner confirmation of Threat v1.1.0-proposed; frontend acceptance ≠ domain acceptance); PR #1 comment 6659121176 (Vulnerability mounting-evidence request; adapter prepared, tri-state KEV/EPSS preserved).
+
+
+## 2026-11-05 — Timestamp hardening, last_operations, local search, notification filters
+
+- **Trace timestamp root cause (investigated, not guessed):** Agent 1 `registry._iso()` is a bare `isoformat()`; health `now` is tz-aware while sqlite read-back of `DateTime(timezone=True)` event/delivery rows drops tzinfo, so trace timestamps serialize naive (storage-backend-dependent). Frontend: `parseProviderTimestamp` (tz-aware verbatim, naive ISO → documented UTC assumption, garbage → null), all coordination timestamps formatted in UTC. Backend normalization proposed to Agent 1 through the M29 amendment process (PR #4 comment 6659523023, field format matching `AmendmentIn`; AMD id left for their registry).
+- **M29 `last_operations` consumed:** health decoder accepts the additive M29 block (still parses M28 payloads), health panel shows last webhook/sync-success/sync-attempt/task-event with the provider's own "NOT continuous monitoring" note verbatim.
+- **Local cross-data search:** home page gains `LocalDataSearch` over browser-local investigations + reminders with an explicit boundary note (server-side global search unavailable; nothing leaves the device). Malformed local data is ignored, never fabricated.
+- **NotificationCenter:** unread count (`role=status`), category filter, mark-all-read; still local-only with the service-unavailable notice intact.
+- Tests: 114 unit tests (25 files) incl. timestamp/vuln-guard-matrix/notification/search suites; Playwright 36 listed (+local-search journey).

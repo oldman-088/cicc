@@ -165,7 +165,33 @@ export type CoordinationHealth = {
   components: CoordinationHealthComponent[];
   reasons: string[];
   at: string | null;
+  /** M29 additive: evidence-backed recency of last recorded operations. Absent on M28 responses. */
+  last_operations: {
+    last_webhook_received: string | null;
+    last_github_sync_success: string | null;
+    last_github_sync_attempt: string | null;
+    last_task_event: string | null;
+    checked_at: string | null;
+    note: string | null;
+  } | null;
 };
+
+/**
+ * Provider timestamps are UTC by construction (Agent 1 registry uses
+ * `utcnow()` defaults), but trace event/delivery timestamps can arrive as
+ * naive ISO strings when the storage backend drops tzinfo (sqlite), while
+ * health `at` is tz-aware. Interpreting a naive value as UTC here is a
+ * documented frontend compatibility assumption — the backend normalization
+ * was proposed to Agent 1 through the M29 amendment process (PR #4).
+ * Returns null for unparseable values; never guesses beyond the UTC rule.
+ */
+export function parseProviderTimestamp(value: string | null): Date | null {
+  if (!value) return null;
+  const hasTimezone = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(value.trim());
+  const candidate = hasTimezone || !value.includes("T") ? value : `${value}Z`;
+  const date = new Date(candidate);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 /** Full per-task correlation trace (Agent 1 PR #4 M28, contract-registered, read-only). */
 export type CoordinationTaskTrace = {
@@ -511,6 +537,19 @@ export function parseCoordinationHealth(value: unknown): CoordinationHealth {
     }),
     reasons: root.reasons === undefined ? [] : stringArray(root.reasons, "health.reasons"),
     at: nullableString(root.at, "health.at"),
+    last_operations: root.last_operations === undefined || root.last_operations === null
+      ? null
+      : (() => {
+          const ops = object(root.last_operations, "health.last_operations");
+          return {
+            last_webhook_received: nullableString(ops.last_webhook_received, "health.last_operations.last_webhook_received"),
+            last_github_sync_success: nullableString(ops.last_github_sync_success, "health.last_operations.last_github_sync_success"),
+            last_github_sync_attempt: nullableString(ops.last_github_sync_attempt, "health.last_operations.last_github_sync_attempt"),
+            last_task_event: nullableString(ops.last_task_event, "health.last_operations.last_task_event"),
+            checked_at: nullableString(ops.checked_at, "health.last_operations.checked_at"),
+            note: nullableString(ops.note, "health.last_operations.note"),
+          };
+        })(),
   };
 }
 

@@ -6,6 +6,7 @@ import {
   parseCoordinationTaskEvents,
   parseCoordinationHealth,
   parseCoordinationTaskTrace,
+  parseProviderTimestamp,
   coordinationTaskTraceEndpoint,
   parseCoordinationTasks,
   parseOpsOverview,
@@ -230,6 +231,23 @@ describe("same-origin integration client", () => {
       task_id: "api-1", correlation: { idempotency_key: null, event_id: null }, state: "RUNNING",
       agent: null, attempts: -1, dead_letter: false, events: [], deliveries: [], approvals: [],
     })).toThrow(/attempts/);
+  });
+
+  it("parses provider timestamps: tz-aware verbatim, naive ISO as documented-UTC, garbage as null", () => {
+    expect(parseProviderTimestamp("2026-11-05T13:22:42+00:00")?.toISOString()).toBe("2026-11-05T13:22:42.000Z");
+    expect(parseProviderTimestamp("2026-11-05T13:22:42.291777")?.toISOString()).toBe("2026-11-05T13:22:42.291Z");
+    expect(parseProviderTimestamp("2026-11-05T13:22:42Z")?.toISOString()).toBe("2026-11-05T13:22:42.000Z");
+    expect(parseProviderTimestamp("not-a-date")).toBeNull();
+    expect(parseProviderTimestamp(null)).toBeNull();
+  });
+
+  it("decodes M29 last_operations when present and stays compatible with M28 health payloads", () => {
+    const withOps = parseCoordinationHealth({
+      overall: "healthy", components: [], reasons: [], at: "2026-11-05T13:00:00Z",
+      last_operations: { last_webhook_received: null, last_github_sync_success: "2026-11-05T12:00:00Z", last_github_sync_attempt: "2026-11-05T12:30:00Z", last_task_event: "2026-11-05T12:45:00Z", checked_at: "2026-11-05T13:00:00Z", note: "on-demand check; NOT continuous monitoring (no scheduler running)" },
+    });
+    expect(withOps.last_operations?.last_task_event).toBe("2026-11-05T12:45:00Z");
+    expect(parseCoordinationHealth({ overall: "healthy", components: [], reasons: [], at: null }).last_operations).toBeNull();
   });
 
   it("decodes per-task lifecycle events and the M27 idempotency correlation key", () => {

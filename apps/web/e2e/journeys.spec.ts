@@ -82,3 +82,14 @@ test("malformed import journey: invalid file is rejected visibly and local state
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Import guard case", level: 3 })).toBeVisible();
 });
+
+test("local search journey: home search finds browser-local investigations only", async ({ page }) => {
+  await page.goto("/investigations", { waitUntil: "networkidle" });
+  await page.getByLabel("Title").fill("Searchable beacon");
+  await page.getByRole("button", { name: "Create investigation" }).click();
+  await expect(page.getByRole("heading", { name: "Searchable beacon", level: 3 })).toBeVisible();
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.getByRole("searchbox", { name: /Search investigations and reminders stored in this browser/ }).fill("searchable");
+  await expect(page.getByRole("link", { name: /Searchable beacon/ })).toBeVisible();
+  await expect(page.getByText(/Server-side global search across providers is not available yet/)).toBeVisible();
+});
