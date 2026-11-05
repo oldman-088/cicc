@@ -2,6 +2,41 @@
 
 Updated: 2026-11-05 · Working branch: `arena/09952395-cicc`
 
+## 2026-11-05 — read-only Ops/Coordination adapters and current PR #4 review
+
+### Changes
+
+- Re-reviewed PR #4 at current head `f0589f3935f8918e54b7fa54b983d646e87775b2`, including its M14 reference BFF and current adoption record. Compared it with the previously reviewed `2f647f18577278c83cb4b1c1927e889c060058e8`: M16–M19 changed conformance/lifecycle tooling, handoff, tests, adoption docs, and the coordination router (additive read-only `/contract` descriptor and lifecycle fixes), but not `docs/API_REFERENCE.md`, `agents.py`, `registry.py`, or the `GET /agents` DTO. The mismatch remains. Matched the frontend server-only credential to `WEB_BFF_API_TOKEN` and its optional same-origin enforcement setting; this is not a verified deployment or live API connection.
+- Added a fixed-path, GET-only Next BFF allowlist, mandatory local trusted-single-tenant acknowledgement, 5-second timeout, streaming 2 MB response cap, redirect rejection, query validation, no-store responses, sanitized errors, and optional `Sec-Fetch-Site: cross-site` rejection. Browser authorization/cookie/tenant headers are not forwarded; `HEAD` and writes are not proxied.
+- Added runtime-validated API adapters and localized read-only System Health/Coordination workspaces with explicit loading, unconfigured, error, malformed, empty, retry, and stale-after-failure states. Fixtures remain synthetic and isolated to tests.
+- Found and reported the PR #4 Coordination agent DTO discrepancy: the reference documents `last_seen`/`completed_tasks`/`failed_tasks`, while the current `agents.py`/registry source returns `last_heartbeat`/`completed`/`failed`. The strict decoder accepts these two observed spellings, rejects conflicting duplicate aliases, and exposes the timestamp field actually supplied; this does not resolve the upstream mismatch. Clarification request: [PR #4 comment #6656004782](https://github.com/oldman-088/cicc/pull/4#issuecomment-6656004782).
+- Did not modify backend files or other agents' branches. Agents 2/3 have not confirmed adoption; no user authentication or tenant isolation is claimed.
+
+### Verification
+
+- `npm run typecheck` passed.
+- `npm test -- --reporter=dot` passed: **85 tests across 17 files**, including Arabic/Persian RTL page direction and LTR technical-identifier isolation for System Health/Coordination. JSDOM/axe checks are structural; color contrast is disabled.
+- `npm run build --workspace=@cicc/web` passed; all seven page routes were generated and the API route remained dynamic.
+- `npm audit --audit-level=high` found 0 vulnerabilities; `git diff --check` passed.
+- Local port-3000 HTTP smoke returned 200 for all seven pages. The unconfigured BFF returned `503 provider_not_configured`; `HEAD` and `POST` returned 405. The preview process had no upstream URL/token/trust acknowledgement, so no request was made to PR #4's API.
+- No browser/screenshot, device, manual keyboard, screen-reader, fluent-speaker, contrast, or real GPU/WebGL QA could be performed. Automated checks and HTTP smoke are not visual QA.
+
+## 2026-11-05 — local preferences, navigation shortcut, and contract refresh
+
+### Changes
+
+- Settings now restores and persists EN/AR/FA locale alongside the existing reduced-motion preference, both in this browser only. Hydration is gated so the default state is not written over a saved preference before it is read; no account/tenant sync was added.
+- Added a visible, bidi-isolated `Ctrl/⌘+K` hint and shortcut for the route-only search. It opens the collapsed mobile navigation, focuses/selects the search field, and deliberately does not intercept the shortcut while an input, textarea, select, or contenteditable is active.
+- Re-reviewed current external PR heads #1 (`b988e869`), #3 (`480fa3d8`), and #4 (`b1b2f1b`). Expanded the contract inventory with candidate endpoints/interfaces, auth, error, schema, and tenant-scope evidence. PR #4's M11-02 v1.0 proposal has a path mismatch between docs and router and an unimplemented tenant-isolation gap; asked the owner to clarify these and the frontend/auth boundary in [PR #4 follow-up](https://github.com/oldman-088/cicc/pull/4#issuecomment-6654937068).
+- Kept Threat Intelligence, Vulnerability Intelligence, System Health, and Coordination visibly disconnected. No API client was added against the unmounted PR #1 package contract, missing PR #3 HTTP contract, or unconfirmed PR #4 read/auth contract. No other branch was modified.
+
+### Verification
+
+- `npm run typecheck` passed.
+- `npm test -- --reporter=dot` passed: 62 tests across 13 files, including preference restore/persistence and Ctrl/Meta+K behavior. The axe-core checks are structural only; color contrast is disabled in JSDOM.
+- Browser visual QA remains blocked: no Chromium/Chrome/Firefox executable, Playwright/Puppeteer package, or browser-control tool was available. No desktop/tablet/mobile or manual keyboard/contrast/screen-reader claims are made.
+- Post-change verification also passed: isolated production build generated all seven routes; `npm audit --omit=dev --audit-level=high` found 0 vulnerabilities; `git diff --check` passed; and all seven HTTP route smoke requests returned 200 with PID 2368 still running. These are automated/build/HTTP checks, not visual QA.
+
 ## 2026-11-05 — dashboard transparency and cross-PR API coordination
 
 ### Changes
@@ -25,7 +60,7 @@ Updated: 2026-11-05 · Working branch: `arena/09952395-cicc`
 - Kept `/` as a truthful workspace overview, `/command-theater` as a distinct investigation module, and the app-wide shell as the shared surface.
 - Extended navigation and browser-accessible route coverage to `/threat-intelligence`, `/vulnerability-intelligence`, `/system-health`, `/coordination`, and `/settings`. The four data-domain pages are explicitly **unconfigured frontend shells**: each states that no verified provider/contract is connected and lists planned scope without synthesizing records, counts, alerts, or service/agent status.
 - Added sidebar search over workspace page labels only. Its copy explicitly says this is not entity/IOC/CVE/alert search and that entity search requires a verified data provider.
-- Added a working Settings page for EN/AR/FA session locale and a reduced-motion option that adds to (never overrides) the operating-system preference. The motion choice is saved as a non-sensitive local boolean in this browser; locale currently resets on reload. Account/tenant preferences remain unavailable without a verified identity/preferences contract.
+- Added a working Settings page for EN/AR/FA locale and a reduced-motion option that adds to (never overrides) the operating-system preference. Both preferences are saved only in this browser; account/tenant preferences remain unavailable without a verified identity/preferences contract.
 - Added shared semantic tokens and styles for an original CICC analyst workspace, route-specific active states, RTL-aware navigation, and focus/reduced-motion/forced-colors foundations.
 - Preserved Command Theater's injected frontend adapter boundary, production no-provider behavior, isolated development-only synthetic fixtures, graph caps, and no-fallback-on-request-error rule.
 
@@ -47,7 +82,7 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 ### Automated work and verification
 
 - Added route, localization, no-provider, navigation-search-scope, settings preference, and unconfigured-module tests; automated tests use fixtures and JSDOM.
-- At the foundation checkpoint: TypeScript typecheck and production build passed (all seven frontend routes generated), 60 tests across 13 files passed, and `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities. Current post-change typecheck/test results are recorded in the dashboard-coordination section above; build/audit/smoke checks still need to be rerun for this batch.
+- At the earlier foundation checkpoint: TypeScript typecheck and production build passed (all seven frontend routes generated), 60 tests across 13 files passed, and `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities. Those are historical checkpoint results; the current batch's final build, audit, and smoke results are recorded in the 2026-11-05 Ops/Coordination entry above.
 - At that checkpoint, HTTP smoke requests to the existing Next development server on port 3000 returned 200 for all seven routes; PID 2368 remained alive. This verifies route responses only, not rendering or browser interaction.
 - axe-core structural checks disable color contrast because JSDOM cannot validate rendered contrast. No browser, device, GPU, manual keyboard, screen-reader, or fluent-speaker verification is claimed.
 - Historic isolated Node graph microbenchmarks remain 3.10ms median for 10,000-node layout and 6.37ms median for a 10,000-node/50,001-edge view-selection input. They are not browser/GPU performance measurements.
@@ -58,5 +93,5 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 - No backend/API route was found; no endpoint, payload, identity contract, or service state was invented.
 - The route shells are explicitly unavailable states, not delivered data workflows. Replacing them with live features is blocked on reviewed contracts and product semantics.
 - The page search is a useful local navigation filter only, not a substitute for global entity search.
-- Build, package audit, route smoke requests, and `git diff --check` must be run again after the current code/doc batch. The Next dev server on port 3000 is intentionally kept running. HTTP smoke checks do not count as visual QA.
+- At that earlier checkpoint, build, package audit, route smoke requests, and `git diff --check` still needed to be rerun after the then-current batch; the later 2026-11-05 Ops/Coordination entry above records those completed checks. The Next dev server on port 3000 is intentionally kept running. HTTP smoke checks do not count as visual QA.
 - Real browser/device/assistive-technology verification remains outstanding; the next task queue is in `MASTER_TASK_QUEUE.md`.

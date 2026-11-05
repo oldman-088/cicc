@@ -8,71 +8,70 @@ This repository contains one Next.js App Router frontend. The browser-accessible
 
 | Route | Frontend state | Data state |
 | --- | --- | --- |
-| `/` | Workspace overview with linked module cards and integration disclosure | No live provider; only Command Theater can opt into visibly synthetic development fixtures |
+| `/` | Workspace overview with linked module cards and integration disclosure | No aggregate provider; Command Theater alone can opt into visibly synthetic development fixtures |
 | `/command-theater` | Investigation graph, accessible entity explorer, filters, 2D map, optional 3D view | Typed host-owned adapter boundary; no production CICC provider is connected |
-| `/threat-intelligence` | Localized, navigable module shell with explicit planned scope | Not configured; no threat records or feed health |
-| `/vulnerability-intelligence` | Localized, navigable module shell with explicit planned scope | Not configured; no CVEs, scores, or remediation states |
-| `/system-health` | Localized, navigable module shell with explicit planned scope | Not configured; no service, worker, queue, or throughput claims |
-| `/coordination` | Localized, navigable module shell with explicit planned scope | Not configured; no agents, assignments, or task events |
-| `/settings` | Session language choice and app/browser reduced-motion preference | Locale is session-only; motion preference uses local browser storage; account/tenant settings are unavailable |
+| `/threat-intelligence` | Localized module shell with explicit planned scope | Not configured; no threat records or feed-health data |
+| `/vulnerability-intelligence` | Localized module shell with explicit planned scope | Not configured; no CVEs, scores, or remediation states |
+| `/system-health` | Localized read-only operations dashboard | Server-side fixed-path GET BFF is implemented; no provider is configured or live-verified in this checkout |
+| `/coordination` | Localized read-only agent/task/metric/event dashboard | Server-side fixed-path GET BFF is implemented; no provider is configured or live-verified in this checkout |
+| `/settings` | EN/AR/FA language choice and reduced-motion preference | Saved only in this browser; no account/tenant sync |
 
-A present route does not imply a working data integration. The four domain shells above explain the missing provider/API contract and show planned work only; they do not present fixtures as operational records. No backend endpoints, authentication behavior, tenant scope, API fields, or service states have been invented.
+A route does not imply a working data integration. Threat/Vulnerability and production Command Theater stay unconnected. System Health and Coordination render only valid provider responses; absent configuration yields an explicit error, not synthetic operational data. Their local test fixtures are synthetic and isolated in tests. The overview does not aggregate backend metrics or events.
 
-The shared shell owns responsive navigation, page-only navigation search, breadcrumbs, EN/AR/FA locale, document/component direction, skip-to-content, and global landmarks. Navigation search filters workspace pages only; entity search, alerts, notifications, account/tenant management, and global saved views are not connected or implied. The app-level reduced-motion option only adds to the operating-system preference and stores a non-sensitive boolean in this browser.
+## Trust and contract boundary
 
-Command Theater's presentation adapter and data-integrity rules are documented in `src/components/command-theater/COMMAND_THEATER_INTEGRATION.md`; graph follow-ups and existing CPU measurements are in `src/components/command-theater/COMMAND_THEATER_BACKLOG.md`.
+- PR #4 is open at reviewed head `f0589f3935f8918e54b7fa54b983d646e87775b2`. Its M13 Ops/Coordination reads and M14 BFF behavior are documented in `API_INTEGRATION_CONTRACTS.md`; PR #4 is not merged or running in this checkout.
+- The Coordination agent DTO is unresolved: the reference documentation uses `last_seen`, `completed_tasks`, and `failed_tasks`; the current source returns `last_heartbeat`, `completed`, and `failed`. The frontend decoder accepts exactly those two observed spellings, rejects conflicting aliases, and labels the timestamp field actually received. Agent 1 was asked to align docs/source in [PR #4 follow-up](https://github.com/oldman-088/cicc/pull/4#issuecomment-6656004782). Do not describe this as a resolved canonical contract or promote it to live without owner confirmation.
+- The frontend BFF uses server-only `WEB_BFF_API_TOKEN`; if the backend `CICC_OPS_READ_TOKEN` gate is enabled, those values must match. `API_INTERNAL_URL` and the frontend's explicit `CICC_OPS_TRUSTED_SINGLE_TENANT=true` acknowledgement are required. This does not authenticate users or provide tenant isolation; Ops/Coordination must remain behind trusted deployment/network controls.
+- Agents 2/3 have not confirmed Coordination adoption. No authenticated request to a deployed PR #4 service has been verified.
+- Sidebar search filters frontend page destinations only; entity search, notifications, identity, roles, tenant management, and saved views are not implemented.
 
 ## Prioritized backlog
 
-### P0 — Verified data/auth contracts — blocked on API owners
+### P0 — Canonical DTO and live integration evidence — owner/deployment dependent
 
-No backend/API application, OpenAPI document, generated client, auth contract, or tenant-scoping contract exists in this checkout. Request reviewed contracts for each data domain before building record lists, search, filters, saved investigations, live updates, or operational dashboards. Do not invent endpoints or payloads. Continue to expose explicit not-configured/error states until contracts and owners are confirmed.
+1. Align PR #4's documented and implemented Coordination agent field names and confirm the canonical wire DTO. Keep the local alias decoder strict until then.
+2. Before any live/connected claim, confirm Agents 2/3 adoption separately, provision server-only credentials, verify deployment/network access and user-access controls, and run an approved authenticated integration test against the deployed API.
+3. Define real user/session authorization and tenant isolation before exposing Ops/Coordination beyond a trusted single-tenant deployment. A shared read token and UI warning are not substitutes.
 
 ### P1 — Real-browser, responsive, and assistive-technology review — environment-dependent
 
-Validate 320px through large desktop, zoom/reflow, EN/AR/FA wrapping and mixed-direction identifiers, keyboard-only operation, visible focus, screen-reader output, forced colors, motion preference, color contrast, and actual 2D/3D/WebGL behavior in browsers/devices. Keep manual/browser evidence distinct from jsdom.
+Validate all routes at narrow/mobile through large desktop widths, zoom/reflow, EN/AR/FA wrapping and mixed-direction IDs, keyboard-only operation, visible focus, screen-reader output, forced colors, reduced motion, contrast, and actual 2D/3D/WebGL behavior. The current environment provides no browser/screenshot tool; document the missing visual evidence rather than infer it from JSDOM or HTTP smoke.
 
-### P1 — Command Theater integration and analyst workflows — contract/browser dependent
+### P1 — Translation review — fluent-speaker dependent
 
-Continue dense-graph readability, 2D/3D parity, real WebGL loss/recovery, source/provenance presentation, and route performance review. Connect only a host-owned adapter mapped from an approved API contract. Preserve graph rendering caps and do not give display coordinates analytic meaning.
+Have fluent speakers review EN/AR/FA product terminology and verify text expansion, numerals, punctuation, mixed-direction identifiers, breadcrumbs, and control order in real browsers.
 
-### P2 — Threat Intelligence and Vulnerability Intelligence — contracts required
+### P2 — Threat Intelligence and Vulnerability Intelligence — contract dependent
 
-Replace the explicit route shells with usable list/detail/filter/evidence workflows only after entity semantics, provenance, pagination, freshness, authorization, and failure behavior are reviewed. Show verification and confidence separately. Keep unavailable, cached, demo, and live records distinct.
+Replace explicit route shells with usable list/detail/evidence workflows only after entity semantics, provenance, pagination, freshness, authorization, and failure behavior are reviewed. Show verification and confidence separately; keep unavailable, cached, demo, and live records distinct.
 
-### P2 — System Health and Coordination — contracts required
+### P2 — Global entity search and alerts — product/contract dependent
 
-Build source-backed service, worker, queue, agent, task, alert, and audit views only after owners define status/freshness semantics, authorization, and failure modes. The current routes intentionally claim no operational state.
-
-### P2 — Global entity search and alerts — contract/product dependent
-
-Current sidebar search covers frontend destinations only and says so. Entity search, notifications, alert triage, and saved views need product semantics and verified data/search contracts before they can be surfaced as working features.
+Keep current navigation search explicitly route-only. Entity search, notifications, alert triage, and saved views require product semantics and verified data/search contracts before being surfaced as working features.
 
 ### P2 — Settings and identity — auth/persistence dependent
 
-The current settings page supports interface language for this session and local reduced-motion preference. Add account, tenant, theme, or persisted locale controls only with explicit product and identity/preferences contracts.
-
-### P3 — Translation review — fluent-speaker review outstanding
-
-Review EN/AR/FA product terminology with fluent speakers. Verify text expansion, numerals, punctuation, mixed-direction IDs, bidi isolation, breadcrumbs, and control order in actual browsers; tests cover selected labels and direction mechanics only.
-
-### P3 — Accessibility — automated foundation in place; manual review outstanding
-
-Automated component tests and axe-core structural checks cover app shell, overview, settings, unconfigured modules, and Command Theater. Color contrast is excluded in jsdom; no screen-reader, browser, or conformance claim has been made. Perform manual keyboard/focus, zoom, contrast, NVDA/JAWS/VoiceOver/TalkBack as available, and forced-colors checks.
+The current settings page persists locale and reduced-motion locally in this browser. Add account, tenant, theme persistence, cross-device sync, or server preference controls only with explicit product and identity/preferences contracts.
 
 ### P3 — Performance and reliability — limited measurements only
 
-Current graph timing data is isolated Node CPU work, not browser rendering. Add production bundle analysis, route/hydration profiling, browser memory/long-task checks, and WebGL frame-time measurements when a reproducible browser/GPU environment is available. No fabricated performance budgets are claimed.
+Current graph timing data is isolated Node CPU work, not browser rendering. Measure production bundle size, route/hydration cost, browser memory/long tasks, and WebGL frame time when a reproducible browser/GPU environment is available. No fabricated performance budgets are claimed.
 
 ### P3 — Browser E2E/visual regression — runner not configured
 
-Typecheck, component tests, axe-core checks, and production builds are available. A browser E2E/visual regression suite is not configured in this checkout. Add one when the project can run it reproducibly in CI.
+Typecheck, component tests, axe-core structural checks, and production builds are available. A reproducible browser E2E/visual regression suite is not configured in this checkout. Add one when CI can run it reliably.
 
 ## Latest verification
 
-- `npm run typecheck` passed; production `npm run build` passed and statically generated all seven app routes (`/`, `/command-theater`, `/threat-intelligence`, `/vulnerability-intelligence`, `/system-health`, `/coordination`, `/settings`).
-- `npm test -- --reporter=dot`: 60 tests across 13 files passed. axe-core structural checks run in JSDOM with the color-contrast rule disabled.
-- `npm audit --omit=dev --audit-level=high`: 0 vulnerabilities.
-- HTTP smoke requests to the existing port-3000 Next server returned 200 for all seven routes. PID 2368 remained alive; the server was not stopped. This is not visual/device/browser accessibility validation.
-- `git diff --cached --check` passed for the staged change set. Commit `860ead9` was pushed to `arena/09952395-cicc`; PR #2 was updated and remains open/unmerged.
-- No browser visual inspection, screen-reader, manual keyboard/device, fluent-speaker, contrast, or GPU/WebGL verification was performed.
+- `npm run typecheck` — passed.
+- `npm test -- --reporter=dot` — **85 tests across 17 files passed**, including Arabic/Persian RTL page direction and LTR technical-identifier isolation on the operations pages. Axe checks are structural in JSDOM and disable `color-contrast`; they are not visual or WCAG validation.
+- `npm run build --workspace=@cicc/web` — passed on Next.js 16.4.5; all seven page routes were generated and the integration API route remained dynamic.
+- `npm audit --audit-level=high` — 0 vulnerabilities.
+- `git diff --check` — passed.
+- Local HTTP smoke on the existing port-3000 Next server returned 200 for all seven pages. `GET /api/integrations/ops/overview` returned the expected `503 provider_not_configured`; `HEAD` and `POST` returned 405. The preview process had no API URL/token/trust-acknowledgement environment variables, so no upstream service request was made. These checks do not verify PR #4's deployed API.
+- No browser visual inspection or screenshot, manual keyboard/device testing, screen-reader session, fluent-speaker review, real contrast measurement, or GPU/WebGL validation was performed.
+
+---
+
+Command Theater's presentation-adapter rules are in `src/components/command-theater/COMMAND_THEATER_INTEGRATION.md`; graph follow-ups and isolated CPU measurements are in `src/components/command-theater/COMMAND_THEATER_BACKLOG.md` and `PERFORMANCE_REPORT.md`.

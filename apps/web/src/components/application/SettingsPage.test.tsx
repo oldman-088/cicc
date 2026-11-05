@@ -5,6 +5,7 @@ import { CiccApplication } from "./CiccApplication";
 import { SettingsPage } from "./SettingsPage";
 
 afterEach(() => {
+  window.localStorage.removeItem("cicc:locale");
   window.localStorage.removeItem("cicc:reduce-motion");
   document.documentElement.removeAttribute("data-cicc-reduce-motion");
 });
@@ -24,6 +25,7 @@ describe("workspace settings", () => {
       expect(document.documentElement.lang).toBe("fa");
       expect(document.documentElement.dir).toBe("rtl");
       expect(screen.getByRole("heading", { name: "تنظیمات", level: 1 })).toBeInTheDocument();
+      expect(window.localStorage.getItem("cicc:locale")).toBe("fa");
     });
 
     const motionControl = screen.getByRole("checkbox", { name: "کاهش حرکت در CICC" });
@@ -31,6 +33,24 @@ describe("workspace settings", () => {
     await waitFor(() => {
       expect(document.documentElement).toHaveAttribute("data-cicc-reduce-motion", "true");
       expect(window.localStorage.getItem("cicc:reduce-motion")).toBe("true");
+    });
+  });
+
+  it("restores browser-only locale and reduced-motion preferences on startup", async () => {
+    window.localStorage.setItem("cicc:locale", "ar");
+    window.localStorage.setItem("cicc:reduce-motion", "true");
+    render(
+      <CiccApplication>
+        <SettingsPage />
+      </CiccApplication>,
+    );
+
+    await waitFor(() => {
+      expect(document.documentElement.lang).toBe("ar");
+      expect(document.documentElement.dir).toBe("rtl");
+      expect(screen.getByRole("combobox", { name: "اختيار لغة الواجهة" })).toHaveValue("ar");
+      expect(screen.getByRole("checkbox", { name: "تقليل الحركة في CICC" })).toBeChecked();
+      expect(document.documentElement).toHaveAttribute("data-cicc-reduce-motion", "true");
     });
   });
 

@@ -8,7 +8,8 @@ Treat integration state as part of the product experience, not a footnote.
 
 | State | Meaning | Required UI behavior |
 | --- | --- | --- |
-| **Not configured** | No provider/verified integration is wired into this frontend | Say so directly; explain the missing contract; show no record-shaped placeholders or retry action that cannot work |
+| **Not integrated** | No reviewed provider/adapter is wired into this frontend | Say so directly; explain the missing contract; show no record-shaped placeholders or retry action that cannot work |
+| **Provider not configured** | A reviewed adapter exists, but this deployment lacks the server-side URL and credential/trusted-mode acknowledgement | Say the deployment is unconfigured; do not call it an outage or empty result; offer retry only if configuration can change without a redeploy |
 | **Unavailable / error** | A configured provider made a request but failed, timed out, was cancelled, or returned invalid data | Preserve the distinction from an empty successful result; explain what failed; offer retry only when a real retry path exists; never replace the result with fixtures |
 | **Empty** | A source returned a valid successful result containing no matching data | Say that the query/result is empty; do not label it “not configured” or “offline” |
 | **Cached** | A provider explicitly identifies the result as cached/stale and supplies usable freshness context | Mark cached state and show the source timestamp/age when supplied; do not call it live |
@@ -16,12 +17,12 @@ Treat integration state as part of the product experience, not a footnote.
 | **Live** | A verified live provider returned the result and the contract supports that assertion | Show source and freshness as provided by the provider; do not infer health or recency |
 | **Unverified / illustrative** | Verification/confidence is unknown, assessed, inferred, or intentionally illustrative | Preserve those semantics; do not visually convert them to “verified” or objective truth |
 
-No live provider exists for the overview or domain pages in this checkout. Threat Intelligence, Vulnerability Intelligence, System Health, and Coordination routes are shells that explain planned scope and missing integrations. Command Theater is adapter-ready but has no production backend adapter; demo fixtures are isolated and labeled in development. Do not invent incidents, IOC/CVE counts, agent statuses, feed health, worker/queue state, or SLAs.
+No aggregate provider is connected to the overview. Threat Intelligence and Vulnerability Intelligence remain unintegrated shells. System Health and Coordination now have read-only server-side adapters to Agent 1's documented PR #4 read contract, but no API deployment is configured or verified in this checkout; both pages fail closed and visibly disclose the trusted single-tenant/no-user-auth boundary. Command Theater is adapter-ready but has no production provider; its synthetic development fixtures are isolated and labeled. Do not invent incidents, IOC/CVE counts, agent statuses, feed health, worker/queue state, or SLAs.
 
 ## 2. Navigation and search
 
 - Use the shared shell for every route: consistent brand, breadcrumb, locale selector, skip link, one main landmark, and primary navigation.
-- The sidebar search is explicitly **page-only**. It filters translated route labels and never claims to search threat entities, IOCs, vulnerabilities, alerts, or agents. State that entity search requires a verified data provider.
+- The sidebar search is explicitly **page-only**. It filters translated route labels and never claims to search threat entities, IOCs, vulnerabilities, alerts, or agents. State that entity search requires a verified data provider; expose the `Ctrl/⌘+K` shortcut to focus the search.
 - Keep links and actions separate from status labels. A page that is not configured remains navigable so users can inspect the reason and planned scope.
 - On mobile/tablet widths, the navigation toggle exposes the same destinations; activate it with a button and keep `aria-expanded`/`aria-controls` synchronized.
 - Do not render a bell, avatar, tenant selector, live badge, or disabled-looking CTA unless the feature has a real behavior and a truthful availability message.
@@ -51,12 +52,12 @@ For unconfigured modules:
 - Keep the locale selector available in the top-level shell and Settings. Both controls update the same app state.
 - English is LTR; Arabic and Persian are RTL. Set document/component language and direction. Use logical CSS properties and mirror directional arrows when their meaning is “back/forward”.
 - Wrap technical IDs, URLs, CVE/IOC values, and mixed-script tokens in `<bdi>` or an explicit direction where needed. Do not translate source identifiers.
-- Settings currently applies language only for the active session; the reduced-motion value is stored in this browser. Explain scope and persistence; do not imply account-wide sync.
+- Locale and reduced-motion choices are stored only in this browser. Explain scope and persistence; do not imply account-wide or cross-device sync.
 - Translation coverage is code-backed but has not been reviewed by fluent speakers. Leave space for text expansion and verify mixed-direction punctuation in a browser.
 
 ## 6. Settings and accessibility preferences
 
-The settings page provides only behaviors that exist: EN/AR/FA locale state and an additional reduce-motion option. The OS reduced-motion preference always remains respected. The motion checkbox stores a non-sensitive local boolean and does not alter any server service. Account/tenant settings are explicitly unavailable because no verified identity/preferences contract is present.
+The settings page provides only behaviors that exist: EN/AR/FA locale and an additional reduce-motion option, both saved in this browser only. The OS reduced-motion preference always remains respected. These preferences do not alter any server service. Account/tenant settings are explicitly unavailable because no verified identity/preferences contract is present.
 
 Use native controls with explicit labels, keyboard focus, semantic headings, and useful descriptions. Do not add a custom switch or select without a demonstrated need. Forced-colors focus styling and reduced-motion CSS exist, but require browser verification.
 

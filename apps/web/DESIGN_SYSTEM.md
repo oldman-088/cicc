@@ -48,17 +48,18 @@ Spacing tokens: `--cicc-space-1/2/3/4/6/8` = `0.25/0.5/0.75/1/1.5/2rem`. Radius 
 
 ## Components and states
 
-- **Application shell:** sticky top bar, brand mark, breadcrumb, global language control, responsive navigation, page-only route filter, skip link, and a single main landmark. The current route receives `aria-current="page"`.
-- **Overview card:** whole-card navigation, title + described-by text, and a visible state badge; CT demo is explicitly labeled synthetic in development. The remaining domain cards state that their provider is not connected.
-- **Unavailable module panel:** warning-toned integration message, plain-language explanation, explicit “planned/not yet available” scope, and a route back to the overview. It shows no record-shaped fixtures.
-- **Settings:** labeled locale selector, keyboard-accessible motion checkbox, explanation of local/session persistence, and a separate notice for unsupported account/tenant controls.
+- **Application shell:** sticky top bar, brand mark, breadcrumb, global language control, responsive navigation, page-only route filter with an announced `Ctrl/⌘+K` shortcut, skip link, and a single main landmark. The current route receives `aria-current="page"`.
+- **Overview card:** whole-card navigation, title + described-by text, and a visible state badge; CT demo is explicitly labeled synthetic in development. Threat/Vulnerability remain unconfigured; System Health/Coordination use read-only server adapters but are unavailable until deployment configuration is present.
+- **Unconfigured module panel:** warning-toned integration message, plain-language explanation, explicit planned scope, and a route back to the overview. It is used for Threat/Vulnerability and shows no record-shaped fixtures.
+- **Read-only data panel:** `ResourcePanel` gives each provider resource a refresh action, loading/error/empty states, and a browser-local last-success receipt time. Previous data after refresh failure is labeled stale, never current. Operational pages disclose the single-tenant trust limitation and use raw provider status text.
+- **Settings:** labeled locale selector, keyboard-accessible motion checkbox, explanation that locale/motion are browser-local, and a separate notice for unsupported account/tenant controls.
 - **Command Theater:** shared 2D/3D relationship view, filter and metadata panels, bounded graph rendering, accessible explorer, provider/error/empty states. Detail is maintained in the Command Theater component and integration docs.
 - **Focus:** global `:focus-visible` outline is 3px with offset; forced-colors mode uses a system-color outline. Do not remove focus indicators to make hover states look cleaner.
 - **Motion:** default interactions are restrained. `prefers-reduced-motion` is respected; the app-level option can further reduce animation and is never an override that forces motion.
 
 ## Localization and direction
 
-Supported locale identifiers are `en`, `ar`, and `fa`. English is LTR; Arabic and Persian are RTL. Keep translated strings in typed per-locale maps, use logical CSS, preserve browser-native select behavior, isolate Latin identifiers, and test long labels and punctuation. Language switching is session-only today; it does not imply account preference persistence or a translated backend.
+Supported locale identifiers are `en`, `ar`, and `fa`. English is LTR; Arabic and Persian are RTL. Keep translated strings in typed per-locale maps, use logical CSS, preserve browser-native select behavior, isolate Latin identifiers, and test long labels and punctuation. Locale is saved only in browser-local storage; it does not imply account preference synchronization or a translated backend.
 
 ## Status color use
 

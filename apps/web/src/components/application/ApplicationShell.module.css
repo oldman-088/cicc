@@ -267,6 +267,26 @@
   line-height: 1.5;
 }
 
+.searchShortcut {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-block-start: 0.35rem;
+  color: #91a8bd;
+}
+
+.searchShortcut kbd {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid #344b60;
+  border-radius: 0.3rem;
+  color: #d0dce8;
+  background: #102131;
+  font: inherit;
+  font-size: 0.95em;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .sectionLabel {
   margin: 0 0 0.65rem;
   padding-inline: 0.7rem;

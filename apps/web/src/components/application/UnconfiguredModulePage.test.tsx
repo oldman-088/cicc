@@ -16,11 +16,11 @@ vi.mock("./CiccApplication", () => ({
   useCiccLocale: () => ({ locale: moduleLocale.value, setLocale: () => {} }),
 }));
 
-const englishModules: { id: ModuleId; title: string; status: string }[] = [
-  { id: "threat-intelligence", title: "Threat Intelligence", status: "Threat data is not connected" },
-  { id: "vulnerability-intelligence", title: "Vulnerability Intelligence", status: "Vulnerability data is not connected" },
-  { id: "system-health", title: "System Health", status: "Operational telemetry is not connected" },
-  { id: "coordination", title: "Agent Coordination", status: "Coordination services are not connected" },
+const englishModules: { id: ModuleId; title: string; status: string; scope: string }[] = [
+  { id: "threat-intelligence", title: "Threat Intelligence", status: "Threat data is not connected", scope: "Planned scope — not yet available" },
+  { id: "vulnerability-intelligence", title: "Vulnerability Intelligence", status: "Vulnerability data is not connected", scope: "Planned scope — not yet available" },
+  { id: "system-health", title: "System Health", status: "Operations provider is not available", scope: "Available read-only views" },
+  { id: "coordination", title: "Agent Coordination", status: "Coordination provider is not available", scope: "Available read-only views" },
 ];
 
 afterEach(() => {
@@ -28,12 +28,12 @@ afterEach(() => {
 });
 
 describe("unconfigured workspace modules", () => {
-  it.each(englishModules)("explains the unavailable integration for $title", ({ id, title, status }) => {
+  it.each(englishModules)("explains the unavailable integration for $title", ({ id, title, status, scope }) => {
     const { container } = render(<UnconfiguredModulePage moduleId={id} />);
 
     expect(screen.getByRole("heading", { name: title, level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: status })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Planned scope — not yet available" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: scope })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to workspace overview" })).toHaveAttribute("href", "/");
     expect(container).not.toHaveTextContent(/live count|service is healthy/i);
   });

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { UnconfiguredModulePage } from "../../components/application/UnconfiguredModulePage";
+import { SystemHealthWorkspace } from "../../components/system-health/SystemHealthWorkspace";
 
 export const metadata: Metadata = {
   title: "System Health | CICC",
-  description: "Operations workspace. No verified health or telemetry source is connected.",
+  description: "Read-only system health and operational telemetry from the configured provider.",
 };
 
 export default function SystemHealthPage() {
-  return <UnconfiguredModulePage moduleId="system-health" />;
+  return <SystemHealthWorkspace />;
 }

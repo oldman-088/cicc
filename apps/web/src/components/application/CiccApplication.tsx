@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Locale } from "./localization";
+import { isLocale, type Locale } from "./localization";
 import { ApplicationShell } from "./ApplicationShell";
 
 type LocaleContextValue = {
@@ -25,6 +25,7 @@ export function useCiccPreferences() {
 export function CiccApplication({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>("en");
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [preferencesReady, setPreferencesReady] = useState(false);
   const localeValue = useMemo(
     () => ({ locale, setLocale, reduceMotion, setReduceMotion }),
     [locale, reduceMotion],
@@ -50,15 +51,17 @@ export function CiccApplication({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      if (window.localStorage.getItem("cicc:reduce-motion") === "true") {
-        setReduceMotion(true);
-      }
+      const storedLocale = window.localStorage.getItem("cicc:locale");
+      if (storedLocale && isLocale(storedLocale)) setLocale(storedLocale);
+      setReduceMotion(window.localStorage.getItem("cicc:reduce-motion") === "true");
     } catch {
-      // Keep the OS preference when browser storage is unavailable.
+      // Preferences still work for this session when browser storage is unavailable.
     }
+    setPreferencesReady(true);
   }, []);
 
   useEffect(() => {
+    if (!preferencesReady) return;
     const root = document.documentElement;
     if (reduceMotion) root.setAttribute("data-cicc-reduce-motion", "true");
     else root.removeAttribute("data-cicc-reduce-motion");
@@ -68,7 +71,16 @@ export function CiccApplication({ children }: { children: ReactNode }) {
     } catch {
       // The preference remains active for this app session without storage.
     }
-  }, [reduceMotion]);
+  }, [reduceMotion, preferencesReady]);
+
+  useEffect(() => {
+    if (!preferencesReady) return;
+    try {
+      window.localStorage.setItem("cicc:locale", locale);
+    } catch {
+      // Locale selection remains active for this app session without storage.
+    }
+  }, [locale, preferencesReady]);
 
   return (
     <LocaleContext.Provider value={localeValue}>

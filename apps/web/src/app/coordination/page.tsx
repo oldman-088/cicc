@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { UnconfiguredModulePage } from "../../components/application/UnconfiguredModulePage";
+import { CoordinationWorkspace } from "../../components/coordination/CoordinationWorkspace";
 
 export const metadata: Metadata = {
   title: "Agent Coordination | CICC",
-  description: "Agent coordination workspace. No verified agent or task provider is connected.",
+  description: "Read-only agent, task, metric, and event views from the configured coordination provider.",
 };
 
 export default function CoordinationPage() {
-  return <UnconfiguredModulePage moduleId="coordination" />;
+  return <CoordinationWorkspace />;
 }

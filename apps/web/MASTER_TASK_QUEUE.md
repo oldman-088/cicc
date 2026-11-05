@@ -4,69 +4,45 @@
 
 Status legend: **Done** = implemented and checked to the stated level; **In progress** = current branch work; **Blocked** = requires an owner/contract/environment; **Queued** = not started.
 
-## Completed foundations
+## Completed frontend work
 
-- [x] Shared responsive application shell, overview route, and separate Command Theater route.
-- [x] EN/AR/FA locale context, document language/direction synchronization, translated navigation, RTL-aware shell, and skip link.
-- [x] Navigation search that filters known frontend pages and explicitly disclaims entity search.
-- [x] Explicit, localized, navigable shells for Threat Intelligence, Vulnerability Intelligence, System Health, and Coordination. No fabricated data or service state.
-- [x] Settings route for session locale and locally stored additional reduced-motion preference; unsupported identity/tenant controls are called out.
-- [x] Existing Command Theater adapter boundary, runtime validation, isolated synthetic development provider, data-failure behavior, graph limits, and keyboard-aware visualization preserved.
-- [x] Added dashboard source-freshness and recent-events empty states, with synthetic Command Theater data explicitly excluded from live freshness/event claims.
-- [x] Architecture/design/UX/API/accessibility/performance/development documentation and this task queue authored and reviewed; manual/browser validation remains separately blocked.
+- [x] Shared responsive CICC shell, workspace overview, separate Command Theater route, breadcrumbs, skip link, semantic navigation, and responsive navigation behavior.
+- [x] EN/AR/FA locale handling, document `lang`/`dir`, RTL/LTR layout support, reduced-motion preference, and browser-local locale persistence.
+- [x] Page-only navigation search with an explicit scope notice and `Ctrl/⌘+K` shortcut; entity search is not claimed.
+- [x] Honest unconfigured Threat Intelligence and Vulnerability Intelligence shells; no fabricated data or operational status.
+- [x] Command Theater typed presentation adapter, runtime validation, isolated synthetic development provider, accessible 2D/3D fallback, graph limits, and no fixture fallback after provider failure.
+- [x] Read-only System Health and Agent Coordination workspaces with explicit loading, unconfigured/error, malformed, empty, stale-after-failure, and retry states; EN/AR/FA copy and RTL-safe technical IDs.
+- [x] Server BFF with fixed GET allowlist, server-only `WEB_BFF_API_TOKEN`, mandatory trusted single-tenant acknowledgement, optional `WEB_BFF_ENFORCE_SAME_ORIGIN=1`, no forwarding of browser credentials/tenant headers, redirects rejected, bounded query/timeout/streaming response size, and no write methods. `HEAD` is explicitly rejected.
+- [x] Coordination DTO decoder/tests cover the two observed documented/implemented field spellings, reject conflicting duplicate aliases, and show which timestamp property was supplied. This is compatibility handling only; it does not resolve the upstream DTO mismatch.
+- [x] Updated API contract inventory, architecture, UX/design/accessibility, backlog, and development records with current PR #4 evidence and verification limits.
 
-## Immediate acceptance / validation
+## Current blockers and owner follow-up
 
-- [x] Typecheck passed after the dashboard update.
-- [x] 60 automated tests across 13 files passed after the dashboard update, including axe-core structural checks with color contrast disabled.
-- [x] Production build passed with all seven application routes generated, using an isolated temporary copy so the live preview could remain running.
-- [x] `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities; `git diff --check` passed.
-- [x] All seven route responses returned HTTP 200 on the existing port-3000 server after the dashboard update; PID 2368 stayed running. This is HTTP smoke only.
-- [x] The foundation diff was reviewed (37 frontend/doc files) and committed/pushed as `860ead9` to `origin arena/09952395-cicc`; no unrelated work or agent branch was changed in this follow-up.
-- [x] PR #2 previously had its title/body updated through GitHub API. It targets `main`, remains open, and was not merged.
-- [x] Reviewed open PR contract artifacts #1/#3/#4 and posted owner questions; no reply was present at the latest REST check. Current frontend remains unconfigured for these domains.
+- [ ] **PR #4 Agent DTO mismatch:** at current reviewed head `f0589f3935f8918e54b7fa54b983d646e87775b2` (compared with the previously reviewed `2f647f18577278c83cb4b1c1927e889c060058e8`), `docs/API_REFERENCE.md` documents `last_seen` / `completed_tasks` / `failed_tasks`, while `apps/api/app/coordination/agents.py` plus `registry.task_stats_by_agent()` returns `last_heartbeat` / `completed` / `failed`. M16–M19 added a read-only `/contract` descriptor and coordination lifecycle fixes, but did not change `docs/API_REFERENCE.md`, `agents.py`, `registry.py`, or the `GET /agents` DTO; mismatch persists. Clarification/alignment request posted at [PR #4 comment #6656004782](https://github.com/oldman-088/cicc/pull/4#issuecomment-6656004782). Do not edit backend files or other agents' branches.
+- [ ] Agents 2/3 have not confirmed Coordination v1.0 adoption. Do not claim their approval or bind their workflows.
+- [ ] No `API_INTERNAL_URL`, BFF credential/trust acknowledgement, or approved integration environment is configured for this preview. The local BFF correctly returns `provider_not_configured`; do not claim live PR #4 service verification.
+- [ ] No user authentication or tenant isolation exists for Ops/Coordination. Keep this behind trusted single-tenant deployment/network controls; do not present the local trust flag as authentication.
+- [ ] Visual screenshot/browser QA is not possible here: no browser/screenshot control tool is available. Do not claim manual visual, device, assistive-technology, contrast, fluent-speaker, or GPU checks.
 
-## P0 — data integrity and integration governance
+## Verification completed
 
-- [ ] **Blocked: approve API/auth/tenant contracts.** Obtain owner-approved versioned contracts before implementing data transport, live search, notification, identity, or operational status. Open PRs #1/#3/#4 contain candidate artifacts, but none is merged or fully reconciled; see `API_INTEGRATION_CONTRACTS.md` and recheck the owner discussions before transport work.
-- [x] Current Command Theater fixtures are development-only, visibly synthetic, and isolated from provider failures; regression tests cover the rule.
-- [ ] Add corresponding isolation tests whenever a new provider or source state is introduced.
-- [ ] Preserve `unconfigured`, `unavailable/error`, `empty`, `cached`, `live`, and `unverified` as distinct states; only assert source states supported by actual metadata.
+- [x] `npm run typecheck` passed.
+- [x] `npm test -- --reporter=dot` passed: **85 tests across 17 files**, including Arabic/Persian RTL and LTR identifier-isolation checks on System Health/Coordination. Axe checks are JSDOM structural checks with color contrast disabled.
+- [x] `npm run build --workspace=@cicc/web` passed; all seven pages generated and the integration API route remained dynamic.
+- [x] `npm audit --audit-level=high` reported 0 vulnerabilities.
+- [x] `git diff --check` passed.
+- [x] Local port-3000 HTTP smoke: all seven app pages returned 200; unconfigured BFF GET returned 503 `provider_not_configured`; HEAD and POST returned 405. The preview process had no API URL/token/trust environment variables, so this did not contact PR #4's service.
+- [ ] Browser visual, screenshot, device, screen-reader, contrast, fluent-speaker, and real GPU/WebGL validation remain unperformed.
 
-## P1 — manual alpha validation
+## PR #2 handling
 
-- [ ] **Blocked: browser/device environment.** Test desktop/tablet/mobile (including 320px), zoom/reflow, EN/AR/FA wrapping, bidi identifiers, focus visibility, keyboard navigation, forced colors, reduced motion, and screenshot consistency.
-- [ ] **Blocked: assistive technology.** Record keyboard-only and screen-reader review with actual browser/AT versions. Automated JSDOM/axe checks do not satisfy this task.
-- [ ] **Blocked: browser/GPU.** Verify real WebGL initialization, context loss/recovery, focus restoration, 2D/3D parity, dense-graph frame time, and device memory.
-- [ ] Request fluent-speaker review of EN/AR/FA wording and terminology.
+- [x] Reviewed the current PR #2 description, changed-file list, branch head, and this batch's source/documentation diff; typecheck, full suite, build, audit, and smoke checks passed before updating the PR.
+- [ ] Update PR #2 body and push only to `arena/09952395-cicc` after the current diff is finalized. Do not merge PR #2 or push to `main`.
 
-## P1 — Command Theater
+## Later work (contract/product dependent)
 
-- [ ] Connect a host-owned adapter only after reviewed API, auth, and tenant contracts exist.
-- [ ] Run browser-based analyst workflow checks for source/provenance visibility, 2D keyboard map, explorer parity, bounded view disclosure, pagination, error/retry, and optional 3D fallback.
-- [ ] Measure browser bundle/route/hydration/memory/graphics performance separately from the existing Node CPU microbenchmarks.
-
-## P2 — data-backed feature modules (contract-gated)
-
-- [ ] **Threat Intelligence:** replace the no-provider shell with reviewed actor/campaign/indicator/evidence workflows after entity semantics and source contracts exist.
-- [ ] **Vulnerability Intelligence:** define exposure/CVE/prioritization/remediation workflows from verified inputs (including any external scoring source semantics); do not assume fields or status.
-- [ ] **System Health:** add source-backed service/worker/queue/alert views only after freshness, health, failure, and authorization semantics are defined by the operations owner.
-- [ ] **Coordination:** implement agent/task/routing/approval workflows only from a reviewed registry and task contract.
-- [ ] **Global entity search:** expand beyond page navigation only when an authorized search/index contract, ranking/pagination, stale behavior, and empty/error states are agreed.
-- [ ] **Notifications/alerts:** do not add notification bells or simulated counts before delivery, acknowledgement, ordering, and ownership semantics exist.
-
-## P2 — preferences and identity
-
-- [ ] Persist locale or account preferences only when product and identity owners approve scope and conflict behavior.
-- [ ] Add account, tenant, role, or theme controls only with a verified auth/preferences contract and real supported behaviors.
-
-## P3 — engineering quality
-
-- [ ] Add browser E2E/visual-regression automation when a reproducible browser runner is available in CI.
-- [ ] Continue consolidating hardcoded component CSS values onto documented design tokens without reducing measured contrast/focus visibility.
-- [ ] Add real browser performance and memory baselines on named devices after a production-like build/provider is available; do not invent budgets from Node timings.
-- [ ] Re-review source code/asset licenses before any reuse. The current UI uses original markup/styles/icons and only borrows general interaction patterns.
-
-## Completion policy
-
-A task that needs a backend/API owner or real browser/GPU/AT environment remains **Blocked** until that dependency is available. Do not satisfy it with invented contracts, dummy operational data, synthetic service health, or claims based only on jsdom/HTTP checks. Keep the browser-preview server on port 3000 running while doing code work.
+- [ ] Connect Threat Intelligence or Vulnerability Intelligence only after owner-approved HTTP/auth/tenant/provenance contracts.
+- [ ] Add global entity search, alert triage, notifications, identity, or tenant settings only after product and API contracts.
+- [ ] Add account/cross-device preferences only after identity and persistence contracts.
+- [ ] Add browser E2E/visual regression when a reproducible browser runner is available; keep JSDOM/HTTP evidence clearly separate.
+- [ ] Measure browser bundle/hydration, responsive layouts, real contrast, screen-reader output, GPU/context loss, and device performance in an approved environment.

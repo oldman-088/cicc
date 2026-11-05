@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 import { ApplicationShell } from "./ApplicationShell";
@@ -80,6 +80,7 @@ describe("CICC application shell", () => {
     const search = screen.getByRole("searchbox", { name: "یافتن صفحهٔ فضای کاری" });
     expect(search).toHaveAttribute("aria-describedby");
     expect(screen.getByText(/فقط صفحه‌ها جست‌وجو می‌شوند/)).toBeInTheDocument();
+    expect(screen.getByText("Ctrl/⌘+K")).toHaveAttribute("dir", "ltr");
     fireEvent.change(search, { target: { value: "آسیب‌پذیری" } });
 
     const navigation = screen.getByRole("navigation", { name: "پیمایش اصلی" });
@@ -89,6 +90,37 @@ describe("CICC application shell", () => {
 
     fireEvent.change(search, { target: { value: "not-a-module" } });
     expect(screen.getByRole("status")).toHaveTextContent("صفحه‌ای در فضای کاری با این جست‌وجو پیدا نشد.");
+  });
+
+  it("opens navigation search with Ctrl/Meta+K without hijacking form-field shortcuts", async () => {
+    for (const modifiers of [{ ctrlKey: true }, { metaKey: true }]) {
+      const { unmount } = render(
+        <ApplicationShell locale="en" onLocaleChange={vi.fn()}>
+          <h1>Workspace overview</h1>
+        </ApplicationShell>,
+      );
+      const search = screen.getByRole("searchbox", { name: "Find a workspace page" });
+      const toggle = screen.getByRole("button", { name: "Open workspace navigation" });
+      expect(search).toHaveAttribute("aria-keyshortcuts", "Control+K Meta+K");
+      expect(screen.getByText("Ctrl/⌘+K")).toBeInTheDocument();
+
+      const fieldShortcut = new KeyboardEvent("keydown", {
+        key: "k", bubbles: true, cancelable: true, ctrlKey: true,
+      });
+      search.dispatchEvent(fieldShortcut);
+      expect(fieldShortcut.defaultPrevented).toBe(false);
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+      const globalShortcut = new KeyboardEvent("keydown", {
+        key: "k", bubbles: true, cancelable: true, ...modifiers,
+      });
+      window.dispatchEvent(globalShortcut);
+      await waitFor(() => expect(search).toHaveFocus());
+      expect(globalShortcut.defaultPrevented).toBe(true);
+      expect(screen.getByRole("button", { name: "Close workspace navigation" }))
+        .toHaveAttribute("aria-expanded", "true");
+      unmount();
+    }
   });
 
   it("marks the overview destination as current on the home route", () => {

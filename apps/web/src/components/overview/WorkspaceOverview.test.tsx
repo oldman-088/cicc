@@ -23,8 +23,8 @@ describe("workspace overview", () => {
     render(<WorkspaceOverview demoMode={false} />);
 
     expect(screen.getByRole("heading", { name: "Workspace overview", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "No live data provider is configured" })).toBeInTheDocument();
-    expect(screen.getByText(/has no verified backend\/API integration.*do not display production intelligence or operational metrics/i))
+    expect(screen.getByRole("heading", { name: "No provider is configured in this deployment" })).toBeInTheDocument();
+    expect(screen.getByText(/System Health and Coordination have read-only server-side adapters.*no provider is configured by default/i))
       .toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Command Theater" }))
       .toHaveAttribute("href", "/command-theater");
@@ -39,9 +39,9 @@ describe("workspace overview", () => {
     expect(screen.getByText(/No CVE records, scores, or status are displayed without a verified source/i))
       .toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Data sources and freshness" })).toBeInTheDocument();
-    expect(screen.getByText(/no source update time or freshness claim is available/i)).toBeInTheDocument();
+    expect(screen.getByText(/System Health and Coordination show provider timestamps or cache metadata only when returned/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Recent events" })).toBeInTheDocument();
-    expect(screen.getByText("No event provider is configured, so no recent activity is shown."))
+    expect(screen.getByText(/This overview does not aggregate operational events.*no events are fabricated here/i))
       .toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Related activity workspaces" })).toBeInTheDocument();
     expect(screen.queryByText(/live threat count|active incidents/i)).not.toBeInTheDocument();

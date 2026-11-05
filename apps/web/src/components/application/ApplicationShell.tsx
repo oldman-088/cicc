@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { isLocale, type Locale } from "./localization";
 import styles from "./ApplicationShell.module.css";
 
@@ -32,6 +32,7 @@ type ShellMessages = {
   availabilityDescription: string;
   searchPages: string;
   searchHelp: string;
+  searchShortcutLabel: string;
   noPagesMatch: string;
   language: string;
   openNavigation: string;
@@ -59,6 +60,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     availabilityDescription: "Pages without a verified data provider show an explicit not-connected state. No production data is synthesized.",
     searchPages: "Find a workspace page",
     searchHelp: "Searches pages only. Entity search requires a connected, verified data provider.",
+    searchShortcutLabel: "Shortcut",
     noPagesMatch: "No workspace page matches this search.",
     language: "Interface language",
     openNavigation: "Open workspace navigation",
@@ -84,6 +86,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     availabilityDescription: "تعرض الصفحات التي لا تملك مزوّد بيانات موثّق حالة عدم الاتصال بوضوح. لا تُنشأ بيانات إنتاجية مصطنعة.",
     searchPages: "البحث عن صفحة في مساحة العمل",
     searchHelp: "يبحث في الصفحات فقط. يتطلب البحث عن الكيانات مزوّد بيانات متصلاً وموثّقاً.",
+    searchShortcutLabel: "اختصار",
     noPagesMatch: "لا توجد صفحة في مساحة العمل تطابق هذا البحث.",
     language: "لغة الواجهة",
     openNavigation: "فتح تنقل مساحة العمل",
@@ -109,6 +112,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     availabilityDescription: "صفحه‌هایی که منبع دادهٔ تأییدشده ندارند، وضعیت اتصال‌نداشتن را روشن نشان می‌دهند. دادهٔ عملیاتی ساختگی تولید نمی‌شود.",
     searchPages: "یافتن صفحهٔ فضای کاری",
     searchHelp: "فقط صفحه‌ها جست‌وجو می‌شوند. جست‌وجوی موجودیت به منبع دادهٔ متصل و تأییدشده نیاز دارد.",
+    searchShortcutLabel: "میان‌بر",
     noPagesMatch: "صفحه‌ای در فضای کاری با این جست‌وجو پیدا نشد.",
     language: "زبان رابط کاربری",
     openNavigation: "بازکردن پیمایش فضای کاری",
@@ -171,8 +175,37 @@ export function ApplicationShell({ locale, onLocaleChange, children }: Applicati
   const [navigationQuery, setNavigationQuery] = useState("");
   const navigationId = useId();
   const searchHelpId = useId();
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const messages = shellMessages[locale];
   const pathname = usePathname() ?? "/";
+
+  useEffect(() => {
+    function focusNavigationSearch(event: KeyboardEvent) {
+      if (
+        !(event.ctrlKey || event.metaKey)
+        || event.altKey
+        || event.shiftKey
+        || event.key.toLowerCase() !== "k"
+        || event.defaultPrevented
+      ) return;
+
+      const target = event.target;
+      if (target instanceof HTMLElement && (
+        target.isContentEditable
+        || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+      )) return;
+
+      event.preventDefault();
+      setMobileNavigationOpen(true);
+      window.setTimeout(() => {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }, 0);
+    }
+
+    window.addEventListener("keydown", focusNavigationSearch);
+    return () => window.removeEventListener("keydown", focusNavigationSearch);
+  }, []);
 
   const workspaceItems: NavigationItem[] = [
     { id: "overview", href: "/", label: messages.overview },
@@ -290,15 +323,23 @@ export function ApplicationShell({ locale, onLocaleChange, children }: Applicati
                 </svg>
               </span>
               <input
+                ref={searchInputRef}
                 type="search"
                 aria-label={messages.searchPages}
                 aria-describedby={searchHelpId}
+                aria-keyshortcuts="Control+K Meta+K"
                 value={navigationQuery}
                 onChange={(event) => setNavigationQuery(event.target.value)}
                 placeholder={messages.searchPages}
               />
             </div>
-            <p className={styles.searchHelp} id={searchHelpId}>{messages.searchHelp}</p>
+            <p className={styles.searchHelp} id={searchHelpId}>
+              {messages.searchHelp}
+              <span className={styles.searchShortcut}>
+                {messages.searchShortcutLabel}
+                <kbd dir="ltr"><bdi dir="ltr">Ctrl/⌘+K</bdi></kbd>
+              </span>
+            </p>
 
             <p className={styles.sectionLabel}>{messages.workspaceSection}</p>
             <ul className={styles.navigationList}>

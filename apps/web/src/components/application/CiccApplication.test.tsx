@@ -20,6 +20,8 @@ vi.mock("../command-theater/webgl-support", () => ({
 }));
 
 afterEach(() => {
+  window.localStorage.removeItem("cicc:locale");
+  window.localStorage.removeItem("cicc:reduce-motion");
   document.documentElement.lang = "en";
   document.documentElement.dir = "ltr";
 });
