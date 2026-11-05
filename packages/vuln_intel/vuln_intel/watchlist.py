@@ -181,6 +181,11 @@ class ExposureReport:
     #: Advisories that name a package we run, but whose version could not be
     #: evaluated.  Kept separate so "unknown" is never buried inside "affected".
     unverified: tuple[PackageMatch, ...] = ()
+    #: (advisory, dependency) pairs proven NOT inside any affected range.  Kept
+    #: explicitly because a ``not_affected`` verdict is the one statement that
+    #: removes work from a downstream consumer's queue (VEX export relies on it);
+    #: dropping it would make "safe" indistinguishable from "not evaluated".
+    not_affected: tuple[PackageMatch, ...] = ()
     #: Advisories with no ``affected`` data, which cannot be matched at all.
     unexplorable: tuple[str, ...] = ()
     advisories_considered: int = 0
@@ -203,6 +208,7 @@ class ExposureReport:
             "advisories_considered": self.advisories_considered,
             "affected": len(self.affected),
             "unverified": len(self.unverified),
+            "not_affected": len(self.not_affected),
             "unexplorable": list(self.unexplorable),
             "clean": self.clean,
             "assets_at_risk": list(self.assets_at_risk),
@@ -233,6 +239,7 @@ def analyse_exposure(
     """
     matches: list[PackageMatch] = []
     unverified: list[PackageMatch] = []
+    not_affected: list[PackageMatch] = []
     unexplorable: list[str] = []
     considered = 0
     assets: set[str] = set()
@@ -267,13 +274,15 @@ def analyse_exposure(
                         assets.add(dependency.asset)
                 elif assessment.verdict is Verdict.UNKNOWN:
                     unverified.append(match)
+                else:
+                    not_affected.append(match)
 
     # One dependency can be matched by several affected-entries of one advisory;
     # report each (advisory, dependency) pair once.
-    deduped = _dedupe(matches)
     return ExposureReport(
-        matches=deduped,
+        matches=_dedupe(matches),
         unverified=_dedupe(unverified),
+        not_affected=_dedupe(not_affected),
         unexplorable=tuple(unexplorable),
         advisories_considered=considered,
         assets_at_risk=tuple(sorted(assets)),

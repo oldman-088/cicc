@@ -317,6 +317,11 @@ class TechniqueRollup:
     by_technique: Mapping[str, tuple[str, ...]]
     names: Mapping[str, str]
     consulted: bool
+    #: Additive split (M3): the same correlations grouped by ``mapping_type``,
+    #: so a consumer can see impact techniques beside exploitation techniques
+    #: instead of wondering why a count differs from a naive sum. The default
+    #: ``techniques`` list above stays filtered to exploitation techniques.
+    by_mapping_type: Mapping[str, Mapping[str, int]] = field(default_factory=dict)
 
     @property
     def techniques(self) -> tuple[str, ...]:
@@ -335,6 +340,10 @@ class TechniqueRollup:
                 }
                 for tid, cves in self.by_technique.items()
             ],
+            "techniques_by_mapping_type": {
+                mapping_type: dict(counts)
+                for mapping_type, counts in sorted(self.by_mapping_type.items())
+            },
         }
 
 
@@ -351,10 +360,17 @@ def technique_rollup(correlations: Iterable[TechniqueCorrelation]) -> TechniqueR
     names: dict[str, str] = {}
     consulted = False
     cves: set[str] = set()
+    # M3: group every technique (not only exploitation ones) by mapping type.
+    by_type_techniques: dict[str, set[str]] = {}
+    by_type_cves: dict[str, set[str]] = {}
     for correlation in correlations:
         cves.add(correlation.cve)
         consulted = consulted or correlation.consulted
         for technique in correlation.techniques:
+            by_type_techniques.setdefault(technique.mapping_type, set()).add(
+                technique.technique_id
+            )
+            by_type_cves.setdefault(technique.mapping_type, set()).add(correlation.cve)
             if not technique.is_exploitation:
                 continue
             bucket = per_technique.setdefault(technique.technique_id, [])
@@ -367,4 +383,12 @@ def technique_rollup(correlations: Iterable[TechniqueCorrelation]) -> TechniqueR
         by_technique={tid: tuple(sorted(cves_list)) for tid, cves_list in ordered},
         names=names,
         consulted=consulted,
+        by_mapping_type={
+            mapping_type: {
+                "technique_count": len(by_type_techniques.get(mapping_type, ())),
+                "cve_count": len(by_type_cves.get(mapping_type, ())),
+            }
+            for mapping_type in MAPPING_TYPES
+            if mapping_type in by_type_techniques
+        },
     )
