@@ -95,3 +95,10 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   ACTIVE/STALE/UNAVAILABLE/UNKNOWN + status-transition audit, state-vs-events
   consistency test). Whole product ~30-40%; no real cross-agent execution yet;
   DoD §17 unmet -> not production-ready.
+
+## M24 re-confirmation (2026-11-05 ~12:02 UTC)
+- `main` still `ca8f82c`; `README.md` (v1.0) unchanged/unmodified. Agent 1
+  ~90% (M24: atomic guarded task transitions + create-race fix proven under
+  real threaded concurrency; crash/restart recovery; TTL/timeout interplay;
+  health model documented + surfaced in reference dashboard). Whole product
+  ~30-40%; no real cross-agent execution; DoD §17 unmet -> not production-ready.

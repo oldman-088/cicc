@@ -207,6 +207,7 @@ export interface CoordinationAgent {
   capabilities: string[];
   status: string;
   stale: boolean;
+  health?: "ACTIVE" | "STALE" | "UNAVAILABLE" | "UNKNOWN"; // M24 health classification (docs/AGENT_HEALTH_MODEL.md)
   version: string | null;
   last_heartbeat: string | null;
   active_tasks: number;

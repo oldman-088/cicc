@@ -19,7 +19,7 @@
         "DAG",
         "sweep"
       ],
-      "tests": "API 179/179 (7 real-PG + 1 live-GitHub); contract_check 31/31 live; E2E 22/22 live"
+      "tests": "API 185/185 (7 real-PG + 1 live-GitHub, incl. 6 threaded-concurrency tests); contract_check 31/31 live; E2E 22/22 live"
     },
     "ops": {
       "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,7 +43,7 @@
     "never_touch_other_branches": true
   },
   "milestones_done": [
-    "M1..M23"
+    "M1..M24"
   ],
   "contracts": {
     "version": "v1.0",
@@ -89,7 +89,7 @@
     "2": "744ccd3",
     "3": "1a46f70",
     "6": "a221003",
-    "checked": "2026-11-05T11:48Z"
+    "checked": "2026-11-05T12:02Z"
   },
   "adoption": {
     "agent2": "PENDING (primary TI owner)",
@@ -97,5 +97,5 @@
     "agent3": "PENDING",
     "agent4": "PARTIALLY COMPATIBLE \u2014 proxy code + verified-compatible surface; execution UNVERIFIED"
   },
-  "cross_agent_execution": "NONE \u2014 fixtures and read-only review only"
+  "cross_agent_execution": "NONE (UNVERIFIED) \u2014 fixtures and read-only review only"
 }

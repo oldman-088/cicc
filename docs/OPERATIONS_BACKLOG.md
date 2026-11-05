@@ -284,6 +284,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
 
+## Done — Milestone 24 (PR #4 update)
+
+- M24 P0: two real concurrency defects fixed and proven under threaded
+  execution (create-race IntegrityError; non-atomic transitions). Recovery:
+  crash/restart, TTL vs timeout, backoff/max-attempts, idempotency — 6 tests.
+- M24 P1: AGENT_HEALTH_MODEL.md; health badge in reference dashboard.
+- M24 P2/P3: real cross-agent execution still NONE (UNVERIFIED) — Agent 4
+  live-run evidence outstanding; per-agent adoption table updated.
+- M24 P5: contract descriptor/docs/routes/tests machine-verified (185/185).
+- M24 P8: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -507,6 +520,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M23-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
+
+## Done — Milestone 24 (PR #4 update)
+
+- M24 P0: two real concurrency defects fixed and proven under threaded
+  execution (create-race IntegrityError; non-atomic transitions). Recovery:
+  crash/restart, TTL vs timeout, backoff/max-attempts, idempotency — 6 tests.
+- M24 P1: AGENT_HEALTH_MODEL.md; health badge in reference dashboard.
+- M24 P2/P3: real cross-agent execution still NONE (UNVERIFIED) — Agent 4
+  live-run evidence outstanding; per-agent adoption table updated.
+- M24 P5: contract descriptor/docs/routes/tests machine-verified (185/185).
+- M24 P8: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
 
 ## Next (backlog, priority order)
 
@@ -735,6 +761,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
 
+## Done — Milestone 24 (PR #4 update)
+
+- M24 P0: two real concurrency defects fixed and proven under threaded
+  execution (create-race IntegrityError; non-atomic transitions). Recovery:
+  crash/restart, TTL vs timeout, backoff/max-attempts, idempotency — 6 tests.
+- M24 P1: AGENT_HEALTH_MODEL.md; health badge in reference dashboard.
+- M24 P2/P3: real cross-agent execution still NONE (UNVERIFIED) — Agent 4
+  live-run evidence outstanding; per-agent adoption table updated.
+- M24 P5: contract descriptor/docs/routes/tests machine-verified (185/185).
+- M24 P8: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -955,6 +994,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
 
+## Done — Milestone 24 (PR #4 update)
+
+- M24 P0: two real concurrency defects fixed and proven under threaded
+  execution (create-race IntegrityError; non-atomic transitions). Recovery:
+  crash/restart, TTL vs timeout, backoff/max-attempts, idempotency — 6 tests.
+- M24 P1: AGENT_HEALTH_MODEL.md; health badge in reference dashboard.
+- M24 P2/P3: real cross-agent execution still NONE (UNVERIFIED) — Agent 4
+  live-run evidence outstanding; per-agent adoption table updated.
+- M24 P5: contract descriptor/docs/routes/tests machine-verified (185/185).
+- M24 P8: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -1172,6 +1224,19 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M23-7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T11:48:18Z; E2E 22/22 @11:48:22Z.
+
+## Done — Milestone 24 (PR #4 update)
+
+- M24 P0: two real concurrency defects fixed and proven under threaded
+  execution (create-race IntegrityError; non-atomic transitions). Recovery:
+  crash/restart, TTL vs timeout, backoff/max-attempts, idempotency — 6 tests.
+- M24 P1: AGENT_HEALTH_MODEL.md; health badge in reference dashboard.
+- M24 P2/P3: real cross-agent execution still NONE (UNVERIFIED) — Agent 4
+  live-run evidence outstanding; per-agent adoption table updated.
+- M24 P5: contract descriptor/docs/routes/tests machine-verified (185/185).
+- M24 P8: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @2026-11-05T12:02:26Z; E2E 22/22 @12:02:29Z.
 
 ## Next (backlog, priority order)
 

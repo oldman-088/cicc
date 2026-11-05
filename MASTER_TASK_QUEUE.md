@@ -172,6 +172,22 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   No coordination refs in any agent PR except PR#2 proxy code.
 - API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
 
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

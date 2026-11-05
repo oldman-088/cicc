@@ -113,6 +113,11 @@ export default function CoordinationView({
                       <span className={`rounded-full border px-2 py-0.5 text-xs ${a.stale ? "border-red-500/60 text-red-300" : a.status === "available" ? "border-emerald-500/50 text-emerald-300" : "border-amber-500/50 text-amber-300"}`}>
                         {a.stale ? "offline(stale)" : a.status}
                       </span>
+                      {a.health && (
+                        <span className={`ml-1 rounded-full border px-2 py-0.5 text-xs ${a.health === "ACTIVE" ? "border-emerald-500/50 text-emerald-300" : a.health === "STALE" || a.health === "UNAVAILABLE" ? "border-red-500/60 text-red-300" : "border-slate-500/60 text-slate-300"}`} title="heartbeat health (not Arena session availability)">
+                          {a.health}
+                        </span>
+                      )}
                     </td>
                     <td className="td text-slate-300">{a.specialization ?? "—"}</td>
                     <td className="td text-xs text-slate-400">{a.capabilities.join(", ") || "—"}</td>

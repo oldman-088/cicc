@@ -22,3 +22,4 @@
 - 2026-11-05 M21 (43c9025+): first agent code-level evidence (PR#2 744ccd3 BFF proxy for coordination reads); AgentDTO doc drift fixed + pinned; BFF env convention in .env.example; API 174/174
 - 2026-11-05 M22 (e96c38f+): PR#1 head reconciled 8629c8f; A4 proxy surface verified live (31/31); heartbeat active_tasks/meta implemented + pinned; API 175/175
 - 2026-11-05 M23 (26810be+): dead_letter/state fix; agent health classification + status audit; state-vs-events consistency test; PR#6 a221003 recorded; API 179/179
+- 2026-11-05 M24 (2c6af20+): atomic guarded transitions + create-race fix (threaded tests); crash recovery; TTL/timeout; health model doc + dashboard badge; API 185/185

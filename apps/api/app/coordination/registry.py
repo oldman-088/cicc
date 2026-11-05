@@ -14,7 +14,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app import models
 
@@ -93,7 +93,23 @@ def create_task(s, *, task_id: str, event_id: str | None, source: str, kind: str
         idempotency_key=idempotency_key,
     )
     s.add(t)
-    s.flush()
+    try:
+        s.flush()
+    except Exception:
+        # M24 P0-3: concurrent duplicate submission — the UNIQUE constraint on
+        # task_id/idempotency_key wins the race; replay the existing row instead
+        # of failing with a 500 IntegrityError
+        s.rollback()
+        existing = s.execute(select(models.CoordinationTask).where(
+            models.CoordinationTask.task_id == task_id)).scalar_one_or_none()
+        if existing is None and idempotency_key:
+            existing = s.execute(select(models.CoordinationTask).where(
+                models.CoordinationTask.idempotency_key == idempotency_key)).scalar_one_or_none()
+        if existing is not None:
+            record_event(s, existing.task_id, "duplicate_idempotency_key", task_id)
+            s.flush()
+            return existing
+        raise
     record_event(s, task_id, "created", f"kind={kind} repo={repo} pr={pr_ref} requires_approval={requires_approval}")
     if requires_approval:
         transition(s, t, "WAITING_FOR_APPROVAL", "requires approval per policy")
@@ -115,19 +131,38 @@ def transition(s, task: models.CoordinationTask, new_state: str, detail: str | N
         record_event(s, task.task_id, "transition_rejected", f"{cur} -> {new_state}")
         return False
     old = task.state
-    task.state = new_state
-    task.updated_at = utcnow()
+    # M24 P0-6: guarded atomic UPDATE (compare-and-set on current state) so two
+    # concurrent transitions cannot both win — works on SQLite and PostgreSQL
+    values = {"state": new_state, "updated_at": utcnow()}
     if new_state in ("QUEUED", "DELIVERING", "RETRYING"):
-        task.attempts = (task.attempts or 0) + 1
+        values["attempts"] = (models.CoordinationTask.attempts or 0) + 1
     if new_state == "RETRYING":
-        task.next_retry_at = utcnow() + timedelta(seconds=backoff_seconds(task.attempts or 1))
+        values["next_retry_at"] = utcnow() + timedelta(seconds=backoff_seconds((task.attempts or 0) + 1))
     if new_state == "QUEUED":
-        task.next_retry_at = None
+        values["next_retry_at"] = None
         # M23: reviving a dead-lettered/retrying task clears the flag, otherwise
         # dead_letter=true would contradict the QUEUED state
+        values["dead_letter"] = False
+    res = s.execute(
+        update(models.CoordinationTask)
+        .where(models.CoordinationTask.id == task.id)
+        .where(models.CoordinationTask.state.in_([cur, task.state]))
+        .values(**values),
+        execution_options={"synchronize_session": False},  # we sync locals manually below
+    )
+    if res.rowcount != 1:
+        # lost the race to a concurrent transition — reject + audit
+        record_event(s, task.task_id, "transition_rejected", f"{cur} -> {new_state} (concurrent)")
+        return False
+    task.state = new_state
+    task.updated_at = values["updated_at"]
+    if "attempts" in values:
+        task.attempts = (task.attempts or 0) + 1
+    if new_state == "RETRYING":
+        task.next_retry_at = values["next_retry_at"]
+    if new_state == "QUEUED":
+        task.next_retry_at = None
         task.dead_letter = False
-    if new_state == "FAILED":
-        task.dead_letter = task.dead_letter or False
     record_event(s, task.task_id, f"state:{old}->{new_state}", detail)
     return True
 

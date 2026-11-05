@@ -283,3 +283,22 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   execution — still NONE.
 - API 179/179 (7 real-PG + 1 live-GitHub); web 23/23 + tsc; contract_check
   31/31 @11:48:18Z; E2E 22/22 @11:48:22Z. Master prompt unchanged @ca8f82c.
+
+## 2026-11-05 — Milestone 24 (branch arena/961971ed-cicc, PR #4)
+
+- P0 concurrency (REAL threaded tests, test_m24_concurrency.py x6, repeated
+  runs stable): fixed create_task race (UNIQUE violation -> 500) with
+  IntegrityError replay; transition() now guarded compare-and-set UPDATE
+  (rowcount check) — concurrent complete applies exactly once; report()
+  honors transition result; synchronize_session=False to avoid double
+  attempts increment. Also: backoff monotonic + max-attempts dead-letter;
+  TTL(expires_at) vs RUNNING timeout_s distinct, sweep idempotent; crash/
+  restart recovery of RUNNING/RETRYING tasks on same DB; idempotency_key
+  replay after completion -> same task.
+- P1: docs/AGENT_HEALTH_MODEL.md (health states + transitions + boundary:
+  heartbeat health != Arena session availability). Reference dashboard shows
+  health badge (components/CoordinationView.tsx, lib/types.ts).
+- API 185/185 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
+  contract_check 31/31 @12:02:26Z; E2E 22/22 @12:02:29Z.
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); cross-agent execution:
+  NONE (UNVERIFIED). Master prompt README.md@main@ca8f82c unchanged.

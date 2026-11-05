@@ -175,3 +175,18 @@ miscount, **no key was removed or lost**; parity en==ar holds at every commit.
 - Agent 4: unchanged — proxy code in PR #2 @744ccd3, surface verified
   compatible (M22); actual execution still UNVERIFIED.
 - Agents 2/3: PENDING (no coordination refs in PR #3 / PR #1 @84fca76).
+
+## M24 update (2026-11-05 ~12:02 UTC)
+
+- PR heads unchanged: #1 84fca76, #2 744ccd3, #3 1a46f70, #6 a221003; no new
+  comments. Coordination-API code references exist only in PR #2's proxy.
+- Per-agent adoption record (M24 format):
+  Agent 2 (primary TI, PR #3 1a46f70): contract v1.0 published (GET /contract,
+  docs/INTEGRATION_CONTRACTS.md) — explicit acceptance: NO (PENDING); impl
+  calls coordination API: NO; real persisted execution: NO.
+  Agent 6 (authorized backup TI, PR #6 a221003): same — PENDING; no
+  coordination refs; backup authorization ≠ Agent 2 availability.
+  Agent 3 (vuln intel, PR #1 84fca76): PENDING; no refs; no execution.
+  Agent 4 (frontend, PR #2 744ccd3): PARTIALLY COMPATIBLE — proxy code calls
+  the coordination reads; surface VERIFIED compatible live (M22); real
+  persisted execution: UNVERIFIED (no live-run evidence yet).
