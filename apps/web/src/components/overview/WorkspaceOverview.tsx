@@ -32,6 +32,13 @@ type OverviewMessages = {
   demoBadge: string;
   dataIntegrityTitle: string;
   dataIntegrityDescription: string;
+  sourceFreshnessTitle: string;
+  sourceFreshnessDescription: string;
+  sourceFreshnessDemoDescription: string;
+  recentEventsTitle: string;
+  recentEventsDescription: string;
+  recentEventsDemoDescription: string;
+  eventDestinationsLabel: string;
   commandTheater: DestinationCopy;
   threatIntelligence: DestinationCopy;
   vulnerabilityIntelligence: DestinationCopy;
@@ -55,6 +62,13 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     demoBadge: "Synthetic demo in development",
     dataIntegrityTitle: "Data integrity",
     dataIntegrityDescription: "A visible page is not evidence of live data. Unconfigured, unavailable, cached, and synthetic states remain distinct; no live counts or service health are inferred.",
+    sourceFreshnessTitle: "Data sources and freshness",
+    sourceFreshnessDescription: "No verified live source is connected in this build, so no source update time or freshness claim is available.",
+    sourceFreshnessDemoDescription: "The Command Theater sample is synthetic, not live intelligence, and has no production source timestamp.",
+    recentEventsTitle: "Recent events",
+    recentEventsDescription: "No event provider is configured, so no recent activity is shown.",
+    recentEventsDemoDescription: "No operational event feed is configured; synthetic graph fixtures are not presented as recent events.",
+    eventDestinationsLabel: "Related activity workspaces",
     commandTheater: {
       title: "Command Theater",
       description: "Explore entity relationships with an accessible 2D map and an optional 3D view. The UI is ready; production data requires a verified provider.",
@@ -101,6 +115,13 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     demoBadge: "عرض اصطناعي في بيئة التطوير",
     dataIntegrityTitle: "سلامة البيانات",
     dataIntegrityDescription: "وجود صفحة لا يعني وجود بيانات حية. تبقى الحالات غير المهيأة وغير المتاحة والمخزنة مؤقتاً والاصطناعية متميزة؛ ولا تُستنتج أعداد حية أو سلامة خدمات.",
+    sourceFreshnessTitle: "مصادر البيانات وحداثتها",
+    sourceFreshnessDescription: "لا يوجد مصدر حي موثّق متصل في هذا الإصدار، لذلك لا يتوفر وقت تحديث أو ادعاء حداثة للمصدر.",
+    sourceFreshnessDemoDescription: "عينة مسرح القيادة اصطناعية وليست استخبارات حية، ولا تحمل طابعاً زمنياً لمصدر إنتاجي.",
+    recentEventsTitle: "الأحداث الأخيرة",
+    recentEventsDescription: "لم يُضبط مزوّد للأحداث، لذلك لا يُعرض أي نشاط حديث.",
+    recentEventsDemoDescription: "لا يوجد موجز أحداث تشغيلية؛ ولا تُعرض عينات الرسم الاصطناعية كأحداث حديثة.",
+    eventDestinationsLabel: "مساحات العمل المرتبطة بالنشاط",
     commandTheater: {
       title: "مسرح القيادة",
       description: "استكشف علاقات الكيانات بخريطة ثنائية الأبعاد ميسّرة وعرض ثلاثي الأبعاد اختياري. الواجهة جاهزة؛ وبيانات الإنتاج تتطلب مزوّداً موثّقاً.",
@@ -147,6 +168,13 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     demoBadge: "نمای ساختگی در محیط توسعه",
     dataIntegrityTitle: "درستی داده‌ها",
     dataIntegrityDescription: "وجود صفحه به‌معنای دادهٔ زنده نیست. وضعیت‌های پیکربندی‌نشده، ناموجود، کش‌شده و ساختگی متمایزند؛ تعداد زنده یا سلامت سرویس حدس زده نمی‌شود.",
+    sourceFreshnessTitle: "منبع داده و تازگی",
+    sourceFreshnessDescription: "در این ساخت منبع زندهٔ تأییدشده‌ای متصل نیست؛ بنابراین زمان به‌روزرسانی یا ادعای تازگی نداریم.",
+    sourceFreshnessDemoDescription: "نمونهٔ تالار فرماندهی ساختگی است، اطلاعات زنده نیست و مُهر زمانی منبع تولیدی ندارد.",
+    recentEventsTitle: "رویدادهای اخیر",
+    recentEventsDescription: "منبع رویداد پیکربندی نشده است؛ بنابراین فعالیت اخیری نمایش داده نمی‌شود.",
+    recentEventsDemoDescription: "جریان رویداد عملیاتی تنظیم نشده است؛ نمونه‌های ساختگی نمودار به‌عنوان رویداد اخیر نشان داده نمی‌شوند.",
+    eventDestinationsLabel: "فضاهای کاری مرتبط با فعالیت",
     commandTheater: {
       title: "تالار فرماندهی",
       description: "پیوند موجودیت‌ها را با نقشهٔ دوبعدی دسترس‌پذیر و نمای سه‌بعدی اختیاری ببینید. رابط آماده است؛ دادهٔ عملیاتی به منبع تأییدشده نیاز دارد.",
@@ -269,6 +297,26 @@ export function WorkspaceOverview({ demoMode }: WorkspaceOverviewProps) {
           })}
         </div>
       </section>
+
+      <div className={styles.dashboardSignals}>
+        <section className={styles.signalPanel} aria-labelledby={`${id}-freshness-title`}>
+          <h2 id={`${id}-freshness-title`}>{messages.sourceFreshnessTitle}</h2>
+          <p className={styles.signalDescription}>
+            {demoMode ? messages.sourceFreshnessDemoDescription : messages.sourceFreshnessDescription}
+          </p>
+        </section>
+
+        <section className={styles.signalPanel} aria-labelledby={`${id}-events-title`}>
+          <h2 id={`${id}-events-title`}>{messages.recentEventsTitle}</h2>
+          <p className={styles.signalDescription}>
+            {demoMode ? messages.recentEventsDemoDescription : messages.recentEventsDescription}
+          </p>
+          <nav className={styles.eventLinks} aria-label={messages.eventDestinationsLabel}>
+            <Link href="/coordination">{messages.coordination.openAction}</Link>
+            <Link href="/system-health">{messages.systemHealth.openAction}</Link>
+          </nav>
+        </section>
+      </div>
 
       <aside className={styles.integrityNote} aria-labelledby={`${id}-integrity-title`}>
         <span className={styles.integrityMark} aria-hidden="true">i</span>

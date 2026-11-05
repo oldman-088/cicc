@@ -2,6 +2,22 @@
 
 Updated: 2026-11-05 · Working branch: `arena/09952395-cicc`
 
+## 2026-11-05 — dashboard transparency and cross-PR API coordination
+
+### Changes
+
+- Added explicit **Data sources and freshness** and **Recent events** panels to the workspace dashboard. They state when no verified source/event provider is configured; Command Theater's synthetic development graph is explicitly excluded from live freshness and recent-event claims. The activity panel links to System Health and Agent Coordination.
+- Added matching English, Arabic, and Persian copy and responsive styling. Extended component tests to check the no-provider and synthetic-demo distinctions.
+- Updated `API_INTEGRATION_CONTRACTS.md` with evidence pointers to PRs #1, #3, and #4 and each contract's current implementation/approval limits. Owner coordination questions are posted on those PRs; at the last REST check (2026-11-05 09:36 UTC), no replies had arrived.
+- No transport client, backend endpoint, credential flow, or live status was added: the external contracts are on unmerged PR branches, and host/auth/tenant boundaries remain unresolved. No other agent branch was modified.
+
+### Verification
+
+- `npm run typecheck` passed.
+- `npm test -- --reporter=dot` passed: 60 tests across 13 files. The workspace overview axe-core structural check passed with color-contrast disabled; this is not a visual or full WCAG audit.
+- The production build passed with all seven application routes generated; it ran in an isolated temporary copy and was removed afterward to avoid disturbing the live dev server. `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities, `git diff --check` passed, and current HTTP smoke requests returned 200 for all seven routes.
+- No browser/device QA was possible in this environment. HTTP smoke is not visual verification. Next dev server PID 2368 on port 3000 remains running.
+
 ## 2026-11-05 — application-wide frontend alpha foundation
 
 ### Scope implemented in the working tree
@@ -31,8 +47,8 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 ### Automated work and verification
 
 - Added route, localization, no-provider, navigation-search-scope, settings preference, and unconfigured-module tests; automated tests use fixtures and JSDOM.
-- Current verification: TypeScript typecheck passed; production build passed and statically generated all seven frontend routes; 60 tests across 13 files passed; `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities.
-- HTTP smoke requests to the existing Next development server on port 3000 returned 200 for all seven routes; PID 2368 remained alive. This verifies route responses only, not rendering or browser interaction.
+- At the foundation checkpoint: TypeScript typecheck and production build passed (all seven frontend routes generated), 60 tests across 13 files passed, and `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities. Current post-change typecheck/test results are recorded in the dashboard-coordination section above; build/audit/smoke checks still need to be rerun for this batch.
+- At that checkpoint, HTTP smoke requests to the existing Next development server on port 3000 returned 200 for all seven routes; PID 2368 remained alive. This verifies route responses only, not rendering or browser interaction.
 - axe-core structural checks disable color contrast because JSDOM cannot validate rendered contrast. No browser, device, GPU, manual keyboard, screen-reader, or fluent-speaker verification is claimed.
 - Historic isolated Node graph microbenchmarks remain 3.10ms median for 10,000-node layout and 6.37ms median for a 10,000-node/50,001-edge view-selection input. They are not browser/GPU performance measurements.
 - `git diff --cached --check` passed after staging the scoped frontend/doc change set. Commit `860ead9` was pushed to `arena/09952395-cicc`; PR #2 title/body were updated via GitHub API and the PR remains open, unmerged, and targeted at `main`.

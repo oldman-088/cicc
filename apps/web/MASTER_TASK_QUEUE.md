@@ -12,20 +12,23 @@ Status legend: **Done** = implemented and checked to the stated level; **In prog
 - [x] Explicit, localized, navigable shells for Threat Intelligence, Vulnerability Intelligence, System Health, and Coordination. No fabricated data or service state.
 - [x] Settings route for session locale and locally stored additional reduced-motion preference; unsupported identity/tenant controls are called out.
 - [x] Existing Command Theater adapter boundary, runtime validation, isolated synthetic development provider, data-failure behavior, graph limits, and keyboard-aware visualization preserved.
+- [x] Added dashboard source-freshness and recent-events empty states, with synthetic Command Theater data explicitly excluded from live freshness/event claims.
 - [x] Architecture/design/UX/API/accessibility/performance/development documentation and this task queue authored and reviewed; manual/browser validation remains separately blocked.
 
 ## Immediate acceptance / validation
 
-- [x] Typecheck passed on the current implementation pass.
-- [x] 60 automated tests across 13 files passed, including axe-core structural checks with color contrast disabled.
-- [x] Fresh typecheck, 60-test suite, production build, package audit, and staged `git diff --check` passed; results are recorded in the backlog and development log.
-- [x] All seven route responses returned HTTP 200 on the existing port-3000 server; PID 2368 stayed running. This is HTTP smoke only.
-- [x] Reviewed the scoped Git diff (37 frontend/doc files; no unrelated work or untracked files removed), committed as `860ead9`, and pushed only to `origin arena/09952395-cicc`.
-- [x] Updated PR #2 title/body through GitHub API. It targets `main`, remains open, and was not merged.
+- [x] Typecheck passed after the dashboard update.
+- [x] 60 automated tests across 13 files passed after the dashboard update, including axe-core structural checks with color contrast disabled.
+- [x] Production build passed with all seven application routes generated, using an isolated temporary copy so the live preview could remain running.
+- [x] `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities; `git diff --check` passed.
+- [x] All seven route responses returned HTTP 200 on the existing port-3000 server after the dashboard update; PID 2368 stayed running. This is HTTP smoke only.
+- [x] The foundation diff was reviewed (37 frontend/doc files) and committed/pushed as `860ead9` to `origin arena/09952395-cicc`; no unrelated work or agent branch was changed in this follow-up.
+- [x] PR #2 previously had its title/body updated through GitHub API. It targets `main`, remains open, and was not merged.
+- [x] Reviewed open PR contract artifacts #1/#3/#4 and posted owner questions; no reply was present at the latest REST check. Current frontend remains unconfigured for these domains.
 
 ## P0 — data integrity and integration governance
 
-- [ ] **Blocked: approve API/auth/tenant contracts.** Obtain owner-approved versioned contracts before implementing data transport, live search, notification, identity, or operational status. No backend contract is present in this checkout.
+- [ ] **Blocked: approve API/auth/tenant contracts.** Obtain owner-approved versioned contracts before implementing data transport, live search, notification, identity, or operational status. Open PRs #1/#3/#4 contain candidate artifacts, but none is merged or fully reconciled; see `API_INTEGRATION_CONTRACTS.md` and recheck the owner discussions before transport work.
 - [x] Current Command Theater fixtures are development-only, visibly synthetic, and isolated from provider failures; regression tests cover the rule.
 - [ ] Add corresponding isolation tests whenever a new provider or source state is introduced.
 - [ ] Preserve `unconfigured`, `unavailable/error`, `empty`, `cached`, `live`, and `unverified` as distinct states; only assert source states supported by actual metadata.

@@ -4,9 +4,9 @@
 
 ## Repository finding
 
-The checked-out repository contains a Next.js frontend only. No backend routes, OpenAPI/JSON Schema documents, generated API client, auth implementation, tenant-isolation contract, notification/search service, or system-health source was found. Consequently this document intentionally defines **no HTTP endpoint, method, URL, header, payload, or server field**. The domain pages other than Command Theater currently display explicit not-configured states.
+The checked-out branch contains a Next.js frontend only. It has no backend routes, generated API client, auth implementation, tenant-isolation contract, notification/search service, or system-health source. This inventory does not define a backend contract on behalf of another service; it records pointers to contract artifacts on open PR branches below, with their review/implementation status. Those branches are not part of this checkout, and the frontend domains other than Command Theater remain explicitly not configured.
 
-Do not implement guessed REST paths, direct browser connections to private services, hardcoded demo credentials, or inferred health. A team-owned, versioned contract and integration owner are prerequisites.
+Do not implement guessed REST paths, direct browser connections to private services, hardcoded demo credentials, or inferred health. A team-owned, versioned contract and integration owner are prerequisites; an unmerged branch is not by itself proof of a deployable or authorized frontend integration.
 
 ## Existing frontend presentation boundary: Command Theater
 
@@ -38,14 +38,24 @@ The synthetic provider is dynamically imported only when the route explicitly pa
 | Domain / capability | Current frontend state | Contract status |
 | --- | --- | --- |
 | Command Theater graph pages | Typed injected adapter and runtime validation | Frontend contract only; no production provider/API contract |
-| Threat Intelligence records/feeds | Explicit unconfigured route | None in checkout |
-| Vulnerability exposure/CVE/remediation | Explicit unconfigured route | None in checkout |
-| System health/worker/queue telemetry | Explicit unconfigured route | None in checkout |
-| Agent coordination/tasks | Explicit unconfigured route | None in checkout |
-| Global entity search | Not implemented; sidebar searches route labels only | None in checkout |
-| Alerts/notifications | Not surfaced as operational feature | None in checkout |
-| Authentication/authorization/tenant scope | No frontend integration contract | None in checkout |
+| Threat Intelligence records/feeds | Explicit unconfigured route | PR #3 describes ingestion/service work, but no HTTP router or OpenAPI contract was present in the reviewed files; owner confirmation requested |
+| Vulnerability exposure/CVE/remediation | Explicit unconfigured route | PR #1 documents package-level read APIs, but says they are not mounted in the host and its cross-system contract is proposed/unagreed; owner confirmation requested |
+| System health/worker/queue telemetry | Explicit unconfigured route | PR #4 contains an implemented backend router and Pydantic contracts on an open branch; not merged, and status/auth details still need reconciliation |
+| Agent coordination/tasks | Explicit unconfigured route | PR #4 contains coordination proposals, but endpoint ownership/path alignment and the heartbeat/task identity contract remain unconfirmed |
+| Global entity search | Not implemented; sidebar searches route labels only | No contract identified in the reviewed PRs |
+| Alerts/notifications | Not surfaced as operational feature | PR #4 documents ops alerts; the frontend is not wired and authorization/ownership remain pending |
+| Authentication/authorization/tenant scope | No frontend integration contract | No host/session-to-service authorization contract confirmed |
 | User preferences | Locale in app memory; reduced-motion boolean in local browser storage | Local UI only; no account preferences service |
+
+### Open-PR source artifacts (not integrated)
+
+Reviewed against the following PR heads on 2026-11-05. These links are evidence pointers, **not** declarations that the APIs are deployed, approved for production, or safe to expose to browser users:
+
+- [PR #1 — Vulnerability Intelligence](https://github.com/oldman-088/cicc/pull/1), reviewed at `84d32aa`. `docs/vulnerability-intelligence/API.md` describes `GET /v1/vulnerabilities` and `GET /v1/vulnerabilities/{cve}` with cursor/error behavior. The accompanying integration-contract document calls the cross-system contract proposed/not agreed, and the API package is not mounted in the host application. Asked the owner to confirm DTOs, auth/tenant boundaries, and host binding: [discussion](https://github.com/oldman-088/cicc/pull/1#issuecomment-6654459415).
+- [PR #3 — Threat Intelligence](https://github.com/oldman-088/cicc/pull/3), reviewed at `805cd2b`. The reviewed preparation/architecture documents describe module interfaces, but the inspected diff did not expose an HTTP router or OpenAPI schema. Asked for the current/planned DTOs and a clear distinction between fixtures and live records: [discussion](https://github.com/oldman-088/cicc/pull/3#issuecomment-6654459704).
+- [PR #4 — System Health and Coordination](https://github.com/oldman-088/cicc/pull/4), reviewed at `c610917`. Its docs and backend source describe the `/api/v1/ops` family (overview, components, metrics/history, activity, dependencies, tasks, workers, and alerts). The branch is open and not present in this checkout. Items requiring owner alignment include the documented `maintenance` status versus the initial status list, read-token/platform-auth behavior and user/tenant scope, final coordination path/DTO agreement, and the direct `apps/web/` overlap with this frontend. Coordination was requested here: [discussion](https://github.com/oldman-088/cicc/pull/4#issuecomment-6654459950); heartbeat/task identity is separately discussed in [issue #5](https://github.com/oldman-088/cicc/issues/5).
+
+As of 2026-11-05 09:36 UTC, those coordination comments had no owner replies. Do not copy or edit another agent's branch. Recheck the threads before making transport/schema assumptions; keep these modules in their explicit not-configured state until the relevant owner and auth boundary are confirmed.
 
 ## Contract decisions required before implementation
 

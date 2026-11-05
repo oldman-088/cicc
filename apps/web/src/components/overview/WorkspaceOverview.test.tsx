@@ -38,6 +38,12 @@ describe("workspace overview", () => {
       .toHaveAttribute("href", "/coordination");
     expect(screen.getByText(/No CVE records, scores, or status are displayed without a verified source/i))
       .toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Data sources and freshness" })).toBeInTheDocument();
+    expect(screen.getByText(/no source update time or freshness claim is available/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent events" })).toBeInTheDocument();
+    expect(screen.getByText("No event provider is configured, so no recent activity is shown."))
+      .toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Related activity workspaces" })).toBeInTheDocument();
     expect(screen.queryByText(/live threat count|active incidents/i)).not.toBeInTheDocument();
   });
 
@@ -47,6 +53,10 @@ describe("workspace overview", () => {
     expect(screen.getByRole("heading", { name: "Synthetic development sample only" }))
       .toBeInTheDocument();
     expect(screen.getByText(/never presented as live intelligence/i)).toBeInTheDocument();
+    expect(screen.getByText(/synthetic, not live intelligence, and has no production source timestamp/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/synthetic graph fixtures are not presented as recent events/i))
+      .toBeInTheDocument();
   });
 
   it("renders translated overview headings in both RTL locales", () => {
