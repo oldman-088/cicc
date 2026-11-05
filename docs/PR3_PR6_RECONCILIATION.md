@@ -295,7 +295,8 @@ apps/threat_intelligence/vendor_advisories.py
 - `main` is still at `ca8f82c`; **neither PR is merged.**
 - PR #3's `apps/` tree is **4 files**. The other 9 recovered modules and 9 test files exist
   only on this branch.
-- File-set comparison at Stage 3: **0 files only in PR #3, 12 in both, 49 only in PR #6.**
+- File-set comparison at Stage 3 (verified with `comm` over `git ls-files` vs
+  `git ls-tree -r 1a46f70`): **0 files only in PR #3, 12 in both, 47 only in PR #6.**
   `README.md` is byte-identical, so the **7 root docs are the only real conflicts.**
 
 ### 10.2 Recommendation
