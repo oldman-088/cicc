@@ -115,3 +115,30 @@ test("investigation delete journey: local investigation and note can be removed"
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByText(/No investigations yet/)).toBeVisible();
 });
+
+test("theme journey: optional light theme applies and persists", async ({ page }) => {
+  await page.goto("/settings", { waitUntil: "networkidle" });
+  await page.getByRole("combobox", { name: "Choose interface theme" }).selectOption("light");
+  await expect(page.locator("html")).toHaveAttribute("data-cicc-theme", "light");
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.locator("html")).toHaveAttribute("data-cicc-theme", "light");
+  await page.getByRole("combobox", { name: "Choose interface theme" }).selectOption("dark");
+  await expect(page.locator("html")).not.toHaveAttribute("data-cicc-theme", "light");
+});
+
+test("offline journey: banner appears offline and local data still works", async ({ page, context }) => {
+  await page.goto("/investigations", { waitUntil: "networkidle" });
+  await context.setOffline(true);
+  await expect(page.getByRole("alert").filter({ hasText: /You are offline/ })).toBeVisible();
+  await page.getByLabel("Title").fill("Offline case");
+  await page.getByRole("button", { name: "Create investigation" }).click();
+  await expect(page.getByRole("heading", { name: "Offline case", level: 3 })).toBeVisible();
+  await context.setOffline(false);
+  await expect(page.getByRole("alert").filter({ hasText: /You are offline/ })).toHaveCount(0);
+});
+
+test("not-found journey: unknown route shows an honest 404 page", async ({ page }) => {
+  await page.goto("/no-such-workspace", { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+  await expect(page.getByText(/does not exist/)).toBeVisible();
+});

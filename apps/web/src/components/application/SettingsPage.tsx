@@ -17,6 +17,11 @@ type SettingsMessages = {
   motionTitle: string;
   motionDescription: string;
   motionLabel: string;
+  themeTitle: string;
+  themeDescription: string;
+  themeLabel: string;
+  themeDark: string;
+  themeLight: string;
   integrationTitle: string;
   integrationDescription: string;
 };
@@ -33,6 +38,11 @@ const settingsMessages: Record<Locale, SettingsMessages> = {
     motionTitle: "Motion",
     motionDescription: "The operating system's reduced-motion preference is always respected. This additional preference is stored only in this browser.",
     motionLabel: "Reduce motion in CICC",
+    themeTitle: "Appearance",
+    themeDescription: "Dark is the command-center default. The optional light theme is stored only in this browser.",
+    themeLabel: "Choose interface theme",
+    themeDark: "Dark (command center)",
+    themeLight: "Light (optional)",
     integrationTitle: "Account and tenant settings",
     integrationDescription: "These controls are not available: this frontend has no verified identity, tenant, or preference-service contract.",
   },
@@ -47,6 +57,11 @@ const settingsMessages: Record<Locale, SettingsMessages> = {
     motionTitle: "الحركة",
     motionDescription: "يُحترم دائماً تفضيل تقليل الحركة في نظام التشغيل. ويُحفظ هذا التفضيل الإضافي في هذا المتصفح فقط.",
     motionLabel: "تقليل الحركة في CICC",
+    themeTitle: "المظهر",
+    themeDescription: "الداكن هو الافتراضي لمركز القيادة. ويُحفظ المظهر الفاتح الاختياري في هذا المتصفح فقط.",
+    themeLabel: "اختيار مظهر الواجهة",
+    themeDark: "داكن (مركز القيادة)",
+    themeLight: "فاتح (اختياري)",
     integrationTitle: "إعدادات الحساب والمستأجر",
     integrationDescription: "هذه الخيارات غير متاحة: لا يوجد في هذه الواجهة عقد موثّق للهوية أو المستأجر أو خدمة التفضيلات.",
   },
@@ -61,6 +76,11 @@ const settingsMessages: Record<Locale, SettingsMessages> = {
     motionTitle: "حرکت",
     motionDescription: "ترجیح کاهش حرکت سیستم‌عامل همیشه رعایت می‌شود. این ترجیح افزوده فقط در همین مرورگر ذخیره می‌شود.",
     motionLabel: "کاهش حرکت در CICC",
+    themeTitle: "ظاهر",
+    themeDescription: "تیره پیش‌فرض مرکز فرمان است. پوستهٔ روشنِ اختیاری فقط در همین مرورگر ذخیره می‌شود.",
+    themeLabel: "انتخاب پوستهٔ رابط",
+    themeDark: "تیره (مرکز فرمان)",
+    themeLight: "روشن (اختیاری)",
     integrationTitle: "تنظیمات حساب و مستأجر",
     integrationDescription: "این گزینه‌ها در دسترس نیستند؛ این رابط قرارداد تأییدشده‌ای برای هویت، مستأجر یا سرویس ترجیحات ندارد.",
   },
@@ -71,7 +91,7 @@ export function SettingsPage() {
   const id = useId().replaceAll(":", "");
   if (!preferences) return null;
 
-  const { locale, setLocale, reduceMotion, setReduceMotion } = preferences;
+  const { locale, setLocale, reduceMotion, setReduceMotion, theme, setTheme } = preferences;
   const messages = settingsMessages[locale];
 
   return (
@@ -103,6 +123,25 @@ export function SettingsPage() {
               <option value="en">English</option>
               <option value="ar">العربية</option>
               <option value="fa">فارسی</option>
+            </select>
+          </label>
+        </div>
+
+        <div className={styles.settingCard}>
+          <div className={styles.settingCopy}>
+            <h3>{messages.themeTitle}</h3>
+            <p id={`${id}-theme-description`}>{messages.themeDescription}</p>
+          </div>
+          <label className={styles.languageControl}>
+            <span className={styles.visuallyHidden}>{messages.themeLabel}</span>
+            <select
+              aria-label={messages.themeLabel}
+              aria-describedby={`${id}-theme-description`}
+              value={theme}
+              onChange={(event) => setTheme(event.target.value === "light" ? "light" : "dark")}
+            >
+              <option value="dark">{messages.themeDark}</option>
+              <option value="light">{messages.themeLight}</option>
             </select>
           </label>
         </div>

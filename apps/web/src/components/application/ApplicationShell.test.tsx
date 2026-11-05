@@ -123,6 +123,21 @@ describe("CICC application shell", () => {
     }
   });
 
+  it("shows an offline banner only while the browser reports offline", () => {
+    render(
+      <ApplicationShell locale="en" onLocaleChange={() => undefined}>
+        <h1>Workspace</h1>
+      </ApplicationShell>,
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+    fireEvent(window, new Event("offline"));
+    expect(screen.getByRole("alert")).toHaveTextContent(/You are offline/);
+    Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true });
+    fireEvent(window, new Event("online"));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("marks the overview destination as current on the home route", () => {
     routeState.pathname = "/";
     render(

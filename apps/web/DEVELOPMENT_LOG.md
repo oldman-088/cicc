@@ -183,3 +183,11 @@ OpenCTI's licensing varies at file level; Wazuh's plugin repository has a separa
 
 - **System Health diagnostics:** Overview gains a "Diagnostics from this on-demand check" section derived strictly from the provider response: cached-response stale warning with refresh guidance, unverified-source metric hiding explanation, and each non-healthy component with its provider status/detail verbatim. The empty-diagnostics text explicitly says this is not a guarantee all services are healthy. Stalled workers show the provider age against the stall threshold. EN/AR/FA.
 - **Delete actions (browser-local, persisted):** investigations can be deleted from the detail panel; individual notes can be deleted; local reminders can be deleted. All deletions persist to localStorage and are covered by unit tests + a Playwright delete journey (40 listed).
+
+
+## 2026-11-05 — Master Prompt §3.1 gap closure: light theme, offline state, route error states
+
+Gap audit against README.md §3.1 found three unimplemented frontend requirements:
+- **Optional light theme (IMPLEMENTED):** theme preference in `CiccApplication` (dark default = command-center, light optional), persisted `cicc:theme`, `data-cicc-theme="light"` variable overrides in globals.css, Settings appearance control (EN/AR/FA). Unit + Playwright theme-persistence journey.
+- **Offline state (IMPLEMENTED):** shell-level offline banner (role=alert, EN/AR/FA) driven by browser online/offline events, stating local data remains available while provider data cannot refresh. Unit + Playwright offline journey (local investigation creation still works offline).
+- **Route error/loading/not-found (IMPLEMENTED):** `app/error.tsx` (localized retry, no fabricated data), `app/loading.tsx`, `app/not-found.tsx` (honest 404, no substituted content) + not-found journey.

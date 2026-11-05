@@ -496,3 +496,12 @@
     transition: none;
   }
 }
+
+.offlineBanner {
+  margin: 0;
+  padding: 0.6rem 1rem;
+  background: var(--cicc-warning);
+  color: #1a1405;
+  font-weight: 600;
+  text-align: center;
+}

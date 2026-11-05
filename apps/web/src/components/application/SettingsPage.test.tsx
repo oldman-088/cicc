@@ -54,6 +54,17 @@ describe("workspace settings", () => {
     });
   });
 
+  it("applies the optional light theme and persists it browser-only", async () => {
+    window.localStorage.clear();
+    render(<CiccApplication><SettingsPage /></CiccApplication>);
+    const themeSelect = await screen.findByRole("combobox", { name: "Choose interface theme" });
+    fireEvent.change(themeSelect, { target: { value: "light" } });
+    expect(document.documentElement.getAttribute("data-cicc-theme")).toBe("light");
+    expect(window.localStorage.getItem("cicc:theme")).toBe("light");
+    fireEvent.change(themeSelect, { target: { value: "dark" } });
+    expect(document.documentElement.getAttribute("data-cicc-theme")).toBeNull();
+  });
+
   it("states that account and tenant preferences are unavailable without an integration", () => {
     render(
       <CiccApplication>

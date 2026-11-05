@@ -41,6 +41,27 @@
   --cicc-topbar-height: 4.25rem;
 }
 
+/* Optional light theme (Master Prompt §3.1); dark is the default command-center theme. */
+:root[data-cicc-theme="light"] {
+  color-scheme: light;
+  --cicc-canvas: #eef3f8;
+  --cicc-surface: #ffffff;
+  --cicc-surface-raised: #f4f8fc;
+  --cicc-surface-inset: #e6eef6;
+  --cicc-border: #b9c9d8;
+  --cicc-border-subtle: #cfdce9;
+  --cicc-text: #16283c;
+  --cicc-text-strong: #0a1a2c;
+  --cicc-text-muted: #47617c;
+  --cicc-accent: #0e7d8c;
+  --cicc-info: #1d5fb8;
+  --cicc-success: #0d7a6a;
+  --cicc-warning: #8a5a00;
+  --cicc-danger: #a03325;
+  --cicc-focus: #b56b00;
+  --cicc-shadow-panel: 0 18px 55px rgb(30 60 90 / 14%);
+}
+
 * {
   box-sizing: border-box;
 }

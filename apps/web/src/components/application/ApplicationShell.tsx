@@ -38,6 +38,7 @@ type ShellMessages = {
   language: string;
   openNavigation: string;
   closeNavigation: string;
+  offline: string;
 };
 
 const shellMessages: Record<Locale, ShellMessages> = {
@@ -67,6 +68,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     language: "Interface language",
     openNavigation: "Open workspace navigation",
     closeNavigation: "Close workspace navigation",
+    offline: "You are offline. Browser-local data (investigations, reminders, preferences) remains available; provider data cannot load or refresh until connectivity returns.",
   },
   ar: {
     skipToContent: "تخطَّ إلى المحتوى الرئيسي",
@@ -94,6 +96,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     language: "لغة الواجهة",
     openNavigation: "فتح تنقل مساحة العمل",
     closeNavigation: "إغلاق تنقل مساحة العمل",
+    offline: "أنت غير متصل. تبقى البيانات المحلية في المتصفح (التحقيقات والتذكيرات والتفضيلات) متاحة؛ ولا يمكن تحميل بيانات المزوّد أو تحديثها حتى عودة الاتصال.",
   },
   fa: {
     skipToContent: "رفتن به محتوای اصلی",
@@ -121,6 +124,7 @@ const shellMessages: Record<Locale, ShellMessages> = {
     language: "زبان رابط کاربری",
     openNavigation: "بازکردن پیمایش فضای کاری",
     closeNavigation: "بستن پیمایش فضای کاری",
+    offline: "آفلاین هستید. داده‌های محلی مرورگر (بررسی‌ها، یادآورها، ترجیحات) در دسترس می‌مانند؛ دادهٔ منبع تا بازگشت اتصال بارگذاری یا بازخوانی نمی‌شود.",
   },
 };
 
@@ -176,6 +180,18 @@ function NavigationGlyph({ id }: { id: NavigationItem["id"] }) {
 
 export function ApplicationShell({ locale, onLocaleChange, children }: ApplicationShellProps) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [offline, setOffline] = useState(false);
+
+  useEffect(() => {
+    const update = () => setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
   const [navigationQuery, setNavigationQuery] = useState("");
   const navigationId = useId();
   const searchHelpId = useId();
@@ -257,6 +273,10 @@ export function ApplicationShell({ locale, onLocaleChange, children }: Applicati
       <a className={styles.skipLink} href="#cicc-main-content">
         {messages.skipToContent}
       </a>
+
+      {offline && (
+        <p role="alert" className={styles.offlineBanner}>{messages.offline}</p>
+      )}
 
       <header className={styles.topbar}>
         <Link className={styles.brand} href="/" aria-label={messages.brandDescription}>

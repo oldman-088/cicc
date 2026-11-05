@@ -4,11 +4,16 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { isLocale, type Locale } from "./localization";
 import { ApplicationShell } from "./ApplicationShell";
 
+export type CiccTheme = "dark" | "light";
+
 type LocaleContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   reduceMotion: boolean;
   setReduceMotion: (reduceMotion: boolean) => void;
+  /** Master Prompt §3.1: dark command-center interface with an optional light theme. */
+  theme: CiccTheme;
+  setTheme: (theme: CiccTheme) => void;
 };
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
@@ -24,11 +29,12 @@ export function useCiccPreferences() {
 
 export function CiccApplication({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>("en");
+  const [theme, setTheme] = useState<CiccTheme>("dark");
   const [reduceMotion, setReduceMotion] = useState(false);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const localeValue = useMemo(
-    () => ({ locale, setLocale, reduceMotion, setReduceMotion }),
-    [locale, reduceMotion],
+    () => ({ locale, setLocale, reduceMotion, setReduceMotion, theme, setTheme }),
+    [locale, reduceMotion, theme],
   );
 
   useEffect(() => {
@@ -54,6 +60,7 @@ export function CiccApplication({ children }: { children: ReactNode }) {
       const storedLocale = window.localStorage.getItem("cicc:locale");
       if (storedLocale && isLocale(storedLocale)) setLocale(storedLocale);
       setReduceMotion(window.localStorage.getItem("cicc:reduce-motion") === "true");
+      if (window.localStorage.getItem("cicc:theme") === "light") setTheme("light");
     } catch {
       // Preferences still work for this session when browser storage is unavailable.
     }
@@ -72,6 +79,18 @@ export function CiccApplication({ children }: { children: ReactNode }) {
       // The preference remains active for this app session without storage.
     }
   }, [reduceMotion, preferencesReady]);
+
+  useEffect(() => {
+    if (!preferencesReady) return;
+    const root = document.documentElement;
+    if (theme === "light") root.setAttribute("data-cicc-theme", "light");
+    else root.removeAttribute("data-cicc-theme");
+    try {
+      window.localStorage.setItem("cicc:theme", theme);
+    } catch {
+      // Theme remains active for this session without storage.
+    }
+  }, [theme, preferencesReady]);
 
   useEffect(() => {
     if (!preferencesReady) return;
