@@ -312,6 +312,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
 
+## Done — Milestone 26 (PR #4 update)
+
+- M26 P0: approved BFF write path (single fixed route, separate server-only
+  write token, DTO allowlist, server idempotency/correlation key) implemented
+  and LIVE-VERIFIED end-to-end via the reference dashboard BFF (201, DB row,
+  /tasks/{id} + /events). Backup Agent 4 (PR #7) got the ACCEPT contract reply;
+  their component execution still UNVERIFIED.
+- M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
+  race, sweep race on real PostgreSQL); SQLite threaded suite separate.
+- M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
+  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Backup Agent 4 frontend.
+- M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
+  build; contract_check 31/31 @2026-11-05T12:25:12Z; E2E 24/24 @12:25:11Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ live verification where Docker exists
@@ -563,6 +579,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M25 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
+
+## Done — Milestone 26 (PR #4 update)
+
+- M26 P0: approved BFF write path (single fixed route, separate server-only
+  write token, DTO allowlist, server idempotency/correlation key) implemented
+  and LIVE-VERIFIED end-to-end via the reference dashboard BFF (201, DB row,
+  /tasks/{id} + /events). Backup Agent 4 (PR #7) got the ACCEPT contract reply;
+  their component execution still UNVERIFIED.
+- M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
+  race, sweep race on real PostgreSQL); SQLite threaded suite separate.
+- M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
+  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Backup Agent 4 frontend.
+- M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
+  build; contract_check 31/31 @2026-11-05T12:25:12Z; E2E 24/24 @12:25:11Z.
 
 ## Next (backlog, priority order)
 
@@ -819,6 +851,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
 
+## Done — Milestone 26 (PR #4 update)
+
+- M26 P0: approved BFF write path (single fixed route, separate server-only
+  write token, DTO allowlist, server idempotency/correlation key) implemented
+  and LIVE-VERIFIED end-to-end via the reference dashboard BFF (201, DB row,
+  /tasks/{id} + /events). Backup Agent 4 (PR #7) got the ACCEPT contract reply;
+  their component execution still UNVERIFIED.
+- M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
+  race, sweep race on real PostgreSQL); SQLite threaded suite separate.
+- M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
+  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Backup Agent 4 frontend.
+- M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
+  build; contract_check 31/31 @2026-11-05T12:25:12Z; E2E 24/24 @12:25:11Z.
+
 ## Next (backlog, priority order)
 
 1. Real RabbitMQ delivery/ack loop for coordination + broker verification where
@@ -1067,6 +1115,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
 
+## Done — Milestone 26 (PR #4 update)
+
+- M26 P0: approved BFF write path (single fixed route, separate server-only
+  write token, DTO allowlist, server idempotency/correlation key) implemented
+  and LIVE-VERIFIED end-to-end via the reference dashboard BFF (201, DB row,
+  /tasks/{id} + /events). Backup Agent 4 (PR #7) got the ACCEPT contract reply;
+  their component execution still UNVERIFIED.
+- M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
+  race, sweep race on real PostgreSQL); SQLite threaded suite separate.
+- M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
+  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Backup Agent 4 frontend.
+- M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
+  build; contract_check 31/31 @2026-11-05T12:25:12Z; E2E 24/24 @12:25:11Z.
+
 ## Next (backlog, priority order)
 
 1. Real broker delivery + consumer ack loop when a Docker/broker environment
@@ -1312,6 +1376,22 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M25 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc + build;
   contract_check 31/31 @2026-11-05T12:16:11Z; E2E 22/22 @12:16:15Z.
+
+## Done — Milestone 26 (PR #4 update)
+
+- M26 P0: approved BFF write path (single fixed route, separate server-only
+  write token, DTO allowlist, server idempotency/correlation key) implemented
+  and LIVE-VERIFIED end-to-end via the reference dashboard BFF (201, DB row,
+  /tasks/{id} + /events). Backup Agent 4 (PR #7) got the ACCEPT contract reply;
+  their component execution still UNVERIFIED.
+- M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
+  race, sweep race on real PostgreSQL); SQLite threaded suite separate.
+- M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
+  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Backup Agent 4 frontend.
+- M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
+- Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
+  build; contract_check 31/31 @2026-11-05T12:25:12Z; E2E 24/24 @12:25:11Z.
 
 ## Next (backlog, priority order)
 

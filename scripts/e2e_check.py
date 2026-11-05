@@ -136,8 +136,20 @@ def main():
     c, p = call(WEB, "GET", "/api/v1/coordination/github/status", headers={})
     check("BFF: LIVE github status (real api.github.com)", c == 200 and p.get("status") == "ok",
           f"PRs={[x['number'] for x in p.get('open_prs', [])]}", mode="LIVE-BFF")
-    c, _ = call(WEB, "POST", "/api/v1/coordination/tasks", {"kind": "x"}, headers={"Content-Type": "application/json"})
-    check("BFF: write via browser -> 403", c == 403, f"-> {c}", mode="LIVE-BFF")
+    # M26: non-allowlisted writes are always 403 via the BFF
+    c, _ = call(WEB, "POST", "/api/v1/coordination/agents/register", {"agent": "x"}, headers={"Content-Type": "application/json"})
+    check("BFF: non-allowlisted write via browser -> 403", c == 403, f"-> {c}", mode="LIVE-BFF")
+    # the single approved write path (POST /api/v1/coordination/tasks) is 403
+    # unless the web app sets WEB_BFF_ALLOW_COORD_WRITE=1 + WEB_BFF_WRITE_TOKEN
+    c, p = call(WEB, "POST", "/api/v1/coordination/tasks", {"kind": "e2e_check", "payload": {"source": "e2e"}}, headers={"Content-Type": "application/json"})
+    if c == 403:
+        check("BFF: coord write path disabled by default -> 403", True, "-> 403", mode="LIVE-BFF")
+    elif c == 201:
+        check("BFF: approved coord write path enabled -> 201 + task_id", bool(p.get("task_id")), f"-> {c} {p.get('task_id')}", mode="LIVE-BFF")
+        c2, p2 = call(WEB, "GET", f"/api/v1/coordination/tasks/{p.get('task_id')}/events")
+        check("BFF: created task has event history", c2 == 200 and len((p2.get("events") or [])) >= 1, mode="LIVE-BFF")
+    else:
+        check("BFF: coord write path responds 403 or 201", False, f"-> {c}", mode="LIVE-BFF")
 
     failed = [n for n, ok in results if not ok]
     print(f"\nE2E finished {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}: "

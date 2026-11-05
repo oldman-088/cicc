@@ -67,3 +67,69 @@ def test_pg_concurrent_complete_single_winner(pg_app):
     assert t["state"].lower() == "completed"
     ev = pg_app.get("/api/v1/coordination/tasks/m25-pg-cc/events", headers=R).json()["events"]
     assert sum(1 for e in ev if (e["kind"] or "") == "state:RUNNING->COMPLETED") == 1
+
+
+def test_pg_concurrent_webhook_duplicate_delivery(pg_app):
+    import hashlib, hmac, json as _json
+    import os
+    os.environ["CICC_GH_WEBHOOK_SECRET"] = "pg-secret"
+    raw = _json.dumps({"action": "opened", "repository": {"full_name": "o/r"}, "sender": {"login": "u"},
+                       "pull_request": {"number": 99, "title": "t", "labels": [{"name": "ops"}], "head": {"ref": "b"}}}).encode()
+    sig = "sha256=" + hmac.new(b"pg-secret", raw, hashlib.sha256).hexdigest()
+    h = {"X-GitHub-Event": "pull_request", "X-GitHub-Delivery": "pg-wh-race",
+         "X-Hub-Signature-256": sig, "Content-Type": "application/json"}
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        rs = list(ex.map(lambda _: pg_app.post("/api/v1/coordination/webhook/github", content=raw, headers=h), range(8)))
+    assert all(r.status_code == 200 for r in rs), [r.status_code for r in rs]
+    assert sum(1 for r in rs if r.json().get("duplicate")) == 7
+    with ops.SessionLocal() as s:
+        assert len(s.execute(select(models.GitHubEvent).where(models.GitHubEvent.delivery_id == "pg-wh-race")).scalars().all()) == 1
+        assert len(s.execute(select(models.CoordinationTask).where(models.CoordinationTask.task_id == "gh-pg-wh-race")).scalars().all()) == 1
+
+
+def test_pg_approval_expiry_vs_decision_race(pg_app, monkeypatch):
+    import time
+    from app.coordination import registry as reg
+    from datetime import timedelta
+    monkeypatch.setenv("CICC_COORD_APPROVAL_TTL_S", "1")
+    pg_app.post("/api/v1/coordination/tasks", json={"task_id": "pg-ap", "kind": "m25", "payload": {}, "requires_approval": True}, headers=W)
+    # let it expire, then race decide vs sweep-expiry
+    with ops.SessionLocal() as s:
+        ap = s.execute(select(models.CoordinationApproval).where(models.CoordinationApproval.task_id == "pg-ap")).scalar_one()
+        ap.expires_at = reg.utcnow() - timedelta(seconds=1)
+        s.commit()
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        r1 = ex.submit(lambda: pg_app.post("/api/v1/coordination/tasks/pg-ap/approve", json={"decided_by": "owner"}, headers=W))
+        r2 = ex.submit(lambda: pg_app.post("/api/v1/coordination/sweep", headers=W))
+        res = [r1.result(), r2.result()]
+    # exactly one outcome: either 410 (expired) or 200 (approved) — never both 200
+    ok_count = sum(1 for r in res if r.status_code == 200)
+    assert ok_count <= 1, [r.status_code for r in res]
+    ap = pg_app.get("/api/v1/coordination/tasks/pg-ap/approval", headers=R).json()["approval"]
+    assert ap["status"] in ("approved", "expired")
+
+
+def test_pg_concurrent_sweep_requeue(pg_app):
+    from app.coordination import registry as reg
+    from datetime import timedelta
+    for i in range(6):
+        tid = f"pg-sw-{i}"
+        pg_app.post("/api/v1/coordination/tasks", json={"task_id": tid, "kind": "m25", "payload": {}}, headers=W)
+        pg_app.post("/api/v1/coordination/agents/register", json={"agent": "a1"}, headers=W)
+        pg_app.post(f"/api/v1/coordination/tasks/{tid}/route", json={"agent": "a1"}, headers=W)
+        pg_app.post(f"/api/v1/coordination/tasks/{tid}/ack", json={}, headers=W)
+        pg_app.post(f"/api/v1/coordination/tasks/{tid}/start", json={}, headers=W)
+        pg_app.post(f"/api/v1/coordination/tasks/{tid}/fail", json={"result": "x"}, headers=W)
+    with ops.SessionLocal() as s:
+        for t in s.execute(select(models.CoordinationTask)).scalars().all():
+            if t.state == "RETRYING":
+                t.next_retry_at = reg.utcnow() - timedelta(seconds=1)
+        s.commit()
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        rs = list(ex.map(lambda _: pg_app.post("/api/v1/coordination/sweep", headers=W), range(4)))
+    assert all(r.status_code == 200 for r in rs)
+    total_requeued = sum(len(r.json()["requeued"]) for r in rs)
+    assert total_requeued == 6, f"requeued {total_requeued} times for 6 tasks (double-requeue race?)"
+    for i in range(6):
+        t = pg_app.get(f"/api/v1/coordination/tasks/pg-sw-{i}", headers=R).json()
+        assert t["state"].lower() == "queued" and t["dead_letter"] is False

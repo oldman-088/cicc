@@ -201,6 +201,20 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
   request posted on PR #4.
 - API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
 
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
 ## In progress / next (priority)
 1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
 2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).

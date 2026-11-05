@@ -4,6 +4,10 @@ import {
   buildUpstreamHeaders,
   buildUpstreamUrl,
   isWriteAllowed,
+  isCoordWriteAllowed,
+  isCoordWriteRoute,
+  validateCoordTaskBody,
+  coordWriteToken,
   sameOriginOk,
   safeLogFields,
 } from "../lib/bff.mjs";
@@ -61,4 +65,53 @@ test("log fields never include tokens or headers", () => {
   const f = safeLogFields("GET", "v1/ops/overview", 200);
   assert.deepEqual(f, { method: "GET", path: "v1/ops/overview", status: 200 });
   assert.ok(!JSON.stringify(f).includes("token"));
+});
+
+// ---- M26 approved write path (single fixed route, server-only write token) ----
+
+test("M26: coord write route detection", () => {
+  assert.equal(isCoordWriteRoute("POST", ["v1", "coordination", "tasks"]), true);
+  assert.equal(isCoordWriteRoute("POST", ["v1", "coordination", "agents"]), false);
+  assert.equal(isCoordWriteRoute("GET", ["v1", "coordination", "tasks"]), false);
+  assert.equal(isCoordWriteRoute("POST", ["v1", "coordination", "tasks", "x"]), false);
+});
+
+test("M26: coord write requires BOTH flag and separate write token", () => {
+  const seg = ["v1", "coordination", "tasks"];
+  assert.equal(isCoordWriteAllowed("POST", seg, {}), false);
+  assert.equal(isCoordWriteAllowed("POST", seg, { WEB_BFF_ALLOW_COORD_WRITE: "1" }), false);
+  assert.equal(isCoordWriteAllowed("POST", seg, { WEB_BFF_WRITE_TOKEN: "w" }), false);
+  assert.equal(isCoordWriteAllowed("POST", seg, { WEB_BFF_ALLOW_COORD_WRITE: "1", WEB_BFF_WRITE_TOKEN: "w" }), true);
+  // other writes still blocked even with the flag
+  assert.equal(isCoordWriteAllowed("POST", ["v1", "ops", "alerts"], { WEB_BFF_ALLOW_COORD_WRITE: "1", WEB_BFF_WRITE_TOKEN: "w" }), false);
+  assert.equal(isWriteAllowed("POST", { WEB_BFF_ALLOW_COORD_WRITE: "1", WEB_BFF_WRITE_TOKEN: "w" }), false);
+});
+
+test("M26: write DTO allowlist — rejects unknown fields, bad kind/priority, oversized title", () => {
+  let n = 0; const gen = () => `gen-${++n}`;
+  assert.equal(validateCoordTaskBody({ kind: "threat_intel", payload: { a: 1 } }, gen).ok, true);
+  assert.equal(validateCoordTaskBody({ kind: "BAD KIND" }, gen).ok, false);
+  assert.equal(validateCoordTaskBody({ kind: "x", evil: 1 }, gen).ok, false);
+  assert.equal(validateCoordTaskBody({ kind: "x", priority: 99 }, gen).ok, false);
+  assert.equal(validateCoordTaskBody({ kind: "x", title: "t".repeat(501) }, gen).ok, false);
+  assert.equal(validateCoordTaskBody({ kind: "x", depends_on: ["ok_1", "bad id!"] }, gen).ok, false);
+  assert.equal(validateCoordTaskBody([1, 2], gen).ok, false);
+});
+
+test("M26: idempotency_key is server-generated when absent/invalid, preserved when valid", () => {
+  let n = 0; const gen = () => `srv-${++n}`;
+  const a = validateCoordTaskBody({ kind: "x" }, gen);
+  assert.equal(a.value.idempotency_key, "srv-1");
+  const b = validateCoordTaskBody({ kind: "x", idempotency_key: "client-key-1" }, gen);
+  assert.equal(b.value.idempotency_key, "client-key-1");
+  const c = validateCoordTaskBody({ kind: "x", idempotency_key: "bad key with spaces" }, gen);
+  assert.equal(c.value.idempotency_key, "srv-2");
+});
+
+test("M26: client Authorization header is stripped; write token comes from env only", () => {
+  const h = new Headers({ Authorization: "Bearer browser-leaked", "Content-Type": "application/json" });
+  const out = buildUpstreamHeaders(h, { WEB_BFF_API_TOKEN: "read-tok" });
+  assert.equal(out.get("Authorization"), "Bearer read-tok");
+  assert.equal(coordWriteToken({ WEB_BFF_WRITE_TOKEN: "  w-tok " }), "w-tok");
+  assert.equal(coordWriteToken({}), "");
 });

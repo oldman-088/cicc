@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Section from "./Section";
 import { useLocale } from "../lib/i18n";
 import { formatTime } from "../lib/format";
@@ -33,6 +34,28 @@ export default function CoordinationView({
   broker: ComponentInfo | null;
 }) {
   const { t, locale } = useLocale();
+  const [newTask, setNewTask] = useState({ title: "", kind: "ops_review", priority: 5 });
+  const [newTaskResult, setNewTaskResult] = useState<string | null>(null);
+  const [newTaskErr, setNewTaskErr] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  // M26: real frontend-originated write through the BFF's single approved
+  // route POST /api/v1/coordination/tasks (relative URL, no browser token —
+  // the server-side BFF injects the write token and idempotency key).
+  async function createTask() {
+    setCreating(true); setNewTaskErr(null); setNewTaskResult(null);
+    try {
+      const r = await fetch("/api/v1/coordination/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: newTask.kind || "ops_review", priority: Number(newTask.priority) || 5, title: newTask.title || undefined, payload: { source: "reference-dashboard", at: new Date().toISOString() } }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) setNewTaskErr(`${r.status}: ${j.detail || r.statusText}`);
+      else setNewTaskResult(`created ${j.task_id ?? "?"}`);
+    } catch (e) {
+      setNewTaskErr(String(e));
+    } finally { setCreating(false); }
+  }
   return (
     <>
       <Section title={t("coordTitle")}>
@@ -89,6 +112,16 @@ export default function CoordinationView({
       </Section>
 
       <Section title={t("agentsTitle")}>
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-slate-800 bg-slate-900/60 p-2">
+          <input className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm" placeholder="task title" value={newTask.title} onChange={(e) => setNewTask({ ...newTask, title: e.target.value })} />
+          <input className="w-40 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm" placeholder="kind (a-z0-9_)" value={newTask.kind} onChange={(e) => setNewTask({ ...newTask, kind: e.target.value })} />
+          <input className="w-16 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm" type="number" min={1} max={10} value={newTask.priority} onChange={(e) => setNewTask({ ...newTask, priority: Number(e.target.value) })} />
+          <button disabled={creating} onClick={createTask} className="rounded border border-emerald-600 px-3 py-1 text-sm text-emerald-300 disabled:opacity-50">
+            {creating ? "…" : "Create task via BFF"}
+          </button>
+          {newTaskResult && <span className="text-xs text-emerald-300">{newTaskResult}</span>}
+          {newTaskErr && <span className="text-xs text-red-300">{newTaskErr}</span>}
+        </div>
         {agents.length === 0 ? (
           <p className="text-sm text-slate-400">{t("noAgents")}</p>
         ) : (

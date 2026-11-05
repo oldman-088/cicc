@@ -321,3 +321,22 @@ Running log; newest entries last. Checkpoint on interruption: this file +
   request posted on PR #4. Real cross-agent execution: still NONE (UNVERIFIED).
 - API 191/191 (9 real-PG + 1 live-GitHub); web 23/23 + tsc; contract_check
   31/31 @12:16:11Z; E2E 22/22 @12:16:15Z. Master prompt unchanged @ca8f82c.
+
+## 2026-11-05 — Milestone 26 (branch arena/961971ed-cicc, PR #4)
+
+- P0: approved server-side write path implemented on the reference BFF
+  (apps/web/lib/bff.mjs COORD_WRITE_ROUTE + validateCoordTaskBody;
+  route.ts injects WEB_BFF_WRITE_TOKEN; gate WEB_BFF_ALLOW_COORD_WRITE=1).
+  Dashboard "Create task via BFF" button (CoordinationView.tsx). LIVE
+  VERIFIED: POST :3000/api/v1/coordination/tasks (no browser token) -> 201
+  api-5a6a79bfa8d5; DB row idempotency_key=bff-8e30e5e7-...; /tasks/{id} and
+  /events via BFF; 403 for other writes; 422 bad DTO; leaked browser
+  Authorization stripped. ACCEPT reply posted to Backup Agent 4's request.
+- P1 PG concurrency (test_m25_pg_concurrency.py now 5): webhook dup race on
+  PG (8x -> 1 event/1 task), approval expiry vs decide race (<=1 winner),
+  concurrent sweep requeue (6 tasks requeued exactly once). SQLite threaded
+  suite separate (194/194 total; PG 12/12).
+- e2e_check.py updated for the write path (24/24 live @12:25:11Z);
+  contract_check 31/31 @12:25:12Z.
+- PR#7 head reconciled: 3222937 (6bf5f7f and 0691e9a both stale); PR#6
+  d523ee0. Master prompt README.md@main@ca8f82c unchanged.

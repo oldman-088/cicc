@@ -109,3 +109,11 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   concurrency tests). Whole product ~30-40%; first real cross-agent execution
   still NOT achieved (Backup Agent 4 adopted the DTO in code — AGENT-REPORTED —
   but execution UNVERIFIED). DoD §17 unmet -> not production-ready.
+
+## M26 re-confirmation (2026-11-05 ~12:25 UTC)
+- `main` still `ca8f82c`; `README.md` (v1.0) unchanged/unmodified. Agent 1
+  ~90% (M26: approved BFF write path implemented + live-verified end-to-end;
+  PG concurrency suite 5 tests). Whole product ~35-45%: first real
+  frontend-originated execution VERIFIED (reference dashboard BFF, PR #4);
+  Backup Agent 4's own execution still UNVERIFIED. DoD §17 unmet -> not
+  production-ready.

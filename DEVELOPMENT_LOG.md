@@ -24,3 +24,4 @@
 - 2026-11-05 M23 (26810be+): dead_letter/state fix; agent health classification + status audit; state-vs-events consistency test; PR#6 a221003 recorded; API 179/179
 - 2026-11-05 M24 (2c6af20+): atomic guarded transitions + create-race fix (threaded tests); crash recovery; TTL/timeout; health model doc + dashboard badge; API 185/185
 - 2026-11-05 M25 (45ff36c+): approval race fix; threaded webhook/approval/retry/sweep tests; real-PG concurrency tests; PR#7 backup-agent-4 DTO adoption recorded; API 191/191 (9 PG)
+- 2026-11-05 M26 (0572f73+): approved BFF write path (POST /api/v1/coordination/tasks) implemented + live-verified end-to-end (201, persisted, events, correlation id); PG concurrency x5; PR#7 head 3222937; API 194/194, PG 12/12

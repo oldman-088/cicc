@@ -213,3 +213,23 @@ miscount, **no key was removed or lost**; parity en==ar holds at every commit.
 - M25 concurrency: approval decide race fixed (guarded compare-and-set);
   threaded tests for webhook duplicate race, approve/reject race,
   retry+fail race, sweep-under-load; real-PG concurrency tests (pgserver).
+
+## M26 update (2026-11-05 ~12:25 UTC)
+
+- **PR #7 head reconciled: `3222937`** (live @12:18:05Z) — M25's `6bf5f7f` and
+  the separately reported `0691e9a` were both stale intermediates. PR #6 now
+  `d523ee0`; PR #1 `84fca76`; PR #2 `744ccd3`; PR #3 `1a46f70`.
+- Backup Agent 4 (PR #7) asked on PR #4 for an approved BFF write path; Agent 1
+  replied **ACCEPT** and implemented it on PR #4's reference BFF: single fixed
+  route `POST /api/v1/coordination/tasks`, gated by
+  `WEB_BFF_ALLOW_COORD_WRITE=1` + separate server-only `WEB_BFF_WRITE_TOKEN`,
+  strict DTO allowlist, server-generated `idempotency_key` (correlation key),
+  client auth stripped. **Live VERIFIED**: browser-style POST via :3000 → 201
+  task `api-5a6a79bfa8d5`, DB row with `idempotency_key=bff-8e30e5e7-…`,
+  `/tasks/{id}` + `/events` via BFF; negatives 403/422/stripped-auth verified.
+  This is a REAL frontend-originated execution via PR #4's reference
+  dashboard BFF. Execution from PR #7's own component: still UNVERIFIED.
+- Ownership: Agent 2 primary TI; Agent 6 authorized backup (PR #6 d523ee0);
+  Agent 3 on leave — replacement engineer active (no new PR seen yet);
+  Backup Agent 4 active frontend owner (PR #7 3222937). All contract
+  adoptions except Backup Agent 4's code-level canonical-DTO adoption: PENDING.

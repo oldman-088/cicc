@@ -41,6 +41,75 @@ export function isWriteAllowed(method, env) {
   return env.WEB_BFF_ALLOW_WRITES === "1";
 }
 
+// ---- M26: single fixed, allowlisted write route (approved write path) ----
+// Only POST /api/v1/coordination/tasks is permitted, and only when BOTH
+// WEB_BFF_ALLOW_COORD_WRITE=1 and a separate server-only WEB_BFF_WRITE_TOKEN
+// are set. Everything else stays 403. The browser never supplies either.
+export const COORD_WRITE_ROUTE = { method: "POST", segments: ["v1", "coordination", "tasks"] };
+export const MAX_WRITE_BODY_BYTES = 256 * 1024;
+
+export function isCoordWriteRoute(method, pathSegments) {
+  return (
+    method === COORD_WRITE_ROUTE.method &&
+    pathSegments.length === COORD_WRITE_ROUTE.segments.length &&
+    COORD_WRITE_ROUTE.segments.every((seg, i) => pathSegments[i] === seg)
+  );
+}
+
+export function isCoordWriteAllowed(method, pathSegments, env) {
+  if (!isCoordWriteRoute(method, pathSegments)) return false;
+  return env.WEB_BFF_ALLOW_COORD_WRITE === "1" && Boolean((env.WEB_BFF_WRITE_TOKEN || "").trim());
+}
+
+const KIND_RE = /^[a-z0-9_]{1,64}$/;
+const ID_RE = /^[A-Za-z0-9_.:-]{1,200}$/;
+
+// Strict DTO allowlist for POST /api/v1/coordination/tasks (server-side).
+// Returns { ok, value, error }; `value` is the sanitized body to forward.
+export function validateCoordTaskBody(obj, genId) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return { ok: false, error: "body must be an object" };
+  const allowed = new Set(["task_id", "idempotency_key", "kind", "priority", "title", "payload", "repo", "pr_ref", "branch_ref", "owner", "depends_on", "timeout_s", "ttl_s", "requires_approval"]);
+  for (const k of Object.keys(obj)) if (!allowed.has(k)) return { ok: false, error: `field not allowed: ${k}` };
+  if (typeof obj.kind !== "string" || !KIND_RE.test(obj.kind)) return { ok: false, error: "kind invalid" };
+  const out = { kind: obj.kind, payload: obj.payload && typeof obj.payload === "object" && !Array.isArray(obj.payload) ? obj.payload : {} };
+  if (obj.priority !== undefined) {
+    if (!Number.isInteger(obj.priority) || obj.priority < 1 || obj.priority > 10) return { ok: false, error: "priority must be int 1-10" };
+    out.priority = obj.priority;
+  }
+  if (obj.title !== undefined) {
+    if (typeof obj.title !== "string" || obj.title.length > 500) return { ok: false, error: "title invalid" };
+    out.title = obj.title;
+  }
+  for (const f of ["task_id", "repo", "pr_ref", "branch_ref", "owner"]) {  // idempotency_key handled below (regenerated if invalid)
+    if (obj[f] !== undefined) {
+      if (typeof obj[f] !== "string" || !ID_RE.test(obj[f]) && f !== "repo" && f !== "owner") return { ok: false, error: `${f} invalid` };
+      if (f === "repo" || f === "owner") { if (typeof obj[f] !== "string" || obj[f].length > 200) return { ok: false, error: `${f} invalid` }; }
+      out[f] = obj[f];
+    }
+  }
+  if (obj.depends_on !== undefined) {
+    if (!Array.isArray(obj.depends_on) || obj.depends_on.length > 50 || !obj.depends_on.every((d) => typeof d === "string" && ID_RE.test(d))) return { ok: false, error: "depends_on invalid" };
+    out.depends_on = obj.depends_on;
+  }
+  for (const f of ["timeout_s", "ttl_s"]) {
+    if (obj[f] !== undefined) {
+      if (!Number.isInteger(obj[f]) || obj[f] < 1 || obj[f] > 86400 * 30) return { ok: false, error: `${f} invalid` };
+      out[f] = obj[f];
+    }
+  }
+  if (obj.requires_approval !== undefined) {
+    if (typeof obj.requires_approval !== "boolean") return { ok: false, error: "requires_approval invalid" };
+    out.requires_approval = obj.requires_approval;
+  }
+  // server-generated idempotency key = the correlation key for the execution
+  out.idempotency_key = (typeof obj.idempotency_key === "string" && ID_RE.test(obj.idempotency_key) && obj.idempotency_key.length <= 300) ? obj.idempotency_key : genId();
+  return { ok: true, value: out };
+}
+
+export function coordWriteToken(env) {
+  return (env.WEB_BFF_WRITE_TOKEN || "").trim();
+}
+
 export function sameOriginOk(headers, env) {
   if (env.WEB_BFF_ENFORCE_SAME_ORIGIN !== "1") return true;
   const sfs = headers.get("sec-fetch-site");
