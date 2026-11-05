@@ -22,8 +22,25 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: apps/web
       - name: Run browser visual QA (EXECUTED in CI, not in sandbox)
-        run: npm run test:e2e
+        shell: bash
         working-directory: apps/web
+        run: |
+          set -o pipefail
+          npm run test:e2e 2>&1 | tee e2e-test.log
+      - name: Comment Playwright failures on the PR (log hosts are not sandbox-reachable)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync('apps/web/e2e-test.log', 'utf8'); } catch {}
+            const tail = log.split('\n').filter(l => /Error|expect|FAIL|failed|Timeout|✘|›/.test(l)).slice(-60).join('\n').slice(0, 6000);
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `**web-ci Playwright failure** (run ${context.runId}, commit ${context.sha.slice(0,7)}) — filtered failure lines:\n\n\`\`\`\n${tail || log.slice(-5000)}\n\`\`\``
+            });
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -33,5 +50,6 @@ jobs:
             apps/web/test-results
             apps/web/playwright-report
             unit-test.log
+            apps/web/e2e-test.log
             apps/web/unit-test.log
           if-no-files-found: ignore
