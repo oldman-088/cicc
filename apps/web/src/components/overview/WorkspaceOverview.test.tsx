@@ -1,7 +1,7 @@
 import type { AnchorHTMLAttributes } from "react";
 import { render, screen } from "@testing-library/react";
 import axe from "axe-core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceOverview } from "./WorkspaceOverview";
 
 const overviewLocale = vi.hoisted(() => ({ value: "en" as "en" | "ar" | "fa" }));
@@ -18,14 +18,27 @@ vi.mock("../application/CiccApplication", () => ({
 describe("workspace overview", () => {
   beforeEach(() => {
     overviewLocale.value = "en";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ error: { code: "not_configured" } }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
   it("shows only real frontend scope and makes missing live data explicit", () => {
     render(<WorkspaceOverview demoMode={false} />);
 
     expect(screen.getByRole("heading", { name: "Workspace overview", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "No provider is configured in this deployment" })).toBeInTheDocument();
-    expect(screen.getByText(/System Health and Coordination have read-only server-side adapters.*no provider is configured by default/i))
+    expect(screen.getByRole("heading", { name: "Check provider status below" })).toBeInTheDocument();
+    expect(screen.getByText(/System Health and Coordination are checked on demand through their existing read-only server adapters/i))
       .toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Operational readiness" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "System operations" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Agent coordination" })).toBeInTheDocument();
+    expect(screen.getByText("Package API not mounted in CICC")).toBeInTheDocument();
+    expect(screen.getByText("Proposed API and fixtures only")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Command Theater" }))
       .toHaveAttribute("href", "/command-theater");
     expect(screen.getByRole("link", { name: "Threat Intelligence" }))
@@ -39,7 +52,7 @@ describe("workspace overview", () => {
     expect(screen.getByText(/No CVE records, scores, or status are displayed without a verified source/i))
       .toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Data sources and freshness" })).toBeInTheDocument();
-    expect(screen.getByText(/System Health and Coordination show provider timestamps or cache metadata only when returned/i)).toBeInTheDocument();
+    expect(screen.getByText(/on-demand checks below show the provider timestamps, response-received times, and cache metadata actually returned/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Recent events" })).toBeInTheDocument();
     expect(screen.getByText(/This overview does not aggregate operational events.*no events are fabricated here/i))
       .toBeInTheDocument();

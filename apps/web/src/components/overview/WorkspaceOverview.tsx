@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useId } from "react";
 import type { Locale } from "../application/localization";
 import { useCiccLocale } from "../application/CiccApplication";
+import { BetaReadinessPanel } from "./BetaReadinessPanel";
 import styles from "./WorkspaceOverview.module.css";
 
 type WorkspaceOverviewProps = {
@@ -54,8 +55,8 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     scopeLabel: "Frontend workspace",
     integrationTitleDemo: "Synthetic development sample only",
     integrationDescriptionDemo: "Command Theater can load isolated synthetic records in development. They are visibly marked as synthetic and are never presented as live intelligence.",
-    integrationTitleUnavailable: "No provider is configured in this deployment",
-    integrationDescriptionUnavailable: "System Health and Coordination have read-only server-side adapters, but no provider is configured by default. Without a valid response, they show unavailable states; Threat Intelligence, Vulnerability Intelligence, and production Command Theater data remain unconnected.",
+    integrationTitleUnavailable: "Check provider status below",
+    integrationDescriptionUnavailable: "System Health and Coordination are checked on demand through their existing read-only server adapters. Their panels show only provider-reported status and request failures; a response from either provider is not a whole-platform health guarantee. Threat Intelligence, Vulnerability Intelligence, and the domain lifecycle surface remain unbound until host integration is verified.",
     workflowEyebrow: "WORKSPACE MODULES",
     workflowTitle: "Explore the workspace",
     workflowDescription: "Routes are navigable; each module states plainly whether its data integration is connected.",
@@ -63,7 +64,7 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     dataIntegrityTitle: "Data integrity",
     dataIntegrityDescription: "A visible page is not evidence of live data. Unconfigured, unavailable, cached, and synthetic states remain distinct; no live counts or service health are inferred.",
     sourceFreshnessTitle: "Data sources and freshness",
-    sourceFreshnessDescription: "System Health and Coordination show provider timestamps or cache metadata only when returned by the server-side API. This overview does not aggregate their freshness, and the other domains have no production data source.",
+    sourceFreshnessDescription: "The on-demand checks below show the provider timestamps, response-received times, and cache metadata actually returned. They do not aggregate a cross-domain freshness score; Threat Intelligence and Vulnerability Intelligence remain unbound and have no production records here.",
     sourceFreshnessDemoDescription: "The Command Theater sample is synthetic, not live intelligence, and has no production source timestamp.",
     recentEventsTitle: "Recent events",
     recentEventsDescription: "This overview does not aggregate operational events. Coordination and System Health show only events returned by their configured provider; no events are fabricated here.",
@@ -89,15 +90,15 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     },
     systemHealth: {
       title: "System Health",
-      description: "Read-only operational views use a server-side adapter; provider values appear only when this trusted deployment is configured and the API returns valid data.",
+      description: "Provider-reported operational telemetry is checked on demand below; failures and missing configuration remain visible as such.",
       openAction: "Open System Health",
-      unavailableBadge: "Not connected",
+      unavailableBadge: "On-demand check",
     },
     coordination: {
       title: "Agent Coordination",
-      description: "Read-only agent, task, metric, and event views use a server-side adapter and remain unavailable until the trusted deployment is configured.",
+      description: "The provider-reported Coordination health is checked on demand below; no lifecycle or tenant health is inferred.",
       openAction: "Open Agent Coordination",
-      unavailableBadge: "Not connected",
+      unavailableBadge: "On-demand check",
     },
   },
   ar: {
@@ -107,8 +108,8 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     scopeLabel: "مساحة الواجهة الأمامية",
     integrationTitleDemo: "بيانات تطوير اصطناعية فقط",
     integrationDescriptionDemo: "يمكن لمسرح القيادة تحميل سجلات اصطناعية معزولة أثناء التطوير. وتُوسم بوضوح بأنها اصطناعية ولا تُعرض مطلقاً كمعلومات حية.",
-    integrationTitleUnavailable: "لم يُضبط مزوّد في هذا النشر",
-    integrationDescriptionUnavailable: "تملك سلامة النظام والتنسيق محوّلات خادمية للقراءة فقط، لكن لا يُضبط مزوّد افتراضياً. بلا استجابة صالحة ستعرضان حالة عدم التوفر؛ وتظل استخبارات التهديدات والثغرات وبيانات الإنتاج لمسرح القيادة غير متصلة.",
+    integrationTitleUnavailable: "تحقق من حالة المزوّد أدناه",
+    integrationDescriptionUnavailable: "تُفحص سلامة النظام والتنسيق عند الطلب عبر محوّلاتهما الخادمية الحالية للقراءة فقط. تعرض اللوحات حالة المزوّد وأخطاء الطلب فقط؛ ولا تضمن استجابة أي منهما سلامة المنصة بأكملها. تظل استخبارات التهديدات والثغرات ودورة حياة المجالات غير مركّبة حتى التحقق من تكامل المضيف.",
     workflowEyebrow: "وحدات مساحة العمل",
     workflowTitle: "استكشف مساحة العمل",
     workflowDescription: "يمكن فتح المسارات، وتوضح كل وحدة صراحةً ما إذا كان تكامل بياناتها متصلاً.",
@@ -116,7 +117,7 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     dataIntegrityTitle: "سلامة البيانات",
     dataIntegrityDescription: "وجود صفحة لا يعني وجود بيانات حية. تبقى الحالات غير المهيأة وغير المتاحة والمخزنة مؤقتاً والاصطناعية متميزة؛ ولا تُستنتج أعداد حية أو سلامة خدمات.",
     sourceFreshnessTitle: "مصادر البيانات وحداثتها",
-    sourceFreshnessDescription: "تعرض سلامة النظام والتنسيق الطوابع الزمنية أو بيانات التخزين المؤقت التي يعيدها API الخادمي فقط. لا تجمع هذه النظرة حداثة بياناتهما، ولا تملك المجالات الأخرى مصدراً إنتاجياً.",
+    sourceFreshnessDescription: "تعرض الفحوصات عند الطلب أدناه الطوابع الزمنية وأوقات استلام الاستجابة وبيانات التخزين المؤقت التي أعادها المزوّد فعلياً. ولا تستنتج درجة حداثة موحّدة للمجالات؛ كما تظل استخبارات التهديدات والثغرات غير مركّبة بلا سجلات إنتاجية هنا.",
     sourceFreshnessDemoDescription: "عينة مسرح القيادة اصطناعية وليست استخبارات حية، ولا تحمل طابعاً زمنياً لمصدر إنتاجي.",
     recentEventsTitle: "الأحداث الأخيرة",
     recentEventsDescription: "لا تجمع هذه النظرة الأحداث التشغيلية. تعرض صفحتا التنسيق وسلامة النظام الأحداث التي يعيدها المزوّد المضبوط فقط؛ ولا تُختلق أحداث هنا.",
@@ -142,15 +143,15 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     },
     systemHealth: {
       title: "سلامة النظام",
-      description: "تستخدم العروض التشغيلية للقراءة فقط محوّلاً خادمياً؛ ولا تظهر القيم إلا عند ضبط هذا النشر الموثوق وإرجاع API بيانات صالحة.",
+      description: "تُفحص القياسات التشغيلية التي أبلغ عنها المزوّد عند الطلب أدناه؛ وتبقى الأخطاء وغياب الإعداد ظاهرين.",
       openAction: "فتح سلامة النظام",
-      unavailableBadge: "غير متصل",
+      unavailableBadge: "فحص عند الطلب",
     },
     coordination: {
       title: "تنسيق الوكلاء",
-      description: "تستخدم عروض الوكلاء والمهام والمقاييس والأحداث للقراءة فقط محوّلاً خادمياً، وتظل غير متاحة حتى ضبط النشر الموثوق.",
+      description: "تُفحص صحة التنسيق التي أبلغ عنها المزوّد عند الطلب أدناه؛ ولا تُستنتج صحة دورة الحياة أو المستأجر.",
       openAction: "فتح تنسيق الوكلاء",
-      unavailableBadge: "غير متصل",
+      unavailableBadge: "فحص عند الطلب",
     },
   },
   fa: {
@@ -160,8 +161,8 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     scopeLabel: "فضای رابط کاربری",
     integrationTitleDemo: "فقط نمونهٔ ساختگی توسعه",
     integrationDescriptionDemo: "تالار فرماندهی می‌تواند هنگام توسعه رکوردهای ساختگی جداگانه بارگیری کند. این رکوردها آشکارا ساختگی علامت‌گذاری می‌شوند و هرگز اطلاعات زنده معرفی نمی‌شوند.",
-    integrationTitleUnavailable: "در این استقرار منبعی پیکربندی نشده است",
-    integrationDescriptionUnavailable: "سلامت سامانه و هماهنگی دارای آداپتور سمت‌سرور فقط‌خواندنی هستند، اما به‌طور پیش‌فرض منبعی پیکربندی نشده است. بدون پاسخ معتبر وضعیت عدم دسترسی نشان می‌دهند؛ اطلاعات تهدید، آسیب‌پذیری و دادهٔ تولیدی تالار فرماندهی همچنان متصل نیستند.",
+    integrationTitleUnavailable: "وضعیت منبع را در پایین بررسی کنید",
+    integrationDescriptionUnavailable: "سلامت سامانه و هماهنگی هنگام درخواست از طریق آداپتورهای فعلی سمت‌سرور و فقط‌خواندنی بررسی می‌شوند. پنل‌ها فقط وضعیت گزارش‌شده و خطای درخواست را نشان می‌دهند؛ پاسخ هرکدام تضمین سلامت کل پلتفرم نیست. اطلاعات تهدید، آسیب‌پذیری و چرخهٔ عمر دامنه تا زمان تأیید یکپارچه‌سازی میزبان متصل نیستند.",
     workflowEyebrow: "ماژول‌های فضای کاری",
     workflowTitle: "کاوش در فضای کاری",
     workflowDescription: "مسیرها قابل پیمایش‌اند و هر ماژول روشن می‌گوید که آیا اتصال داده دارد یا نه.",
@@ -169,7 +170,7 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     dataIntegrityTitle: "درستی داده‌ها",
     dataIntegrityDescription: "وجود صفحه به‌معنای دادهٔ زنده نیست. وضعیت‌های پیکربندی‌نشده، ناموجود، کش‌شده و ساختگی متمایزند؛ تعداد زنده یا سلامت سرویس حدس زده نمی‌شود.",
     sourceFreshnessTitle: "منبع داده و تازگی",
-    sourceFreshnessDescription: "سلامت سامانه و هماهنگی فقط مُهر زمانی یا فرادادهٔ کشِ بازگشتی از API سمت‌سرور را نشان می‌دهند. این نمای کلی تازگی آن‌ها را تجمیع نمی‌کند و حوزه‌های دیگر منبع دادهٔ تولیدی ندارند.",
+    sourceFreshnessDescription: "بررسی‌های هنگام درخواست در پایین، مُهرهای زمانی، زمان دریافت پاسخ و فرادادهٔ کشِ بازگشتی از ارائه‌دهنده را نشان می‌دهند. امتیاز تازگی بین‌دامنه‌ای استنباط نمی‌شود؛ اطلاعات تهدید و آسیب‌پذیری متصل نیستند و اینجا رکورد تولیدی ندارند.",
     sourceFreshnessDemoDescription: "نمونهٔ تالار فرماندهی ساختگی است، اطلاعات زنده نیست و مُهر زمانی منبع تولیدی ندارد.",
     recentEventsTitle: "رویدادهای اخیر",
     recentEventsDescription: "این نمای کلی رویدادهای عملیاتی را تجمیع نمی‌کند. هماهنگی و سلامت سامانه فقط رویدادهای بازگشتی از منبع پیکربندی‌شده را نشان می‌دهند؛ رویدادی جعل نمی‌شود.",
@@ -195,15 +196,15 @@ const overviewMessages: Record<Locale, OverviewMessages> = {
     },
     systemHealth: {
       title: "سلامت سامانه",
-      description: "نمایش‌های عملیاتی فقط‌خواندنی از آداپتور سمت‌سرور استفاده می‌کنند؛ مقدارها فقط وقتی نمایش داده می‌شوند که استقرار مورداعتماد پیکربندی شده و API دادهٔ معتبر برگرداند.",
+      description: "دادهٔ عملیاتی گزارش‌شده از ارائه‌دهنده در پایین و هنگام درخواست بررسی می‌شود؛ خطاها و نبود پیکربندی آشکار می‌مانند.",
       openAction: "بازکردن سلامت سامانه",
-      unavailableBadge: "متصل نیست",
+      unavailableBadge: "بررسی هنگام درخواست",
     },
     coordination: {
       title: "هماهنگی عامل‌ها",
-      description: "نمای فقط‌خواندنی عامل، وظیفه، معیار و رویداد از آداپتور سمت‌سرور استفاده می‌کند و تا زمان پیکربندی استقرار مورداعتماد در دسترس نیست.",
+      description: "سلامت هماهنگی طبق گزارش ارائه‌دهنده در پایین بررسی می‌شود؛ سلامت چرخهٔ عمر یا مستأجر استنباط نمی‌شود.",
       openAction: "بازکردن هماهنگی عامل‌ها",
-      unavailableBadge: "متصل نیست",
+      unavailableBadge: "بررسی هنگام درخواست",
     },
   },
 };
@@ -253,6 +254,8 @@ export function WorkspaceOverview({ demoMode }: WorkspaceOverviewProps) {
           </p>
         </div>
       </aside>
+
+      <BetaReadinessPanel />
 
       <section className={styles.workflows} aria-labelledby={`${id}-workflows-title`}>
         <div className={styles.sectionHeading}>
