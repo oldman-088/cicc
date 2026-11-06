@@ -1,10 +1,12 @@
 """Individual health checks for monitored components.
 
 Every check is bounded (timeout), failure-isolated (never raises), and
-must never leak credentials: URLs are reduced to their host in details.
-External probes (RabbitMQ management API, platform API) are additionally
-protected by a per-probe circuit breaker so a hanging dependency cannot
-stall the monitoring API, and so stale statuses are explicitly flagged.
+must never leak credentials or configured connection targets. Database
+health details expose only the non-sensitive driver type; external service
+URLs are reduced to scheme and host. External probes (RabbitMQ management
+API, platform API) are additionally protected by a per-probe circuit breaker
+so a hanging dependency cannot stall the monitoring API, and so stale statuses
+are explicitly flagged.
 """
 import base64
 import json
@@ -131,7 +133,10 @@ def check_database(engine) -> dict:
         latency_ms = round((_utcnow() - started).total_seconds() * 1000, 2)
         return {
             "status": "ok",
-            "detail": engine.url.render_as_string(hide_password=True),
+            # Health is commonly surfaced to browsers and external monitors.
+            # Keep the useful database type, but never expose host, path, user,
+            # port, or database name from the configured connection URL.
+            "detail": f"{engine.dialect.name} database connection verified",
             "latency_ms": latency_ms,
         }
     except Exception as exc:  # noqa: BLE001 - report any failure honestly

@@ -5,7 +5,7 @@ not only the happy path."""
 import pytest
 from sqlalchemy import create_engine
 
-from app import ops, ratelimit
+from app import checks, ops, ratelimit
 
 
 @pytest.fixture(autouse=True)
@@ -112,6 +112,32 @@ def test_db_url_password_hidden():
     e = create_engine("postgresql://user:secretpw@db-host:5432/cicc")
     rendered = e.url.render_as_string(hide_password=True)
     assert "secretpw" not in rendered
+
+
+def test_health_response_hides_database_connection_target(client, monkeypatch, tmp_path):
+    db_path = tmp_path / "private-tenant.sqlite"
+    engine = create_engine("sqlite:///" + str(db_path))
+    monkeypatch.setattr(ops, "engine", engine)
+    response = client.get("/health")
+    engine.dispose()
+
+    assert response.status_code == 200
+    body = response.text
+    assert "sqlite database connection verified" in body
+    assert str(tmp_path) not in body
+    assert db_path.name not in body
+    assert "private-tenant" not in body
+
+
+def test_database_health_check_reports_driver_not_connection_url(tmp_path):
+    db_path = tmp_path / "private.sqlite"
+    engine = create_engine("sqlite:///" + str(db_path))
+    result = checks.check_database(engine)
+    engine.dispose()
+
+    assert result["status"] == "ok"
+    assert result["detail"] == "sqlite database connection verified"
+    assert str(db_path) not in result["detail"]
 
 
 def test_db_failure_detail_has_no_url_or_password(client, monkeypatch):
