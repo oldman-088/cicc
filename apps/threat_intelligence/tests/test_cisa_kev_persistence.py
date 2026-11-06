@@ -20,6 +20,7 @@ def db(tmp_path_factory):
         conn.exec_driver_sql(path.read_text())
         conn.exec_driver_sql((path.parent/'p2_03_kev_metadata_proposal.sql').read_text())
         conn.exec_driver_sql((path.parent/'p2_04_kev_blob_proposal.sql').read_text())
+        conn.exec_driver_sql((path.parent/'p2_05_kev_conflict_proposal.sql').read_text())
     yield engine
     engine.dispose(); server.cleanup()
 
@@ -127,6 +128,9 @@ def test_least_privilege_worker_cannot_rewrite_or_delete_history(db):
         item=collected(data)
         assert persist_catalog(worker,item).outcome=='created'
         assert persist_catalog(worker,item).outcome=='unchanged'
+        data['vulnerabilities'][0]['product']='conflicting worker fixture'
+        assert persist_catalog(worker,collected(data)).outcome=='conflicted'
+        assert persist_catalog(worker,collected(data)).outcome=='conflicted'
         for sql in ['DELETE FROM ti_kev.snapshot', "UPDATE ti_kev.revision SET record='{}'::jsonb", "UPDATE ti_kev.source_blob SET source_bytes=decode('00','hex')", 'DELETE FROM ti_kev.source_blob', 'UPDATE ti_kev.snapshot SET origin=\'FETCHED_FROM_GITHUB_CISA_REPO\'']:
             with pytest.raises(Exception):
                 with worker.begin() as conn: conn.exec_driver_sql(sql)
@@ -139,12 +143,14 @@ def test_isolated_schema_rollback_and_reapply(db):
     folder=Path(__file__).parents[1]/'schema'
     assert persist_catalog(db,collected(sample())).outcome=='created'
     with db.connect() as conn:
+        conn.exec_driver_sql((folder/'p2_05_kev_conflict_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_04_kev_blob_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_03_kev_metadata_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_02_kev_storage_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_02_kev_storage_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_03_kev_metadata_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_04_kev_blob_proposal.sql').read_text())
+        conn.exec_driver_sql((folder/'p2_05_kev_conflict_proposal.sql').read_text())
     assert counts(db)==(0,0,0)
     assert persist_catalog(db,collected(sample())).outcome=='created'
 
@@ -291,10 +297,40 @@ def test_unchanged_fetch_detects_missing_membership_and_bad_metadata(db):
     item=collected(sample()); result=persist_catalog(db,item)
     with db.begin() as conn:
         conn.execute(text('DELETE FROM ti_kev.snapshot_entry WHERE snapshot_id=:id'),{'id':result.snapshot_id})
-    with pytest.raises(SnapshotIntegrityError,match='membership'): persist_catalog(db,item)
+    with pytest.raises(SnapshotIntegrityError,match='integrity'): persist_catalog(db,item)
     # Restore only the isolated test fixture, then inject independently corrupt metadata.
     with db.begin() as conn:
         conn.execute(text('''INSERT INTO ti_kev.snapshot_entry(snapshot_id,origin,cve_id,content_sha256)
             SELECT :id,origin,cve_id,content_sha256 FROM ti_kev.revision'''),{'id':result.snapshot_id})
         conn.execute(text("UPDATE ti_kev.catalog_metadata SET catalog=jsonb_set(catalog,'{title}',to_jsonb('altered fixture'::text)) WHERE snapshot_id=:id"),{'id':result.snapshot_id})
-    with pytest.raises(SnapshotIntegrityError,match='metadata'): persist_catalog(db,item)
+    with pytest.raises(SnapshotIntegrityError,match='integrity'): persist_catalog(db,item)
+
+
+def test_equal_release_inconsistent_content_is_quarantined(db):
+    from datetime import timedelta
+    from apps.threat_intelligence.cisa_kev_snapshot import load_snapshot, load_conflict_candidate
+    from apps.threat_intelligence.cisa_kev_health import check_health
+    first=collected(sample()); original=persist_catalog(db,first)
+    candidate_data=sample(); candidate_data['vulnerabilities'][0]['product']='conflicting fixture product'
+    candidate=collected(candidate_data)
+    conflict=persist_catalog(db,candidate)
+    assert conflict.outcome=='conflicted' and conflict.snapshot_id==original.snapshot_id and conflict.conflict_id
+    assert persist_catalog(db,candidate).conflict_id==conflict.conflict_id
+    assert load_snapshot(db,origin=first.origin).catalog==first.catalog
+    assert load_conflict_candidate(db,origin=first.origin,conflict_id=conflict.conflict_id).catalog==candidate.catalog
+    health=check_health(db,origin=first.origin,as_of=candidate.collected_at+timedelta(seconds=1),max_check_age=timedelta(days=1))
+    assert health.unresolved_conflicts==1 and health.first_conflict_observed_at
+    with db.connect() as conn:
+        assert conn.execute(text('SELECT count(*) FROM ti_kev.snapshot')).scalar_one()==1
+        assert conn.execute(text('SELECT count(*) FROM ti_kev.source_blob')).scalar_one()==2
+        assert conn.execute(text('SELECT checked_at FROM ti_kev.snapshot WHERE id=:id'),{'id':original.snapshot_id}).scalar_one()==first.collected_at
+
+
+def test_corrupt_previous_snapshot_cannot_be_replaced_by_new_release(db):
+    from apps.threat_intelligence.cisa_kev_persistence import SnapshotIntegrityError
+    first=persist_catalog(db,collected(sample()))
+    with db.begin() as conn:
+        conn.execute(text('DELETE FROM ti_kev.snapshot_entry WHERE snapshot_id=:id'),{'id':first.snapshot_id})
+    newer=sample();newer['dateReleased']='2026-01-02T00:00:00Z'
+    with pytest.raises(SnapshotIntegrityError): persist_catalog(db,collected(newer))
+    assert counts(db)[0]==1

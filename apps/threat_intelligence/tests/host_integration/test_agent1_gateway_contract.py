@@ -30,13 +30,23 @@ def host_harness_module(environ):
 
 
 @pytest.fixture
-def host():
+def host(request):
     try:
         module = host_harness_module(os.environ)
     except HostConfigurationError as exc:
         pytest.fail(str(exc), pytrace=False)
     if module is None:
-        pytest.skip('actual host harness and isolated environment are not configured')
+        needs = {
+            'test_actual_gateway_create_postgres_and_audit': 'approved gateway mount, verified principal, actor-scoped PostgreSQL and trusted audit/trace',
+            'test_actual_gateway_denies_unauthenticated_and_cross_tenant': 'actual gateway authentication and two verified tenant identities',
+            'test_actual_gateway_rejects_invalid_and_forged_tenant': 'actual gateway principal binding and mounted validation',
+            'test_actual_gateway_duplicate_and_conflict': 'actual gateway mount and isolated PostgreSQL idempotency',
+            'test_actual_gateway_audit_failure_rolls_back': 'actual host audit-failure injection and transactional PostgreSQL',
+            'test_actual_host_pool_reuse_keeps_tenant_isolation': 'actual actor-scoped pool reuse and rollback observation',
+            'test_actual_gateway_list_is_tenant_scoped_and_audited': 'actual mounted list, two verified tenants and trusted audit',
+            'test_actual_host_rejects_unauthorized_direct_sql': 'actual runtime database role, direct SQL probe and trusted audit',
+        }
+        pytest.skip('requires isolated actual-host harness: ' + needs.get(request.node.name, 'approved host integration'))
     # Harness is owner-supplied, executable test code; never load from a request.
     harness = importlib.import_module(module).build_harness()
     try:

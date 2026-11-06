@@ -23,6 +23,8 @@ class KevHealth:
     check_age_seconds: float | None
     source_release_in_future: bool | None
     entry_count: int | None
+    unresolved_conflicts: int = 0
+    first_conflict_observed_at: datetime | None = None
 
 
 def check_health(engine: Engine, *, origin: Origin, as_of: datetime, max_check_age: timedelta) -> KevHealth:
@@ -42,12 +44,14 @@ def check_health(engine: Engine, *, origin: Origin, as_of: datetime, max_check_a
         raise ValueError('max_check_age must be positive')
     as_of=as_of.astimezone(timezone.utc)
     horizon=max_check_age.total_seconds()
-    with engine.connect() as conn:
+    with engine.begin() as conn:
+        conn.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         row=conn.execute(text('''SELECT id,released_at,collected_at,checked_at,entry_count FROM ti_kev.snapshot
             WHERE origin=:origin ORDER BY id DESC LIMIT 1'''), {'origin':origin}).mappings().first()
+        conflicts = conn.execute(text('SELECT count(*), min(observed_at) FROM ti_kev.source_conflict WHERE origin=:origin'), {'origin':origin}).one()
     if row is None:
-        return KevHealth(origin,'never_collected',as_of,horizon,None,None,None,None,None,None,None)
+        return KevHealth(origin,'never_collected',as_of,horizon,None,None,None,None,None,None,None,conflicts[0],conflicts[1])
     age=(as_of-row['checked_at']).total_seconds()
     status='future_check_time' if age < 0 else ('within_check_window' if age <= horizon else 'check_overdue')
     return KevHealth(origin,status,as_of,horizon,row['id'],row['released_at'],row['collected_at'],row['checked_at'],
-                     age,row['released_at'] > as_of,row['entry_count'])
+                     age,row['released_at'] > as_of,row['entry_count'],conflicts[0],conflicts[1])

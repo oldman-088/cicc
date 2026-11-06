@@ -7,6 +7,12 @@
 | Section 7 real intelligence integrations | `cisa_github_collector.py`, `cisa_kev_persistence.py`, `cisa_kev_snapshot.py`, `cisa_kev_health.py` | Complete GitHub mirror collection, isolated durable/reloadable snapshots and real-source tests; actual host scheduling/monitoring pending |
 | Section 8 AI intelligence | No verified integration | Not implemented |
 | Section 10 security | `TRUSTED_RELATIONSHIP_WRITES.md`, PostgreSQL tests, `host_adapter.py` | Restricted-role audited operations and mounted-host security events tested locally; actual actor identity, admin-resistant audit, production isolation and host security unverified |
-| Gateway/frontend coordination | `M46_HOST_ADAPTER.md`, `HOST_INTEGRATION_HANDOFF.md`, `FRONTEND_READ_ONLY_TI_CONTRACT.md` | Candidate adapter and DTOs; seven actual-host tests skipped; no approved host mount, trace or frontend binding |
+| Gateway/frontend coordination | `M46_HOST_ADAPTER.md`, `HOST_INTEGRATION_HANDOFF.md`, `FRONTEND_READ_ONLY_TI_CONTRACT.md` | Candidate adapter and DTOs; eight actual-host tests skipped; no approved host mount, trace or frontend binding |
 
 See `P2_01_VERIFICATION_REPORT.md` for current verification and limitations.
+
+## M48 evidence additions
+
+- Domain B, D and Section 6: `vulnerability_quality.py` and `VULNERABILITY_QUALITY_CONTRACT.md` add explicitly caller-scoped source/SBOM/license/age/difference analysis; actual source ingestion and cross-agent interface remain partial.
+- Section 7: P2-05 quarantines same-release content disagreement with original bytes and health signal; source truth, provider authenticity, operator resolution, shared deployment and scheduler remain unimplemented.
+- Master Prompt: original `README.md`, ULTIMATE MASTER PROMPT v1.0, commit `ca8f82c0500637e22851d7128cddf99081ef3c08`, SHA-256 `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1`, unchanged and re-read in M48.

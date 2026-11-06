@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from .cisa_github_collector import CollectedCatalog, METADATA_URL, verify_source_bytes
+from .cisa_kev_snapshot import _load_snapshot_conn, SnapshotUnavailable
 
 @dataclass(frozen=True)
 class PersistenceResult:
@@ -21,6 +22,7 @@ class PersistenceResult:
     added: int
     changed: int
     removed: int
+    conflict_id: int | None = None
 
 class StaleCatalogError(Exception):
     """An older catalog cannot silently replace a newer active snapshot."""
@@ -32,7 +34,7 @@ class SnapshotIntegrityError(Exception):
 def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceResult:
     if engine.dialect.name != 'postgresql':
         raise ValueError('PostgreSQL is required')
-    if (collected.source_url != METADATA_URL or collected.collected_at.tzinfo is None or collected.collected_at.utcoffset() is None
+    if (collected.origin not in ('FETCHED_FROM_GITHUB_CISA_REPO','EXPERIMENTAL_DEMO_DATA_ONLY') or collected.source_url != METADATA_URL or collected.collected_at.tzinfo is None or collected.collected_at.utcoffset() is None
         or not re.fullmatch(r'[0-9a-f]{40}', collected.github_blob_sha)
         or not re.fullmatch(r'[0-9a-f]{64}', collected.content_sha256)):
         raise ValueError('invalid collection provenance')
@@ -63,24 +65,32 @@ def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceR
         if previous and previous['blob_sha'] == collected.github_blob_sha:
             if previous['content_sha256'] != collected.content_sha256:
                 raise ValueError('inconsistent blob digest')
+            # Exact same source can safely backfill legacy missing metadata/blob;
+            # integrity validation below still checks membership before commit.
             conn.execute(text('INSERT INTO ti_kev.catalog_metadata(snapshot_id,catalog) VALUES (:id, CAST(:catalog AS jsonb)) ON CONFLICT DO NOTHING'), {'id':previous['id'],'catalog':catalog_metadata})
-            stored_metadata = conn.execute(text('SELECT catalog FROM ti_kev.catalog_metadata WHERE snapshot_id=:id'), {'id':previous['id']}).scalar_one()
-            if (previous['source_url'] != collected.source_url or previous['released_at'] != catalog.dateReleased
-                    or previous['catalog_version'] != catalog.catalogVersion or previous['entry_count'] != catalog.count
-                    or stored_metadata != json.loads(catalog_metadata)):
-                raise SnapshotIntegrityError('stored snapshot metadata is inconsistent')
-            saved = conn.execute(text('''SELECT e.cve_id,e.content_sha256,r.record FROM ti_kev.snapshot_entry e
-                JOIN ti_kev.revision r ON (e.origin,e.cve_id,e.content_sha256)=(r.origin,r.cve_id,r.content_sha256)
-                WHERE e.snapshot_id=:id AND e.origin=:origin'''), {'id':previous['id'],'origin':collected.origin}).mappings().all()
-            if len(saved) != len(incoming):
-                raise SnapshotIntegrityError('stored snapshot membership is incomplete')
-            for revision in saved:
-                encoded = json.dumps(revision['record'], sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
-                if (incoming.get(revision['cve_id']) != revision['content_sha256']
-                        or hashlib.sha256(encoded).hexdigest() != revision['content_sha256']):
-                    raise SnapshotIntegrityError('stored snapshot revision is inconsistent')
+        previous_catalog = None
+        if previous:
+            try:
+                previous_catalog = _load_snapshot_conn(conn, origin=collected.origin, snapshot_id=previous['id']).catalog
+            except SnapshotUnavailable:
+                raise SnapshotIntegrityError('previous snapshot integrity check failed') from None
+        if previous and previous['blob_sha'] == collected.github_blob_sha:
             conn.execute(text('UPDATE ti_kev.snapshot SET checked_at=GREATEST(checked_at, :checked) WHERE id=:id'), {'checked':collected.collected_at, 'id':previous['id']})
             return PersistenceResult(previous['id'],'unchanged',0,0,0)
+        if previous and previous['released_at'] == catalog.dateReleased:
+            # Compare normalized records independent of list ordering. Retain both
+            # original byte streams when one release has inconsistent content.
+            old_meta = previous_catalog.model_dump(mode='json', exclude={'vulnerabilities'})
+            old_records = {entry.cveID:entry.model_dump(mode='json') for entry in previous_catalog.vulnerabilities}
+            new_records = {entry.cveID:entry.model_dump(mode='json') for entry in catalog.vulnerabilities}
+            if old_meta != json.loads(catalog_metadata) or old_records != new_records:
+                conflict_id = conn.execute(text('''INSERT INTO ti_kev.source_conflict(origin,previous_snapshot_id,candidate_content_sha256,observed_at)
+                    VALUES (:origin,:previous,:digest,:observed) ON CONFLICT (origin,previous_snapshot_id,candidate_content_sha256)
+                    DO NOTHING RETURNING id'''),
+                    {'origin':collected.origin,'previous':previous['id'],'digest':collected.content_sha256,'observed':collected.collected_at}).scalar_one_or_none()
+                if conflict_id is None:
+                    conflict_id = conn.execute(text('SELECT id FROM ti_kev.source_conflict WHERE origin=:origin AND previous_snapshot_id=:previous AND candidate_content_sha256=:digest'), {'origin':collected.origin,'previous':previous['id'],'digest':collected.content_sha256}).scalar_one()
+                return PersistenceResult(previous['id'],'conflicted',0,0,0,conflict_id)
         previous_entries = dict(conn.execute(text('SELECT cve_id,content_sha256 FROM ti_kev.snapshot_entry WHERE snapshot_id=:id'), {'id':previous['id']}).all()) if previous else {}
         added = len(incoming.keys()-previous_entries.keys())
         removed = len(previous_entries.keys()-incoming.keys())
@@ -119,6 +129,9 @@ def main():
         engine = create_engine(url, pool_pre_ping=True)
         result = run_once(engine)
         print(f'KEV collection {result.outcome}; snapshot={result.snapshot_id}; added={result.added}; changed={result.changed}; removed={result.removed}')
+        if result.outcome == 'conflicted':
+            print(f'KEV release conflict quarantined; conflict={result.conflict_id}', file=sys.stderr)
+            return 1
         return 0
     except Exception:
         # Do not print provider payloads, connection URLs, exceptions or secrets.
