@@ -93,7 +93,11 @@ class PostgresRelationshipStore:
                       AND relrowsecurity AND relforcerowsecurity""")).scalar_one()
                 if not safe_role or protected != 4:
                     raise RuntimeError("RLS database role or policies are not safely configured")
-                # SET LOCAL is bound to the transaction and does not survive pool reuse.
+                # Reject poisoned pooled sessions instead of restoring their tenant
+                # after SET LOCAL expires. This is not protection against arbitrary SQL.
+                inherited = conn.execute(text("SELECT current_setting('cicc.tenant_id', true)")).scalar_one()
+                if inherited:
+                    raise RuntimeError("Unexpected pre-existing database tenant context")
                 conn.execute(text("SELECT set_config('cicc.tenant_id', :tenant, true)"), {"tenant": ctx.tenant_id})
             yield conn
 

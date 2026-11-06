@@ -19,3 +19,16 @@ Read-only inspection of Agent 1 PR #4 head `752dc99ececef934fef2d699aae571502639
 3. Verify frontend access only through the approved BFF → gateway → domain path; no browser domain invocation or invented read route. Agent 4 must await the approved DTO and identity semantics.
 
 The proposed `cicc.tenant_id` RLS GUC is mutable by the application DB role and cannot authenticate a tenant; review the threat model in `THREAT_RELATIONSHIP_API_CONTRACT.md`. This proposal is not a substitute for owner-approved DB identity and actual host integration testing.
+
+## Prepared executable host suite (not run)
+
+`apps/threat_intelligence/tests/host_integration/test_agent1_gateway_contract.py` is an opt-in acceptance suite, not an implementation of the Agent 1 host or a claim of integration. It currently skips because no approved host/identity/test adapter is available. A jointly developed, owner-approved test harness module supplies the actual transport, isolated identity fixtures, database audit inspection and fault injection; no host URL or credential is hard-coded or printed. Only enable in an explicitly isolated, authorized environment:
+
+```
+CICC_TI_HOST_ISOLATED=1 CICC_TI_HOST_TEST_HARNESS=<approved_python_module> \
+  python -m pytest -q apps/threat_intelligence/tests/host_integration/test_agent1_gateway_contract.py
+```
+
+Harness module interface for **test tooling only**: `build_harness()` returns an object with `assert_isolated_actual_host()`, `close()`, fixture identities `tenant_a`, `tenant_b`, `unauthenticated`, tenant identifiers `tenant_a_id` and `tenant_b_id`; `create(identity, payload, key)`, `get(identity, relationship_id)`, `traverse(identity, entity_type, entity_id)` return objects with `status`, `body`, `gateway_task_id`, `correlation_id`; `read_audit(identity, correlation_id)` returns a tenant-scoped audit row or `None`; `find_by_idempotency_key(identity,key)` uses isolated DB inspection; `fail_next_relationship_audit()` is a context manager that injects a failure only in the disposable test environment. The harness must demonstrate that calls traverse the **actual** gateway and mounted Agent 2 router; mock-only implementations must not be used to claim this test category. The provisional suite expects the standalone route's 201/200/401/404/409/422 and rollback semantics; reconcile them with approved gateway error mapping and identity policy before use. It tests successful task/correlation/record/audit, missing authentication, forged input, cross-tenant record/traversal/audit, replay/conflict and injected audit rollback.
+
+Agent 1 PR #4 head `f96037b00f03018d6bca6c11cfd1bec407cdf7fa`, `docs/TENANT_AUTH_READINESS.md`: current token actors are shared read/write labels, request-body `tenant_id` is explicitly an **unverified claim**, and principal-to-tenant mapping remains an owner-reserved proposal. The adapter at that head still passes the payload's claim into the legacy dispatcher. It must not be promoted into an authenticated tenant context. Shared migrations, platform auth and BFF auth changes are owner-reserved; the actual host gateway-to-router path remains pending.

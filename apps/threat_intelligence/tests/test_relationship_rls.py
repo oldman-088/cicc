@@ -196,3 +196,70 @@ def test_custom_tenant_guc_is_not_an_authentication_boundary(env):
     with db.begin() as conn:
         conn.execute(text("SELECT set_config('cicc.tenant_id', :v, true)"), {'v': tenant_b})
         assert target in [str(r) for r in conn.execute(select(relationship.c.relationship_id)).scalars()]
+
+
+def test_runtime_role_cannot_update_delete_or_change_policies(env):
+    tenant_a, tenant_b, identity, _, db = env
+    identity(tenant_b)
+    create(payload(), 'victim')
+    statements = [
+        "UPDATE ti_relationship_record SET relationship_type='RELATED_TO'",
+        'DELETE FROM ti_relationship_record',
+        'UPDATE ti_relationship_audit SET outcome=\'forged\'',
+        'DELETE FROM ti_relationship_audit',
+        'ALTER TABLE ti_relationship_record DISABLE ROW LEVEL SECURITY',
+        'ALTER ROLE ti_fixture_rls BYPASSRLS',
+        'SET ROLE postgres',
+    ]
+    for statement in statements:
+        with pytest.raises(DBAPIError):
+            with db.begin() as conn:
+                conn.execute(text("SELECT set_config('cicc.tenant_id', :v, true)"), {'v': tenant_a})
+                conn.exec_driver_sql(statement)
+
+
+def test_rls_update_delete_isolation_even_when_temporarily_granted(env):
+    from apps.threat_intelligence.relationship_storage import entity, idempotency
+    tenant_a, tenant_b, identity, admin, db = env
+    identity(tenant_a)
+    create(payload('own-a','own-b'), 'own')
+    identity(tenant_b)
+    victim = create(payload('victim-a','victim-b'), 'victim')[1]
+    with admin.begin() as conn:
+        conn.exec_driver_sql('GRANT UPDATE, DELETE ON ti_relationship_entity, ti_relationship_record, ti_relationship_idempotency, ti_relationship_audit TO ti_fixture_rls')
+    try:
+        for table in (entity, relationship, idempotency, audit_event):
+            with db.begin() as conn:
+                conn.execute(text("SELECT set_config('cicc.tenant_id', :v, true)"), {'v': tenant_a})
+                result = conn.execute(table.update().where(table.c.tenant_id == tenant_b).values(tenant_id=tenant_a))
+                assert result.rowcount == 0
+                result = conn.execute(table.delete().where(table.c.tenant_id == tenant_b))
+                assert result.rowcount == 0
+        # WITH CHECK prevents changing a visible row to another tenant.
+        with pytest.raises(DBAPIError):
+            with db.begin() as conn:
+                conn.execute(text("SELECT set_config('cicc.tenant_id', :v, true)"), {'v': tenant_a})
+                conn.execute(audit_event.update().where(audit_event.c.tenant_id == tenant_a).values(tenant_id=tenant_b))
+        identity(tenant_b)
+        assert request('GET', BASE + '/relationships/' + victim['relationship_id'])[0] == 200
+    finally:
+        with admin.begin() as conn:
+            conn.exec_driver_sql('REVOKE UPDATE, DELETE ON ti_relationship_entity, ti_relationship_record, ti_relationship_idempotency, ti_relationship_audit FROM ti_fixture_rls')
+
+
+def test_pooled_connection_rejects_session_tenant_poison(env):
+    tenant_a, tenant_b, _, _, db = env
+    # An isolated single-connection pool makes reuse deterministic.
+    pool = create_engine(db.url, pool_size=1, max_overflow=0)
+    try:
+        with pool.begin() as conn:
+            conn.execute(text("SELECT set_config('cicc.tenant_id', :v, false)"), {'v': tenant_b})
+        app.state.relationship_store = PostgresRelationshipStore(pool)
+        assert request('GET', BASE + '/relationships')[0] == 500
+        with pool.begin() as conn:
+            conn.exec_driver_sql('RESET cicc.tenant_id')
+        assert request('GET', BASE + '/relationships')[0] == 200
+        with pool.begin() as conn:
+            assert conn.execute(text("SELECT current_setting('cicc.tenant_id', true)")).scalar_one() in (None, '')
+    finally:
+        pool.dispose()
