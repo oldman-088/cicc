@@ -15,6 +15,7 @@ cat > .env.local  # NEVER committed: tokens below are sandbox examples only
 # CICC_COORD_APPROVERS=owner
 # CICC_GH_WEBHOOK_SECRET=...            (fail-closed when unset)
 # DATABASE_URL=sqlite:////tmp/cicc.db   (PostgreSQL: postgresql+psycopg2://...)
+# CICC_BUILD_SHA=<immutable deployed Git commit> (optional; returned by coordination diagnostics)
 # CICC_DOMAIN_INVOKE_TIMEOUT_S=10  CICC_DOMAIN_INVOKE_RETRIES=1  CICC_DOMAIN_STALE_AFTER_S=3600
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 # checks: curl -s localhost:8000/health ; /ready ; /docs (OpenAPI)

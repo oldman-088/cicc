@@ -329,8 +329,6 @@ def list_domains(_gate: None = Depends(read_token_dependency)):
     empty list = no domain API mounted in this deployment)."""
     with ops.SessionLocal() as s:
         _load_persisted_stats(s)
-        _persist_domain_stats(s)
-        s.commit()
     return {"domains": domains.mounted_domains(), "statuses": domains.all_statuses(),
             "states": list(domains.STATES),
             "note": "empty list = no domain API mounted in this deployment; status is evidence-based (NOT_MOUNTED/MOUNTED/AVAILABLE/EXECUTION_VERIFIED/DEGRADED/FAILED/UNKNOWN)"}
@@ -360,8 +358,6 @@ def domain_status(kind: str, _gate: None = Depends(read_token_dependency)):
     """M37: evidence-based lifecycle status for one domain + observable stats."""
     with ops.SessionLocal() as s:
         _load_persisted_stats(s)
-        _persist_domain_stats(s)
-        s.commit()
     st = domains.all_statuses().get(kind)
     if st is None:
         return {"kind": kind, "status": domains.NOT_MOUNTED,
@@ -419,23 +415,45 @@ def deregister_domain(kind: str, _gate: None = Depends(read_token_dependency),
     return {"kind": kind, "deregistered": True, "status": domains.NOT_MOUNTED}
 
 
-def _record_circuit_transition(s, kind: str, pre_open: bool) -> None:
-    """M45: persist circuit open/close transitions as audit events (survive
-    restart; sanitized — kind + transition only). Process-local circuit STATE
-    still resets fail-safe on restart (documented)."""
-    post_open = bool(domains._CIRCUIT.get(kind, {}).get("open"))  # raw flag: cooldown-adjusted state would miss half-open closes
-    if post_open != pre_open:
-        ops.record_event("warning" if post_open else "info", "coordination.domains",
-                         f"domain circuit {'OPENED' if post_open else 'CLOSED'} kind={kind} "
-                         f"threshold={domains.circuit_failures_threshold()}", s=s)
+def _record_circuit_transition(s, kind: str, transition: str | None) -> None:
+    """Persist only the transition actually committed under the breaker lock."""
+    if transition not in ("OPENED", "CLOSED"):
+        return
+    ops.record_event("warning" if transition == "OPENED" else "info", "coordination.domains",
+                     f"domain circuit {transition} kind={kind} "
+                     f"threshold={domains.circuit_failures_threshold()}", s=s)
 
 
-def _record_half_open_probe_failure(s, kind: str, was_probe: bool) -> None:
-    """M46: retain an operational breadcrumb when a failed probe re-arms cooldown."""
-    if was_probe and domains._CIRCUIT.get(kind, {}).get("open"):
+def _record_domain_outcome(s, task_id: str, kind: str, probe_state: dict, *, ok: bool,
+                           error: str | None = None, stale: bool = False,
+                           latency_s: float | None = None, attempts: int = 1,
+                           timed_out: bool = False, skew: bool = False) -> dict:
+    """Atomically reject callbacks from replaced mounts and persist breaker edges."""
+    outcome = {}
+    accepted = domains.record_outcome(
+        kind, ok, error, stale=stale, latency_s=latency_s, attempts=attempts,
+        timed_out=timed_out, skew=skew, mount_id=probe_state.get("mount_id"),
+        probe_lease_id=probe_state.get("probe_lease_id"), outcome_state=outcome)
+    if not accepted:
+        registry.record_event(
+            s, task_id, "domain_mount_changed",
+            "handler outcome discarded because the registered mount changed")
+        ops.record_event("warning", "coordination.domains",
+                         f"domain callback ignored after mount change kind={kind}", s=s)
+        s.commit()
+        raise HTTPException(status_code=409, detail="domain_mount_changed")
+
+    _record_circuit_transition(s, kind, outcome.get("transition"))
+    if outcome.get("probe_failed_rearmed"):
         ops.record_event("warning", "coordination.domains",
                          f"domain circuit HALF-OPEN probe failed; cooldown reset kind={kind} "
                          f"threshold={domains.circuit_failures_threshold()}", s=s)
+    if probe_state.get("lease_expired"):
+        registry.record_event(s, task_id, "domain_probe_lease_expired",
+                              "replacement half-open probe admitted after prior lease expired")
+        ops.record_event("warning", "coordination.domains",
+                         f"domain half-open probe lease expired; replacement admitted kind={kind}", s=s)
+    return outcome
 
 
 @router.post("/domains/{kind}/invoke", status_code=201)
@@ -477,26 +495,29 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             raise HTTPException(status_code=409, detail=f"domain_not_mounted: {kind}")
         import time as _t
         _t0 = _t.time()
-        # M45: raw internal flag (circuit_state is cooldown-adjusted; half-open still counts as open)
-        _pre_circuit_open = bool(domains._CIRCUIT.get(kind, {}).get("open"))  # M45: detect transition for persisted audit
         _probe_state = {}
-        _half_open_probe = False
         try:
-            out = domains.invoke(kind, payload, task=t, probe_state=_probe_state)  # M46 records exact probe lease
-            _half_open_probe = bool(_probe_state.get("half_open_probe"))
+            out = domains.invoke(kind, payload, task=t, probe_state=_probe_state)
             _lat = _t.time() - _t0
         except domains.DomainCircuitOpen as e:
             registry.record_event(s, task_id, "domain_circuit_open", str(e))
             s.commit()
             raise HTTPException(status_code=503, detail=str(e))
+        except domains.DomainMountChanged:
+            registry.record_event(s, task_id, "domain_mount_changed",
+                                  "handler was not started because the mount changed during admission")
+            s.commit()
+            raise HTTPException(status_code=409, detail="domain_mount_changed")
+        except domains.DomainNotMounted:
+            registry.record_event(s, task_id, "domain_mount_changed",
+                                  "handler was not started because the domain was deregistered")
+            s.commit()
+            raise HTTPException(status_code=409, detail="domain_not_mounted")
         except domains.DomainError as e:
-            _half_open_probe = bool(_probe_state.get("half_open_probe"))
-            domains.record_outcome(kind, False, str(e), latency_s=_t.time() - _t0,
-                                   attempts=getattr(e, "attempts", 1),
-                                   timed_out=bool(getattr(e, "timed_out", False)),
-                                   half_open_probe=_half_open_probe)
-            _record_circuit_transition(s, kind, _pre_circuit_open)  # M45: persisted circuit audit
-            _record_half_open_probe_failure(s, kind, _half_open_probe)
+            _record_domain_outcome(
+                s, task_id, kind, _probe_state, ok=False, error=str(e),
+                latency_s=_t.time() - _t0, attempts=getattr(e, "attempts", 1),
+                timed_out=bool(getattr(e, "timed_out", False)))
             registry.record_event(s, task_id, "domain_error", str(e))
             st_now = domains.domain_status(kind)
             ops.record_domain_alert(kind, st_now, str(e), s=s)
@@ -504,12 +525,9 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             s.commit()
             raise HTTPException(status_code=502, detail=str(e))
         except domains.DomainInvalid as e:
-            _half_open_probe = bool(_probe_state.get("half_open_probe"))
-            domains.record_outcome(kind, False, str(e), latency_s=_t.time() - _t0,
-                                   attempts=getattr(e, "attempts", 1),
-                                   half_open_probe=_half_open_probe)
-            _record_circuit_transition(s, kind, _pre_circuit_open)  # M45
-            _record_half_open_probe_failure(s, kind, _half_open_probe)
+            _record_domain_outcome(
+                s, task_id, kind, _probe_state, ok=False, error=str(e),
+                latency_s=_t.time() - _t0, attempts=getattr(e, "attempts", 1))
             registry.record_event(s, task_id, "domain_invalid", str(e))
             ops.record_domain_alert(kind, domains.domain_status(kind), str(e), s=s)
             _persist_domain_stats(s)
@@ -517,10 +535,9 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             raise HTTPException(status_code=422, detail=str(e))
         freshness = domains.analyze_freshness(out["provenance"])  # M42: basis + clock skew
         stale = freshness["stale"]
-        domains.record_outcome(kind, True, stale=stale, latency_s=_lat,
-                               skew=freshness["clock_skew_s"] > 0,
-                               half_open_probe=_half_open_probe)  # M44/M46 metrics + exact probe state
-        _record_circuit_transition(s, kind, _pre_circuit_open)  # M45: half-open success closes -> persisted audit
+        _record_domain_outcome(
+            s, task_id, kind, _probe_state, ok=True, stale=stale, latency_s=_lat,
+            skew=freshness["clock_skew_s"] > 0)
         ops.record_event("info", "coordination.domains",
                          f"domain invoke ok kind={kind} task={task_id} stale={stale} by=api-write-token", s=s)
         ops.record_domain_alert(kind, "EXECUTION_VERIFIED", "recovered", s=s)
@@ -564,14 +581,13 @@ def coordination_diagnostics(_gate: None = Depends(read_token_dependency)):
         except Exception:
             db_ok = False
         _load_persisted_stats(s)
-        _persist_domain_stats(s)
-        s.commit()
     from app.main import __version__, _STARTED_TS
     import time as _time
     return {
         "status": "ok" if db_ok else "degraded",
         "db_ok": db_ok,
         "version": __version__,
+        "build_commit": os.getenv("CICC_BUILD_SHA") or None,
         "uptime_s": round(_time.time() - _STARTED_TS, 1),
         "mounted_domains": domains.mounted_domains(),
         "domain_statuses": domains.all_statuses(),
@@ -588,8 +604,6 @@ def coordination_health(_gate: None = Depends(read_token_dependency)):
     with ops.SessionLocal() as s:
         h = registry.health(s)
         _load_persisted_stats(s)
-        _persist_domain_stats(s)
-        s.commit()
     st = domains.all_statuses()
     if st:
         worst = domains.EXECUTION_VERIFIED

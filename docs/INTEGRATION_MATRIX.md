@@ -1520,3 +1520,26 @@ owner decision. Master prompt: README.md @ main `ca8f82c` v1.0.
 
 Agents 2, 3, and 4 retain ownership of their PRs and specialized implementations.
 Only read-only codeload exports were used; no other branch or PR was modified.
+
+## M47 current integration/readiness snapshot (2026-11-06; supersedes older branch-head notes above)
+
+### Host and Agent 1 branch
+- Agent 1 branch `arena/961971ed-cicc`; PR #4 head at pre-publication review `4a797f480377bc94fa8eec56ae692a8fc337db5d`, OPEN/CLEAN, no attached checks. Main `ca8f82c0500637e22851d7128cddf99081ef3c08`.
+- Agent 1 current domain gateway adapter targets the legacy TI `ThreatIntelligenceAPI` simulated dispatcher and the older `packages/vuln_intel` package. Neither TI nor VI is automatically mounted. Current PR #3 evidence does not validate these adapters against the branch's current TI relationship HTTP API or Replacement Agent 3 VI entry point.
+- PR #1 HEAD `a942baabc3260683ec1a2b8c9d953c04dceaae9a` OPEN; PR #2 `e745cc2b8ff995b040896212eab2995607c48963` OPEN; PR #3 `7136538f74ab08b33607774c507785fc0c59cd03` OPEN/Draft. PR #3 currently contains the Agent 2 TI handover and Replacement Agent 3 VI work; this is not evidence that both owners approved a shared adapter.
+
+### Readiness evidence
+- Agent 1 local API 309/309; isolated PostgreSQL-selected tests 42/42; web tests 35/35; TypeScript typecheck passed. M47-focused preflight/reliability tests 23/23. These are **SANDBOX/BRANCH** evidence only.
+- The M44 fixture trial passed 17/17 on clean and non-empty disposable SQLite with `CICC_DOMAIN_CIRCUIT_FAILURES=3`. The default-threshold run returned 16/17 because the script expects 3 while service default is 5. The successful trials do not mount TI/VI or establish live feeds.
+- `scripts/m47_merged_app_acceptance.py` no-manifest preflight is **BLOCKED** (exit 2) before API startup. PR #1/#3 remain open and no owner-approved manifest or tenant driver exists. **MERGED-APPLICATION NOT RUN.**
+- PR #3 Agent 2 handover reports a standalone experimental TI relationship host not mounted in Agent 1; host acceptance is **0 executed / 8 skipped**. No actual-host/security/schema approval. Its PostgreSQL CI succeeded on that branch but is not host acceptance.
+- Agent 4 PR #2 contains candidate lifecycle/diagnostic decoders and readiness UI. Current checked-out Agent 1 UI does not invoke those domain routes. The candidate surface is not approved; PR #2's body has stale Agent 1/2/3 head references, so refresh before decisions.
+
+### M47 contract/state changes
+- Half-open circuit probe ownership is a unique expiring UUID lease; expiration permits a successor and stale callbacks cannot close/re-arm another probe's breaker.
+- Per-mount generation guards reject outcomes from callbacks started before replacement/deregistration.
+- Coordination `GET /domains`, `/domains/{kind}/status`, `/domains/metrics`, `/diagnostics`, `/health` are checked for no SQL DML; stats restoration is in-memory only. The unrelated `/api/v1/ops/alerts` GET still evaluates and may persist derived state; this is not part of the read-only guarantee.
+- Diagnostics include nullable `build_commit`; metrics add `probe_inflight`, `probe_lease_expires_in_s`, `probe_lease_expirations`. No schema change; AMD-003 remains PENDING.
+- The exact-revision runner requires exact PR merge results or an owner-approved integration checkout, exact module source/tree identity, approved payload/source/owner manifest, real host execution, and an owner-approved tenant driver. It has not passed against a merged or approved application.
+
+See `docs/M47_CROSS_AGENT_CONTRACT_STATUS.md`, `docs/M47_MERGED_APPLICATION_ACCEPTANCE.md`, and `docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md` for owner-specific gaps and acceptance evidence. No other agent branch or PR was modified.

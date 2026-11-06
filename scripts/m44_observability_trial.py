@@ -8,8 +8,13 @@ values never appear in metrics or diagnostics), read-gating, circuit
 transition counters, mount history visibility, and alert state/recovery
 history via /ops/alerts/history.
 
-Usage: API=http://127.0.0.1:8000 WRITE_TOKEN=smoke-write READ_TOKEN=smoke-read \
-       python3 scripts/m44_observability_trial.py
+Run the API with `CICC_DOMAIN_CIRCUIT_FAILURES=3` before this trial's
+final circuit-transition check (the production/default threshold is 5):
+  API=http://127.0.0.1:8000 WRITE_TOKEN=<test-token> READ_TOKEN=<test-token> \
+    python3 scripts/m44_observability_trial.py
+Using the default threshold 5 makes that final three-failure assertion
+inapplicable and reports 16/17; it is a trial-configuration mismatch, not an
+API regression.
 """
 import json
 import os

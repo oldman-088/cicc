@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
-"""M46 — repeatable MERGED-APPLICATION acceptance test + live ops spot checks.
+"""M46 legacy exact-main source-snapshot probe + external API ops checks.
 
-Merged-app phase runs only after the GitHub API reports PR #1 and PR #3
-merged into main AND each PR's exact merge-result commit is reachable from the
-exact main SHA queried for this run. PR head SHAs are also checked and recorded
-(they need not be ancestors after squash/rebase merges). The script then exports
-that exact main tree, mounts TI and VI from it, invokes both through the host
-gateway, and records route statuses, response provenance, task/trace correlation,
-and the evidence class.
+This script may export exact main source and probe its modules through an
+externally supplied API URL, but it DOES NOT start that API or verify its build
+commit. Its module results are therefore never MERGED-APPLICATION acceptance,
+even when the PR merge-result SHAs are on main. Use
+`scripts/m47_merged_app_acceptance.py` for the actual pinned-application run.
 
-If the PRs are not merged or their merge-result SHAs cannot be verified on main,
-the merged-app phase reports NOT RUN. It never infers integration from an open
-PR head, a preview merge SHA, package presence, or a sandbox execution.
-
-Ops phase (always, against the running API — SANDBOX evidence): health,
-metrics bounded labels, alert history, circuit metrics, and BFF read-only access.
+The ops phase is always SANDBOX evidence against the external API. No codeload
+trial, fixture, external API, or PR head is labelled as merged application.
 
 Usage: API=http://127.0.0.1:8000 WEB=http://127.0.0.1:3000 \
        WRITE_TOKEN=smoke-write READ_TOKEN=smoke-read \
@@ -248,7 +242,7 @@ def main():
             trace_status, trace = trace_for(inv)
             provenance = as_dict(inv).get("provenance", {})
             print_domain_evidence("threat_intel", msha, st, invoke_status, inv, trace_status, trace)
-            check("MERGED-APP: TI exact-main module mounted, invoked, provenance + trace verified",
+            check("source probe: exact-main TI module via external API; provenance + trace checked",
                   st == 201 and invoke_status == 201
                   and as_dict(inv).get("state") == "COMPLETED"
                   and as_dict(provenance).get("experimental_label") == "EXPERIMENTAL_DEMO_DATA_ONLY"
@@ -256,10 +250,10 @@ def main():
                   f"main_sha={msha} PR#3_head_sha={p3['head_sha']} "
                   f"PR#3_merge_commit_sha={p3['merge_commit_sha']} mount={st} invoke={invoke_status} "
                   f"task_id={as_dict(inv).get('task_id')} trace_status={trace_status}",
-                  label="MERGED-APPLICATION")
+                  label="SANDBOX/EXTERNAL-API")
         else:
-            check("MERGED-APP: TI module present in verified main tree", False, ti_mod,
-                  label="MERGED-APPLICATION")
+            check("source probe: TI module present in verified main tree", False, ti_mod,
+                  label="SANDBOX/EXTERNAL-API")
 
         if os.path.isdir(os.path.join(vi_pkg, "vuln_intel")):
             vi_src = f"main {msha} (PR #1 merge-result SHA {p1['merge_commit_sha']})"
@@ -278,7 +272,7 @@ def main():
             trace_status, trace = trace_for(inv)
             provenance = as_dict(inv).get("provenance", {})
             print_domain_evidence("vuln_intel", msha, st, invoke_status, inv, trace_status, trace)
-            check("MERGED-APP: VI exact-main module mounted, invoked, provenance + trace verified",
+            check("source probe: exact-main VI module via external API; provenance + trace checked",
                   st == 201 and invoke_status == 201
                   and as_dict(inv).get("state") == "COMPLETED"
                   and as_dict(inv).get("result", {}).get("count") == 1
@@ -287,18 +281,18 @@ def main():
                   f"main_sha={msha} PR#1_head_sha={p1['head_sha']} "
                   f"PR#1_merge_commit_sha={p1['merge_commit_sha']} mount={st} invoke={invoke_status} "
                   f"task_id={as_dict(inv).get('task_id')} trace_status={trace_status}",
-                  label="MERGED-APPLICATION")
+                  label="SANDBOX/EXTERNAL-API")
         else:
-            check("MERGED-APP: VI package present in verified main tree", False, vi_pkg,
-                  label="MERGED-APPLICATION")
+            check("source probe: VI package present in verified main tree", False, vi_pkg,
+                  label="SANDBOX/EXTERNAL-API")
     else:
-        print("[SKIP] MERGED-APPLICATION phase NOT RUN: requires PR #1 and PR #3 merged to main "
+        print("[SKIP] M46 source-snapshot probe NOT RUN: requires PR #1 and PR #3 merged to main "
               "AND each exact PR merge-result SHA verified reachable from the queried main SHA. "
               f"main={msha}; PR#1 merged={p1['merged']} head={p1['head_sha']} "
               f"merge_sha={p1['merge_commit_sha']} merge_on_main={v1['merge_check']['on_main']}; "
               f"PR#3 merged={p3['merged']} head={p3['head_sha']} "
               f"merge_sha={p3['merge_commit_sha']} merge_on_main={v3['merge_check']['on_main']}. "
-              "No merged-integration claim is made.")
+              "No merged-application claim is made; M47 runner is required.")
 
     # ---------- live ops reliability spot checks (SANDBOX) ----------
     st, live, _ = call(API, "GET", "/live")
@@ -328,8 +322,8 @@ def main():
     labels = sorted({label for _, _, label in results})
     print(f"\n== M46 RESULT: {passed}/{len(results)} PASS @ "
           f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} ==")
-    print(f"   Evidence classes: {', '.join(labels)}. MERGED-APPLICATION: "
-          f"{'VERIFIED GATE + TESTS RUN' if merged_app_verified else 'NOT RUN (PR #1/#3 merge SHAs not verified on main)'}; "
+    print(f"   Evidence classes: {', '.join(labels)}. MERGED-APPLICATION: NOT VERIFIED BY M46 "
+          "(external API build SHA is not pinned); use scripts/m47_merged_app_acceptance.py. "
           "PRODUCTION-VERIFIED: never claimed.")
     return 0 if passed == len(results) else 1
 

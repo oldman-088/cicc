@@ -182,3 +182,45 @@ Verification: `test_m46_ops_reliability.py` 9/9 and
 42/42, web 35/35. Live M44 17/17, M45 26/26, and M46 ops acceptance 7/7 are
 SANDBOX results only; see `docs/INTEGRATION_MATRIX.md`. AMD-003 remains PENDING
 and no schema change has been applied.
+
+## M47 reliability and evidence addendum (2026-11-06)
+
+M47 preserves the M46 state and makes the following Agent 1-only reliability
+changes. No public route was added for schema/tenant access, no table/migration
+was added, and AMD-003 remains pending.
+
+- **Half-open probe lease:** each admitted probe receives a unique UUID lease
+  with a monotonic expiry (`CICC_DOMAIN_CIRCUIT_PROBE_LEASE_S`, default 30s).
+  Once expired or superseded, a late callback cannot consume/close/re-arm the
+  new lease. `probe_lease_expirations` increments when an expired lease is
+  reclaimed for a replacement probe (not merely when its wall-clock deadline
+  passes); current probe visibility is exposed as `circuit.probe_inflight` and
+  `circuit.probe_lease_expires_in_s`; these are process-local.
+- **Mount generations:** invocation outcomes carry the handler generation
+  captured at dispatch. Remount, replacement, or deregister invalidates old
+  callbacks before they change success/failure counters, lifecycle, alerts, or
+  breaker state. The in-flight task receives sanitized `409
+  domain_mount_changed`; trace records the stale outcome without recording a
+  normal `domain_result`/`domain_error`.
+- **Read-only coordination GETs:** `/domains`, `/domains/{kind}/status`,
+  `/domains/metrics`, `/diagnostics`, and `/health` may restore persisted
+  counters into process memory but perform no SQL DML. M47 test instrumentation
+  asserts no INSERT/UPDATE/DELETE/REPLACE. This does not change the separate
+  `GET /api/v1/ops/alerts` behavior, which still evaluates rules and may persist
+  derived alert state; `/api/v1/ops/alerts/history` is the read-only history
+  endpoint.
+- **Stats locking/restore:** per-kind state snapshots and persisted-stat merges
+  are lock-protected and idempotent across repeated startup/read restoration.
+  Persisted invoke/success counters are merged without erasing volatile stats
+  on tied counts. Circuit/latency/probe state remains process-local and is not
+  claimed distributed across replicas.
+- **Build diagnostics:** `GET /diagnostics.build_commit` reports the optional
+  CI/deployment-provided `CICC_BUILD_SHA` (null if unset). This is useful only
+  when compared to an independently pinned checkout; it is not a production
+  attestation by itself.
+
+M47 verification so far: the current focused preflight/reliability group passed
+23 tests, one non-failing Starlette/AnyIO deprecation warning. The exact merged
+application runner has not been run: it requires PR #1/#3 merge-result SHAs and
+owner-approved exact module sources/payloads, or an explicit approved
+integration-checkout manifest. No tenant-isolation or production claim is made.

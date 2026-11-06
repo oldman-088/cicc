@@ -1,0 +1,52 @@
+# M47 cross-agent contract / host readiness ledger
+
+**Purpose:** record code-verified boundaries for Agent 1's M47 integration work. This is a status ledger, not an approved shared API, data model, authorization policy, or cross-agent sign-off. Do not copy candidate schemas into shared services without owner approval.
+
+## Current evidence boundary
+
+At the review point, `main` was `ca8f82c0500637e22851d7128cddf99081ef3c08`; PR #1 and PR #3 were open, unmerged, and moving. PR #2 was open. Exact heads and source PR ownership must be refreshed immediately before a future acceptance run. PR #1/3 tests, even when green on their branches, are branch evidence only.
+
+## Contract matrix
+
+| Surface | Verified in Agent 1 code | Current gap / required owner decision | Status |
+|---|---|---|---|
+| Verified principal resolution | Ops API uses configured read/write bearer tokens. No verified user/service principal object is propagated into coordination handlers. | Platform/security owner must approve authentication, issuer/audience, subject and service identity claims, scopes, expiry/revocation, and mapping to an authenticated tenant. | **Not implemented / no shared contract** |
+| Principal → tenant binding | Invoke body `tenant_id` is explicitly recorded as an **unverified claim** (`claimed_tenant` event); it is not authorization context. | Trusted resolver and fail-closed tenant binding are required. Never trust body, header, trace, or caller-supplied `tenant_id` as identity. | **Unverified; do not claim tenant isolation** |
+| Actor-specific database pools | Agent 1 API currently uses shared `SessionLocal` / `engine`; no verified actor-scoped pool is selected from a principal. | Security/DB owner and domain owners must approve a host callback with a verified actor/tenant, restricted credentials, transaction scope, role switching, rollback behavior, and pool cleanup. Agent 3's branch host interfaces are candidates only. | **No deployed actor-scoped host** |
+| PostgreSQL RLS / table shape | No shared M47 schema or migration was added. AMD-003 remains pending. | Preserve owner-reserved schema. Candidate role-bound RLS / table SQL on PR #3 is unmerged and is not proof of RLS enforcement. Require negative cross-tenant tests on the exact deployed role and DB. | **Pending; do not apply AMD-003** |
+| Domain gateway errors | Current routes use FastAPI `HTTPException`/`detail` responses and legacy exception handling; there is no one approved per-route envelope or error-code/status matrix. | Agent 1 + Agent 2/3 + Agent 4 need to approve exact stable codes, status semantics, retryability, correlation IDs, and frontend unknown-code behavior before typed decoding is treated as contract. | **Candidate only / unresolved** |
+| Domain diagnostics | Actual Agent 1 GET returns status, DB check, app version, uptime, mounted descriptors/statuses, freshness threshold, and additive nullable `build_commit` from `CICC_BUILD_SHA`. It exposes no secrets. | Agent 4's PR #2 `agent1-domains.ts` calls this a documented candidate, not an approved/wired DTO. Confirm optional `build_commit`, unknown fields, nulls, lifecycle states, and freshness semantics before frontend adoption. | **Implemented locally; cross-agent DTO approval pending** |
+| Domain metrics | Actual Agent 1 GET exposes kind-only bounded labels and per-kind counters, latency, circuit, lifecycle, mount history, and new M47 `probe_inflight`, `probe_lease_expires_in_s`, `probe_lease_expirations` observations. | Agent 4's candidate type predates M47; it does not yet type the lease observations. Confirm forward-compatible decoding/unknown-field handling and whether the UI needs to expose process-local lease state. No tenant labels. | **Implemented locally; candidate decoder needs review** |
+| Domain GET persistence | M47 regression verifies `/domains`, `/domains/{kind}/status`, `/domains/metrics`, `/diagnostics`, and `/health` do not issue SQL DML; stats restoration changes process memory only. | This is deliberately scoped. `GET /api/v1/ops/alerts` still calls `evaluate_alerts()` and can persist derived alert state. `GET /alerts/history` is the read-only history surface. Decide separately whether alert evaluation moves to scheduled/explicit write path; M47 does not change it. | **M47 coordination GETs read-only; other route policy unchanged** |
+| Circuit lifecycle | Agent 1 code now uses unique expiring UUID half-open probe leases; expired/superseded callback cannot consume the current lease. Mount-generation snapshot rejects late outcomes after remount/deregister. Lock-protected stats snapshots/restoration and M47 tests cover concurrency/restart state. | Defaults and response details are Agent 1 implementation behavior pending API-owner review: failure threshold 5, cooldown 30s, probe lease 30s, retries 1, handler timeout 10s (deployment may override environment variables). Decide what frontend needs versus keeping implementation diagnostics private. | **Implemented/tested locally; no shared sign-off** |
+| Trace / audit | Agent 1 records task/event IDs, invocation outcome, claimed-tenant metadata and domain mount/probe events; Ops activity is available. M47 runner checks task trace plus persisted operational event. | `actor_id` is not a verified principal; no end-to-end W3C `traceparent` contract or tenant-filtered audit reader. Domain owner and Agent 4 must confirm correlation fields and redaction. | **Useful sandbox evidence; identity/trace contract incomplete** |
+| Broker delivery | Human-assisted coordination does not require RabbitMQ. Broker-confirmed delivery and autonomous background delivery remain distinct. | Revisit broker integration only when background coordination is required; no delivery claim is added by M47. | **Not an M47 blocker** |
+
+## Agent coordination / ownership status
+
+### Agent 2 — Threat Intelligence adapter / host contract
+
+PR #3's latest reviewed head `7136538f74ab08b33607774c507785fc0c59cd03` now contains `docs/handover/AGENT2_THREAT_INTELLIGENCE_HANDOVER.md`. That handover says the branch began as Agent 2 TI, then the user assigned Replacement Agent 3 full VI work in M51–M54; both areas coexist. It records the TI implementation baseline `178d84055918271ce660a21f4d77f95caa30410b`, an experimental standalone relationship API and `host_adapter.create_host_application`, but **neither is mounted in Agent 1's actual host**; the eight actual-host relationship tests are **0 executed / 8 skipped**. PR #3 remains open/draft and has no host/security/schema approval. PR #6 is a separate Agent 6 backup, not the primary Agent 2 source.
+
+The Agent 1 `threat_intel_adapter.py` currently targets legacy `apps/threat_intelligence/api.py` / `ThreatIntelligenceAPI` and its simulated dispatcher. The Agent 2 handover explicitly says that legacy dispatcher is not a real HTTP host and must not be exposed as the approved gateway. This is a concrete compatibility mismatch: do not mount the existing wrapper against the new relationship API or infer an approval. The handover identifies the needed callbacks (`resolve_principal`, `engine_for_principal`, durable `security_audit`, and `link_trace`), but their actual Agent 1 host implementation, actor-specific DB pools, real test harness, route prefix, error contract, and approved invocation payload are still missing.
+
+Action for the cross-agent handoff: the Lead/Agent 2 must select the exact TI source revision and approve the adapter and host contract, or explicitly defer TI. No cross-agent approval is present in the reviewed repository state. Until confirmed, TI integration remains blocked at manifest approval; M47 code remains Agent 1-owned. No other agent's branch or PR was modified.
+
+### Replacement Agent 3 — VI, conflict, quality, SBOM, actual host
+
+Current PR #3 description says Replacement Agent 3 owns the full VI development, including candidate conflict/quality/SBOM paths; it explicitly reports **0 actual Agent 1 host tests executed / 8 skipped** and no shared host/schema/role deployment. PR #1 remains a separate open original VI contribution; no merging, source preference, schema unification, or approval is inferred.
+
+Action for the cross-agent handoff: keep Agent 3's boundary explicit and provide the exact approved host entrypoint/revision, eight real-host test prerequisites/status, data/error/trace contract, and conflict/quality/SBOM read-only operations. No approval/reply is present in the reviewed repository state. Agent 1 will not take over VI internals, mount candidate-only routes, write a shared schema, or claim production/tenant verification. The M47 manifest must bind whichever exact owner-approved source is actually integrated.
+
+### Agent 4 — metrics / diagnostics / frontend readiness
+
+PR #2 at head `e745cc2b8ff995b040896212eab2995607c48963` provides candidate contract decoders, lifecycle/diagnostic types, readiness notes, and frontend tests. Its own code/docs label Agent 1 diagnostics and errors **candidate / not approved**, and the decoder is not evidence of a deployed host API. M47 adds a nullable diagnostics `build_commit` and three additive circuit probe-lease metric fields. The readiness panel calls only currently configured Ops/Coordination reads; it does not call Agent 1 lifecycle/diagnostics, Agent 2 TI, or Replacement Agent 3 VI routes. PR #2's current body still cites older PR heads/Agent 1 M45 (`5213c8...`, Agent 2 `5e0e6...`, Agent 3 `25108...`), so those references are stale; refresh against GitHub before any integration decision.
+
+Action for the cross-agent handoff: confirm unknown/additive-field behavior; update candidate metrics typing for M47 probe lease values; confirm lifecycle/error/null semantics, read-only behavior, and whether the frontend is ready to render these values. No approval/reply is present in the reviewed repository state. Keep the Agent 4 branch untouched; no approval is inferred.
+
+## No-schema / no-claim guardrails
+
+- AMD-003 remains pending and owner-reserved schema changes are untouched.
+- No synthetic tests, candidate SQL, PR head, codeload archive, or sandbox token proves production auth, actor pools, RLS, or tenant isolation.
+- Human-assisted workflow remains valid without RabbitMQ; do not claim broker-confirmed background delivery.
+- Any later acceptance record must preserve four distinct labels: sandbox/fixture, unmerged branch, exact merged application, and production (not inferred from application tests).

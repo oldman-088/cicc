@@ -178,3 +178,38 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   merge gate is false, no merged-app result exists, and major product/security/
   3D requirements remain incomplete. This is an evidence-based estimate, not a
   production-readiness assessment.
+
+## M47 exact-source recheck and present alignment (2026-11-06)
+
+- The source was read from the checked-out repository `README.md` (ULTIMATE
+  MASTER PROMPT v1.0), not inferred from this alignment note. The bytes hash to
+  `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1`; the
+  repository `main` remains `ca8f82c0500637e22851d7128cddf99081ef3c08` and the
+  original README is unmodified. This addendum does not edit the Master Prompt.
+- M47 carries out §1/§13/§14/§15's inspect–implement–test–record loop: expiring
+  exact probe leases, mount-generation callback rejection, SQL-DML-free
+  coordination reads, regression/preflight tests, a fail-closed exact-revision
+  runner, and a Lead handover.
+- §3/§10 and §17 security/data/quality requirements remain **incomplete**:
+  optional static Ops tokens are not verified user identity; no principal-bound
+  tenant data path, RLS, tested tenant isolation, or trusted actor attribution
+  exists; no versioned migration process is present in this checkout. A passing
+  synthetic/sandbox test cannot satisfy these DoD requirements.
+- §2/§4/§5 product integration remains **partial**. Agent 1 Ops/coordination is
+  implemented and locally tested; the checked-out reference dashboard is not
+  the whole product. Current TI/VI host contracts are unresolved; PR #3 reports
+  0/8 actual host tests. No merged-application or production evidence is claimed.
+- §3's preferred stack includes Alembic, workers/scheduled jobs, Redis and
+  PostgreSQL; the current Agent 1 host has SQLAlchemy `create_all`, on-demand
+  operations and SQLite-default configuration (PostgreSQL tests exist), without
+  an established migration ledger or distributed worker. These are recorded as
+  gaps, not represented as complete.
+- §12/§15 requires recovery state, task queue, log and blocker updates; this
+  handover was added at `docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md`
+  and the M47 state is recorded in the project logs. The Agent 1 branch and PR
+  #4 remain the only write target; README and other agents' branches are not
+  modified.
+- §17's production DoD is **not met**: exact merged-app gate remains BLOCKED,
+  auth/tenant isolation and integration evidence are missing. RabbitMQ is not
+  being misrepresented as required for the human-assisted workflow; autonomous
+  broker delivery remains optional and unverified.

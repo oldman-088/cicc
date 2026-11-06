@@ -141,7 +141,8 @@ def test_half_open_allows_only_one_concurrent_probe(client, monkeypatch):
     assert probe_state["half_open_probe"] is True
     opened_at = domains._CIRCUIT["probe"]["opened_at"]
     domains.record_outcome("probe", False, error="fixture sanitized failure",
-                           half_open_probe=probe_state["half_open_probe"])
+                           mount_id=probe_state["mount_id"],
+                           probe_lease_id=probe_state["probe_lease_id"])
     assert domains._CIRCUIT["probe"]["opened_at"] > opened_at
     assert domains._CIRCUIT["probe"].get("probe_inflight") is False
     assert domains._STATS["probe"]["circuit_opens"] == 1
@@ -160,7 +161,7 @@ def test_only_admitted_probe_success_closes_open_circuit(monkeypatch):
         "open": True, "opened_at": time.time() - 1, "probe_inflight": False,
     }
     domains.record_outcome("probe_success", True,
-                           half_open_probe=normal_call["half_open_probe"])
+                           mount_id=normal_call["mount_id"])
     assert domains._CIRCUIT["probe_success"]["open"] is True
     assert domains._STATS["probe_success"]["circuit_closes"] == 0
 
@@ -168,7 +169,8 @@ def test_only_admitted_probe_success_closes_open_circuit(monkeypatch):
     assert domains._begin_invoke("probe_success", probe_state=actual_probe)
     assert actual_probe["half_open_probe"] is True
     domains.record_outcome("probe_success", True,
-                           half_open_probe=actual_probe["half_open_probe"])
+                           mount_id=actual_probe["mount_id"],
+                           probe_lease_id=actual_probe["probe_lease_id"])
     assert domains._CIRCUIT["probe_success"]["open"] is False
     assert domains._STATS["probe_success"]["circuit_closes"] == 1
 
