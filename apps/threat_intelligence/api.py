@@ -151,7 +151,8 @@ class ThreatIntelligenceAPI:
 
     def __init__(self, tenant_id: Optional[str] = None, experimental_label: Optional[str] = EXPERIMENTAL_DEMO_DATA_ONLY):
         self.tenant_id = tenant_id
-        self.experimental_label = experimental_label
+        # Legacy dispatcher is demo-only, including when callers omit a label.
+        self.experimental_label = EXPERIMENTAL_DEMO_DATA_ONLY
         self.provenance = "threat_intelligence_api_v1"
         self.confidence = 1.0  # Internal API confidence
 
@@ -272,19 +273,19 @@ class ThreatIntelligenceAPI:
 
     def _handle_mitre_ingestion(self, request: ThreatIntelligenceRequest) -> Dict[str, Any]:
         """Handle MITRE Ingestion Pipeline requests (P1-01 integration)"""
-        return {"data": [{"pipeline_id": "MITRE-001", "status": "operational", "label": self.experimental_label}], "total_count": 1, "has_more": False}
+        return {"data": [{"pipeline_id": "MITRE-001", "status": "simulated", "label": self.experimental_label}], "total_count": 1, "has_more": False}
 
     def _handle_cisa_kev(self, request: ThreatIntelligenceRequest) -> Dict[str, Any]:
         """Handle CISA KEV Integration Connector requests (P1-02 integration)"""
-        return {"data": [{"connector_id": "KEV-001", "status": "operational", "label": self.experimental_label}], "total_count": 1, "has_more": False}
+        return {"data": [{"connector_id": "KEV-001", "status": "simulated", "label": self.experimental_label}], "total_count": 1, "has_more": False}
 
     def _handle_vendor_advisories(self, request: ThreatIntelligenceRequest) -> Dict[str, Any]:
         """Handle Vendor Security Advisories Integration requests (P1-03 integration)"""
-        return {"data": [{"framework_id": "VEND-001", "status": "operational", "label": self.experimental_label}], "total_count": 1, "has_more": False}
+        return {"data": [{"framework_id": "VEND-001", "status": "simulated", "label": self.experimental_label}], "total_count": 1, "has_more": False}
 
     def _handle_osint_sources(self, request: ThreatIntelligenceRequest) -> Dict[str, Any]:
         """Handle OSINT Intelligence Sources Integration requests (P1-04 integration)"""
-        return {"data": [{"source_id": "OSINT-001", "status": "operational", "label": self.experimental_label}], "total_count": 1, "has_more": False}
+        return {"data": [{"source_id": "OSINT-001", "status": "simulated", "label": self.experimental_label}], "total_count": 1, "has_more": False}
 
     def _handle_source_adapter(self, request: ThreatIntelligenceRequest) -> Dict[str, Any]:
         """Handle Source Adapter Foundation requests (P1-05 Advancement)"""
@@ -413,8 +414,21 @@ class SecurityError(Exception):
 
 # --- FASTAPI ROUTER & APP (P1-05 + P2-01 MOUNTING) ---
 
-router = APIRouter(prefix="/api/v1/threat-intelligence", tags=["Threat Intelligence"])
+from apps.threat_intelligence.relationship_api import router
 app = FastAPI(title="CICC Threat Intelligence API", version="1.0.0")
+
+# Avoid echoing untrusted input or credentials in validation responses. Host apps
+# mounting the router must install an equivalent handler.
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def internal_error_handler(request: Request, exc: Exception):
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(status_code=422, content={"detail": "Invalid request"})
 
 # Mount router to app
 app.include_router(router)

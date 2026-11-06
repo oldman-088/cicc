@@ -2,7 +2,7 @@
   "project_name": "CICC - Threat Intelligence Domain",
   "repository": "oldman-088/cicc",
   "branch": "arena/93315d2c-cicc",
-  "current_phase": "P2-01 prototype and verification; integration incomplete",
+  "current_phase": "P2-01 experimental relationship API and host integration preparation",
   "phase_0_status": "completed",
   "extended_authorization_status": "completed",
   "autonomous_engineering_status": "in_progress",
@@ -19,8 +19,8 @@
     "extended_layers": 3,
     "autonomous_extensions": 4,
     "total_files": 57,
-    "total_tests": 96,
-    "tests_passed": 96,
+    "total_tests": 107,
+    "tests_passed": 107,
     "warnings": 0,
     "pydantic_v2_compatible": true,
     "experimental_labeling": "EXPERIMENTAL_DEMO_DATA_ONLY",
@@ -31,10 +31,10 @@
     "mitre_ingestion_pipeline": "implemented",
     "cisa_kev_integration_connector": "implemented",
     "vendor_security_advisories_framework": "implemented",
-    "threat_intelligence_api": "prototype only; no HTTP routes registered",
-    "api_mounting_interface": "router included but empty; not operational",
-    "agent_1_coordination_contract": "simulated; not integrated",
-    "agent_4_frontend_contract": "response shape only; integration unverified"
+    "threat_intelligence_api": "experimental standalone P2-01 HTTP routes; host integration pending",
+    "api_mounting_interface": "router mounted in standalone app and synthetic test host, not Agent 1 host",
+    "agent_1_coordination_contract": "real gateway adapter is separate legacy-demo consumer, not verified against current branch",
+    "agent_4_frontend_contract": "frontend integration not approved"
   },
   "modules": [
     "threat_actors",
@@ -161,14 +161,14 @@
   "agent_status": "autonomous_engineering_active",
   "verification_update_2026_11_06": {
     "command": "venv/bin/python -m pytest -q --disable-warnings",
-    "passed": 96,
+    "passed": 107,
     "failed": 0,
-    "scope": "All currently collected repository tests; offline and in-memory only",
-    "correction": "Previous aggregated counts were not verified by this run. Prior mock HTTP tests did not call FastAPI and have been removed.",
-    "relationship_engine": "In-memory prototype; traversal corrected; not tenant isolated or persistent",
-    "fastapi": "Router currently has no registered routes; HTTP integration not implemented",
-    "gateway": "Simulated contract only; no actual Agent 1 gateway available in checkout",
-    "security": "Not production ready; no proven authentication, tenant isolation, or audit logging",
-    "live_sources": "Not verified; sandbox restricts outbound access"
+    "application_asgi_tests": 10,
+    "scope": "Offline unit tests and real ASGI application tests with injected test dependencies",
+    "host_integration": "Not performed; Agent 1 host not mounted",
+    "postgresql_tests": "Not performed",
+    "live_provider_tests": "Not performed",
+    "security": "Fail-closed principal and audit dependencies and tenant-keyed in-memory test store; production security unverified",
+    "contract": "THREAT_RELATIONSHIP_API_CONTRACT.md"
   }
 }

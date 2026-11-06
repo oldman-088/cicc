@@ -519,3 +519,11 @@ class TestThreatIntelligenceAPI:
 __all__ = [
     "TestThreatIntelligenceAPI"
 ]
+
+
+def test_legacy_dispatcher_cannot_drop_demo_label():
+    api = ThreatIntelligenceAPI(experimental_label=None)
+    response = api.invoke_endpoint('/api/v1/threat-intelligence/osint-sources', ThreatIntelligenceRequest())
+    assert response['experimental_label'] == EXPERIMENTAL_DEMO_DATA_ONLY
+    assert response['data'][0]['label'] == EXPERIMENTAL_DEMO_DATA_ONLY
+    assert response['data'][0]['status'] == 'simulated'

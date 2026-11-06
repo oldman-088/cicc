@@ -22,9 +22,9 @@ Version: 1.0
 Experimental Label: EXPERIMENTAL_DEMO_DATA_ONLY
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, Tuple
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -66,7 +66,7 @@ class RelationshipEvidence(BaseModel):
 
     evidence_id: UUID = Field(default_factory=uuid4, description="Unique evidence identifier")
     source: str = Field(..., description="Source attribution")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Collection time")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Collection time")
     description: str = Field(..., description="Evidence description")
     confidence: RelationshipConfidence = Field(..., description="Confidence level")
     provenance: str = Field(..., description="Provenance tracking")
@@ -105,8 +105,8 @@ class RelationshipRecord(BaseModel):
     conflicting_intelligence: Optional[List[Dict[str, Any]]] = Field(
         None, description="Preserved conflicting intelligence"
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation time")
-    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Update time")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation time")
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Update time")
     experimental_label: str = Field(
         default=EXPERIMENTAL_DEMO_DATA_ONLY,
         description="Experimental data labeling"
@@ -132,7 +132,7 @@ class RelationshipAnalysisEngine:
     def __init__(self):
         """Initialize the relationship analysis engine"""
         self.relationships: Dict[UUID, RelationshipRecord] = {}
-        self.entity_index: Dict[str, List[UUID]] = {}  # entity_id -> relationship_ids
+        self.entity_index: Dict[Tuple[str, str], List[UUID]] = {}  # (type, id) -> relationship_ids
         self.experimental_label = EXPERIMENTAL_DEMO_DATA_ONLY
 
     def create_relationship(
@@ -177,8 +177,8 @@ class RelationshipAnalysisEngine:
 
     def _index_relationship(self, record: RelationshipRecord) -> None:
         """Index relationship for entity-based traversal"""
-        source_key = f"{record.source_entity.entity_type}:{record.source_entity.entity_id}"
-        target_key = f"{record.target_entity.entity_type}:{record.target_entity.entity_id}"
+        source_key = (record.source_entity.entity_type, record.source_entity.entity_id)
+        target_key = (record.target_entity.entity_type, record.target_entity.entity_id)
 
         if source_key not in self.entity_index:
             self.entity_index[source_key] = []
@@ -191,7 +191,7 @@ class RelationshipAnalysisEngine:
 
     def get_relationships_for_entity(self, entity_id: str, entity_type: str) -> List[RelationshipRecord]:
         """Retrieve all relationships for a specific entity"""
-        key = f"{entity_type}:{entity_id}"
+        key = (entity_type, entity_id)
         relationship_ids = self.entity_index.get(key, [])
         return [self.relationships[rid] for rid in relationship_ids if rid in self.relationships]
 
