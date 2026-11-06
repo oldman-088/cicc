@@ -118,10 +118,18 @@ _PEP440 = re.compile(
 _PRE_ORDER = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "c": 2, "rc": 2, "pre": 2, "preview": 2}
 
 #: Maven's qualifier order, from ``ComparableVersion.StringItem.QUALIFIERS``.
-#: The index *is* the rank, and ``""`` (the release qualifier) sits between ``rc``
-#: and ``sp`` — which is what makes ``1-rc < 1 < 1-sp`` true.
+#: The index *is* the rank, and ``""`` (the release qualifier) sits between ``snapshot``
+#: and ``sp`` — which is what makes ``1-rc < 1-snapshot < 1 < 1-sp`` true.
+#:
+#: ``snapshot`` sits **after** ``rc``, not before ``alpha``. An earlier transcription
+#: here had it first, which ranked a snapshot below every other qualifier and made
+#: ``1-alpha > 1-snapshot`` where Maven says the opposite. The 573 upstream-vector
+#: assertions did not catch it because ``ComparableVersionTest`` never compares
+#: ``snapshot`` against ``alpha``/``beta``/``milestone``/``rc`` directly. The
+#: differential check against the real JVM did, on its first run — which is the entire
+#: argument for having one.
 _MAVEN_QUALIFIERS: tuple[str, ...] = (
-    "snapshot", "alpha", "beta", "milestone", "rc", "", "sp"
+    "alpha", "beta", "milestone", "rc", "snapshot", "", "sp"
 )
 #: Qualifier aliases, from ``StringItem.ALIASES``.
 _MAVEN_ALIASES = {"ga": "", "final": "", "cr": "rc"}

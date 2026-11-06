@@ -34,8 +34,15 @@ def _cmp(left: str, right: str) -> int | None:
 #: ``VERSIONS_QUALIFIER`` — strictly increasing, so every earlier element is less than
 #: every later one (``checkVersionsOrder`` compares all i < j, not just neighbours).
 VERSIONS_QUALIFIER: list[str] = [
-    "1-SNAPSHOT", "1-alpha2snapshot", "1-alpha2", "1-alpha-123", "1-beta-2",
-    "1-beta123", "1-m2", "1-m11", "1-rc", "1-cr2", "1-rc123", "1", "1-sp", "1-sp2",
+    # Verbatim from ComparableVersionTest at maven-3.9.9, in the source's own order.
+    # An earlier transcription here opened the list with "1-SNAPSHOT", which is not
+    # where upstream puts it: snapshot ranks *after* rc and immediately before the
+    # release. That transcription error matched a matching error in the comparator,
+    # so 573 assertions agreed with each other and both were wrong. Corrected against
+    # the upstream source; the JVM differential check is what found it.
+    "1-alpha2snapshot", "1-alpha2", "1-alpha-123", "1-beta-2",
+    "1-beta123", "1-m2", "1-m11", "1-rc", "1-cr2", "1-rc123", "1-SNAPSHOT",
+    "1", "1-sp", "1-sp2",
     "1-sp123", "1-abc", "1-def", "1-pom-1", "1-1-snapshot", "1-1", "1-2", "1-123",
 ]
 
@@ -90,8 +97,19 @@ VERSIONS_ORDER: list[tuple[str, str]] = [
     ("1.0-alpha-1", "1.0"),
     ("1.0-alpha-1", "1.0-alpha-2"),
     ("1.0-alpha-1", "1.0-beta-1"),
-    ("1.0-SNAPSHOT", "1.0-beta-1"),
+    # Upstream: checkVersionsOrder("1.0-beta-1", "1.0-SNAPSHOT"). Transcribed backwards
+    # the first time, which is how a wrong qualifier order survived its own oracle.
+    ("1.0-beta-1", "1.0-SNAPSHOT"),
     ("1.0-SNAPSHOT", "1.0"),
+    # Direct qualifier-vs-snapshot pairs. The upstream suite expresses these only
+    # through the VERSIONS_QUALIFIER chain, and that is precisely why a wrong snapshot
+    # rank survived here: a chain can be mis-transcribed self-consistently, whereas an
+    # explicit pair cannot.
+    ("1-alpha", "1-snapshot"),
+    ("1-beta", "1-snapshot"),
+    ("1-milestone", "1-snapshot"),
+    ("1-rc", "1-snapshot"),
+    ("1", "1-sp"),
     ("1.0-alpha-1-SNAPSHOT", "1.0-alpha-1"),
     ("1.0", "1.0-1"),
     ("1.0-1", "1.0-2"),
@@ -149,7 +167,10 @@ class TestMavenSpecificRules:
         assert _cmp("1-sp", "1-abc") == -1
 
     def test_known_qualifier_order(self):
-        chain = ["1-snapshot", "1-alpha", "1-beta", "1-milestone", "1-rc", "1", "1-sp"]
+        # Upstream ComparableVersionTest: QUALIFIERS is
+        # ["alpha","beta","milestone","rc","snapshot","","sp"], so snapshot is the last
+        # pre-release before the release.
+        chain = ["1-alpha", "1-beta", "1-milestone", "1-rc", "1-snapshot", "1", "1-sp"]
         for low, high in itertools.pairwise(chain):
             assert _cmp(low, high) == -1, f"{low} should be < {high}"
 
