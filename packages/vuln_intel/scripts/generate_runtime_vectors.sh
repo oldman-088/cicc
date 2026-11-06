@@ -286,10 +286,23 @@ if problems:
 print(f"self-check passed: {sum(len(v) for v in SELF_CHECK.values())} known upstream facts")
 
 def version(cmd):
+    """First line of a runtime's version banner, from stdout *or* stderr.
+
+    ``java -version`` writes to stderr, historically and by design, so reading only
+    stdout produced None for the JVM and the evidence file then failed its own
+    "name the runtime" integrity check. That check was right - a vector file that cannot
+    say which runtime produced it is not evidence - so the fix belongs here, not in the
+    assertion.
+    """
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, check=False).stdout.splitlines()[0].strip()
-    except (OSError, IndexError):
+        done = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    except OSError:
         return None
+    for stream in (done.stdout, done.stderr):
+        for line in (stream or "").splitlines():
+            if line.strip():
+                return line.strip()
+    return None
 
 payload = {
     "schema": "cicc.vuln_intel.runtime_vectors.v1",

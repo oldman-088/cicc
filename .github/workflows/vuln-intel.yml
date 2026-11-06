@@ -28,8 +28,8 @@ jobs:
       run:
         working-directory: packages/vuln_intel
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
@@ -109,8 +109,8 @@ jobs:
       run:
         working-directory: packages/vuln_intel
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -183,8 +183,8 @@ jobs:
     # them as two jobs is what makes a green board honest: this one means the known
     # facts hold; neither means every comparison passed.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install test tooling
@@ -262,13 +262,13 @@ jobs:
       run:
         working-directory: packages/vuln_intel
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       - name: Set up a JVM (for Apache ComparableVersion)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -355,7 +355,7 @@ jobs:
 
       - name: Publish the generated vectors as an artifact
         # So a reviewer can inspect the evidence without reproducing the run.
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: runtime-vectors
           path: packages/vuln_intel/tests/fixtures/runtime_vectors.json
