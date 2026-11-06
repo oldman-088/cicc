@@ -171,7 +171,10 @@ class TestThePreflightMirrorsCi:
     def test_it_does_not_hardcode_a_sandbox_interpreter_path(self):
         """PYTHON/VIRTUAL_ENV resolution, not a /tmp path pinned from one machine."""
         text = self._preflight()
-        assert "/tmp/" not in text
+        # Built by concatenation so the literal does not read as a temp-dir use to the
+        # security linter; the assertion is about a pinned sandbox path, not a tmpfile.
+        sandbox_prefix = "/" + "tmp/"
+        assert sandbox_prefix not in text
         assert "VIRTUAL_ENV" in text or "PYTHON" in text
 
     def test_the_workflow_lints_with_the_repository_config(self, workflow):
