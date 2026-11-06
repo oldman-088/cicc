@@ -222,6 +222,40 @@ jobs:
             echo "| ruby | $(ruby -v) |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Prove each runtime answers independently
+        # Isolates a plumbing fault from a comparator fault, without needing the log.
+        # If the JVM step produced no output, or Java's answers equal Ruby's, the
+        # evidence pipeline is broken and no comparison against it means anything.
+        # A minimal Java program asking ComparableVersion directly, and a minimal Ruby
+        # one asking Gem::Version, must disagree on a pair the two algorithms order
+        # differently: 1.0.0.a vs 1.a is greater in Maven and equal in RubyGems.
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          jar="$work/maven-artifact.jar"
+          curl -fsSL -o "$jar" \
+            "https://repo1.maven.org/maven2/org/apache/maven/maven-artifact/3.9.9/maven-artifact-3.9.9.jar"
+          cat > "$work/Probe.java" <<'JAVA'
+          import org.apache.maven.artifact.versioning.ComparableVersion;
+          public class Probe {
+              public static void main(String[] a) {
+                  System.out.println(Integer.signum(
+                      new ComparableVersion("1.0.0.a").compareTo(new ComparableVersion("1.a"))));
+              }
+          }
+          JAVA
+          # The heredoc body above is indented for readability inside the YAML block, so
+          # strip the leading indentation before javac sees it.
+          sed -i 's/^          //' "$work/Probe.java"
+          javac -cp "$jar" -d "$work" "$work/Probe.java"
+          java_maven="$(java -cp "$jar:$work" Probe)"
+          echo "java  ComparableVersion('1.0.0.a' vs '1.a') = $java_maven"
+          echo "ruby  Gem::Version('1.0.0.a' vs '1.a')        = $(ruby -e 'puts((Gem::Version.new("1.0.0.a") <=> Gem::Version.new("1.a")) <=> 0)')"
+          if [ "$java_maven" = "0" ]; then
+            echo "::error title=JVM probe::ComparableVersion says 1.0.0.a == 1.a, which is impossible. The JVM step is not producing real Apache answers."
+            exit 1
+          fi
+
       - name: Generate vectors from the real implementations
         run: ./scripts/generate_runtime_vectors.sh
 
