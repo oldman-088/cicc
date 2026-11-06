@@ -14,7 +14,19 @@
 #
 # Neither was hard to find once CI had failed. Both were avoidable by running the job.
 #
-# Usage:  ./scripts/ci_preflight.sh [--install]
+# A third lesson, added later, is the one that cost the most to learn:
+#
+#   * CI is not one environment. The `oracle` job installs pytest, hypothesis, pyyaml
+#     and three version-oracle packages — no ruff, no mypy. The runtime-oracle job had
+#     no pyyaml at all, and because several test modules are guarded by
+#     `pytest.importorskip("yaml")`, its suite was silently SMALLER rather than skipped.
+#     A test that compares a declared test count to the collected count therefore
+#     failed there while passing locally. This script runs the test job's steps only,
+#     so it could not see any of that; `--bare-python PATH` runs the suite in an
+#     interpreter with only the test dependencies, which is how that class of failure
+#     is caught before pushing.
+#
+# Usage:  ./scripts/ci_preflight.sh [--install] [--bare-python PATH]
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
@@ -27,7 +39,26 @@ if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
   PY="${VIRTUAL_ENV}/bin/python"
 fi
 
-if [[ "${1:-}" == "--install" ]]; then
+BARE_PY=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --bare-python)
+      BARE_PY="${2:-}"
+      [[ -n "$BARE_PY" ]] || { echo "--bare-python needs a path" >&2; exit 2; }
+      shift 2
+      ;;
+    --bare-python=*)
+      BARE_PY="${1#*=}"
+      shift
+      ;;
+    *)
+      [[ "$1" == "--install" ]] && DO_INSTALL=1
+      shift
+      ;;
+  esac
+done
+
+if [[ "${DO_INSTALL:-0}" == "1" ]]; then
   "$PY" -m pip install -q \
     "pytest>=8,<10" "hypothesis>=6,<7" "pyyaml>=6" \
     "openapi-spec-validator>=0.7" "pyflakes>=3,<4" "ruff>=0.6,<1" "mypy>=1.10,<2"
@@ -56,6 +87,15 @@ step "pipeline demo" "$PY" -m vuln_intel.demo
 # is still broken. Report it separately so a failure here is understood as stricter than
 # CI rather than identical to it.
 step "ruff (scripts/, stricter than CI)" "$PY" -m ruff check scripts
+
+# The oracle job's environment: test tooling only. Anything that depends on ruff, mypy
+# or a validator being importable must skip here, not fail — and the suite must still be
+# green, because that is what CI runs.
+if [[ -n "$BARE_PY" ]]; then
+  echo
+  echo "--- bare-interpreter suite (mirrors the oracle/runtime-oracle job env) ---"
+  step "pytest in $BARE_PY (test deps only)" "$BARE_PY" -m pytest -q
+fi
 
 printf '\n'
 if (( failures )); then

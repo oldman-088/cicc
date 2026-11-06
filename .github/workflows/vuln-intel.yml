@@ -94,6 +94,11 @@ jobs:
   # installs every oracle it can and then FAILS if any of them is still missing,
   # so a cross-check cannot disappear quietly.
   #
+  # Every job that runs `pytest` installs pyyaml, even though the package does not
+  # import it: `importorskip` turns an absent optional dependency into silently fewer
+  # tests rather than a skip, which is the exact failure mode that made this job red
+  # for a change that only touched the HTTP layer.
+  #
   # Licences of the reference tools:
   #   packaging        Apache-2.0 OR BSD-2-Clause   (pip, already a pytest dep)
   #   semantic_version BSD-3-Clause                 (pip)
@@ -115,9 +120,13 @@ jobs:
           python-version: "3.12"
 
       - name: Install reference tooling
+        # pyyaml matters more than it looks: modules guarded by
+        # `pytest.importorskip("yaml")` drop out of collection without it, so this
+        # environment runs a *smaller* suite without saying so. CI must not depend on
+        # which optional dev extra happens to be installed.
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "pytest>=8,<10" "hypothesis>=6,<7"
+          python -m pip install "pytest>=8,<10" "hypothesis>=6,<7" "pyyaml>=6"
           # Pinned: the documented cross-check results are tied to these versions.
           # A bump is a signal to re-run the audit, not an invisible behaviour change.
           python -m pip install "packaging==26.3" "semantic_version==2.10.0" "rpm-vercmp==0.1.2"
@@ -255,9 +264,14 @@ jobs:
           ruby-version: "3.2"
 
       - name: Install test tooling
+        # pyyaml is not optional here. Several modules are guarded by
+        # `pytest.importorskip("yaml")`, so without it their tests do not fail and do
+        # not skip — they vanish from collection, and the same commit collects fewer
+        # tests than `quality_gates.tests_passed` declares. That is how this job went
+        # red on a change that only touched the HTTP layer.
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "pytest>=8,<10"
+          python -m pip install "pytest>=8,<10" "pyyaml>=6"
 
       - name: Fail if a runtime is unavailable
         # Same rule as the oracle job: a missing reference implementation must fail the

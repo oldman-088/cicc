@@ -238,3 +238,64 @@ class TestIntegrationDocDoesNotLie:
         # The recipe has to be real: the documented call signature must match the code.
         assert "resolve_tenant" in doc
         assert callable(build_app)
+
+
+class TestEveryPytestJobCanLoadEveryTestModule:
+    """A job that runs `pytest` without pyyaml runs a *smaller* suite, silently.
+
+    Several modules begin with `pytest.importorskip("yaml")`. When pyyaml is absent
+    those modules do not fail and do not skip individually — they disappear from
+    collection, so a job reports N fewer tests with no indication that anything is
+    missing. That is how the runtime-oracle job went red on a commit that only touched
+    the HTTP layer, while the `test` job on the same commit was green: the two jobs were
+    running different suites and neither said so.
+
+    A skip is a visible gap. A vanished module is an invisible one.
+    """
+
+    @staticmethod
+    def _jobs_with_pytest(workflow: dict) -> list[str]:
+        found = []
+        for name, job in workflow["jobs"].items():
+            for step in job.get("steps", []):
+                if "pytest" in str(step.get("run", "")):
+                    found.append(name)
+                    break
+        return found
+
+    @staticmethod
+    def _installs(workflow: dict, job: str, needle: str) -> bool:
+        for step in workflow["jobs"][job].get("steps", []):
+            run = str(step.get("run", ""))
+            if "pip install" in run and needle in run:
+                return True
+        return False
+
+    def test_the_premise_holds_some_module_really_is_guarded_by_yaml(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        guarded = [
+            path.name
+            for path in (root / "tests").glob("test_*.py")
+            if 'importorskip("yaml"' in path.read_text()
+        ]
+        assert guarded, (
+            "no module is guarded by importorskip('yaml') any more, so this class is "
+            "asserting nothing and the pyyaml requirement below can be dropped"
+        )
+
+    def test_every_job_that_runs_pytest_installs_pyyaml(self, workflow):
+        jobs = self._jobs_with_pytest(workflow)
+        assert len(jobs) >= 4, f"expected every job to run pytest, found {jobs}"
+        missing = [job for job in jobs if not self._installs(workflow, job, "pyyaml")]
+        assert not missing, (
+            f"job(s) {missing} run pytest without pyyaml; their suite is silently "
+            "smaller because importorskip removes whole modules"
+        )
+
+    def test_the_test_job_still_installs_the_tooling_the_preflight_runs(self, workflow):
+        """ci_preflight.sh runs ruff/mypy/pyflakes; the test job must install them."""
+        for tool in ("ruff", "mypy", "pyflakes", "openapi-spec-validator"):
+            assert self._installs(workflow, "test", tool), (
+                f"the test job no longer installs {tool}, so scripts/ci_preflight.sh "
+                "is checking something CI does not"
+            )
