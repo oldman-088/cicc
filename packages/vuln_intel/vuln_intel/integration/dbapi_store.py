@@ -495,13 +495,29 @@ class DBAPIVulnerabilityStore:
                         UpsertOutcome.CREATED, entity_id=entity_id, provenance_id=event_type
                     )
 
-                if incoming < _parse_stamp(existing["collected_at"]):
+                existing_stamp = _parse_stamp(existing["collected_at"])
+                existing_details = self._decode(existing["details"])
+                if incoming < existing_stamp:
                     # Mirrors the host importer: an older observation never wins.
                     conn.rollback()
                     return UpsertResult(
                         UpsertOutcome.SKIPPED,
                         entity_id=str(existing["entity_id"]),
                         reason="older observation cannot overwrite a newer one",
+                    )
+                if incoming == existing_stamp and existing_details != merged:
+                    # Same instant, different content: the two sources contradict each
+                    # other and neither is newer. The host refuses this outright; doing
+                    # so silently as an "update" meant the last writer won and the
+                    # disagreement was never recorded. Refused, and named.
+                    conn.rollback()
+                    return UpsertResult(
+                        UpsertOutcome.CONFLICTED,
+                        entity_id=str(existing["entity_id"]),
+                        reason=(
+                            "conflicting observation for the same instant: refusing to "
+                            "let one source overwrite another at equal timestamps"
+                        ),
                     )
 
                 if dry_run:
@@ -512,7 +528,7 @@ class DBAPIVulnerabilityStore:
                         reason="dry run: nothing was written",
                     )
 
-                if self._decode(existing["details"]) != merged:
+                if existing_details != merged:
                     cur.execute(
                         "UPDATE vulnerability_record SET details = "
                         f"{self._param(None)}, origin = {p}, collected_at = {p}, "

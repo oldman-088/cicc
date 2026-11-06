@@ -226,6 +226,18 @@ class InMemoryVulnerabilityStore:
                 reason="older observation cannot overwrite a newer one",
             )
 
+        if incoming == existing.collected_at and existing.details != merged_details:
+            # Same rule as the DB-API store and the host importer: an equal-instant
+            # disagreement is a contradiction, not an update.
+            return UpsertResult(
+                UpsertOutcome.CONFLICTED,
+                entity_id=existing.entity_id,
+                reason=(
+                    "conflicting observation for the same instant: refusing to let one "
+                    "source overwrite another at equal timestamps"
+                ),
+            )
+
         changed = existing.details != merged_details
         if changed:
             existing.details = merged_details

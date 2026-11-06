@@ -349,12 +349,26 @@ class SQLiteVulnerabilityStore:
                         UpsertOutcome.CREATED, entity_id=entity_id, provenance_id=event_type
                     )
 
-                if incoming < _parse_iso(existing["collected_at"]):
+                existing_stamp = _parse_iso(existing["collected_at"])
+                if incoming < existing_stamp:
                     conn.execute("ROLLBACK")
                     return UpsertResult(
                         UpsertOutcome.SKIPPED,
                         entity_id=existing["entity_id"],
                         reason="older observation cannot overwrite a newer one",
+                    )
+                if incoming == existing_stamp and json.loads(existing["details"]) != merged_details:
+                    # Equal instant, different content: a contradiction. The host
+                    # importer refuses this; applying it as an "update" let the last
+                    # writer win and hid the disagreement.
+                    conn.execute("ROLLBACK")
+                    return UpsertResult(
+                        UpsertOutcome.CONFLICTED,
+                        entity_id=existing["entity_id"],
+                        reason=(
+                            "conflicting observation for the same instant: refusing to "
+                            "let one source overwrite another at equal timestamps"
+                        ),
                     )
 
                 if dry_run:

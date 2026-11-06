@@ -37,6 +37,16 @@ class UpsertOutcome(str):
     #: literal for a while, which meant a dry-run report counted it in none of its
     #: totals: created+updated+unchanged+failed summed to zero for N records.
     PREVIEWED = "previewed"
+    #: Two observations claim the same instant but disagree about the content.
+    #:
+    #: This used to be silently applied as an update. The host importer
+    #: (``apps/api/app/connectors/nvd_import.py``) refuses exactly this case with
+    #: "Older or conflicting observation cannot overwrite a newer observation", so the
+    #: two writers disagreed about what a same-timestamp conflict means — and the
+    #: disagreeing write won. It is now refused here too, but as its own outcome
+    #: rather than an exception: a batch importer must be able to carry on with the
+    #: other records and report this one, which a raised exception prevents.
+    CONFLICTED = "conflicted"
 
 
 @dataclass(frozen=True)
@@ -195,7 +205,15 @@ class ImportReport:
         return sum(1 for o in self.outcomes if o.outcome == UpsertOutcome.PREVIEWED)
 
     @property
+    def conflicted(self) -> int:
+        """Observations refused because they contradicted a same-instant record."""
+        return sum(1 for o in self.outcomes if o.outcome == UpsertOutcome.CONFLICTED)
+
+    @property
     def failed(self) -> int:
+        # A conflict is not a failure of the run; it is a disagreement that was
+        # detected and refused. Counting it as failed would make a source that
+        # contradicts itself look like an outage.
         return sum(1 for o in self.outcomes if o.outcome == UpsertOutcome.SKIPPED) + len(
             self.rejected
         )

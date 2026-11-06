@@ -278,12 +278,32 @@ class TestBothStoresAgree:
     """The in-memory store is the reference; the durable one must not drift from it."""
 
     def _both(self, tmp_path):
+        """All THREE stores, not two.
+
+        The DB-API adapter is the deployment path, and it was excluded from this
+        parity test — so when a rule changed in it, only the SQLite-versus-memory
+        pair was compared and the adapter silently disagreed. A parity test that
+        leaves out the store you actually deploy is testing the wrong pair.
+        """
         memory = InMemoryVulnerabilityStore(allow_fixture=True)
         disk = SQLiteVulnerabilityStore(path=tmp_path / "parity.db", allow_fixture=True)
-        return memory, disk
+
+        import sqlite3
+
+        from vuln_intel.integration.dbapi_store import SQLITE_SCHEMA, DBAPIVulnerabilityStore
+
+        path = str(tmp_path / "parity-dbapi.db")
+        conn = sqlite3.connect(path)
+        conn.executescript(SQLITE_SCHEMA)
+        conn.commit()
+        conn.close()
+        adapter = DBAPIVulnerabilityStore(
+            connect=lambda: sqlite3.connect(path), paramstyle="qmark", allow_fixture=True
+        )
+        return memory, disk, adapter
 
     def test_the_same_sequence_produces_the_same_outcomes(self, tmp_path):
-        memory, disk = self._both(tmp_path)
+        memory, disk, adapter = self._both(tmp_path)
         sequence = [
             dict(cve="CVE-2026-0501", severity="high", collected_at=NOW),
             dict(cve="CVE-2026-0501", severity="high", collected_at=LATER),
@@ -293,25 +313,33 @@ class TestBothStoresAgree:
         ]
         outcomes_memory = [_write(memory, **step).outcome for step in sequence]
         outcomes_disk = [_write(disk, **step).outcome for step in sequence]
-        assert outcomes_memory == outcomes_disk
+        outcomes_adapter = [_write(adapter, **step).outcome for step in sequence]
+        assert outcomes_memory == outcomes_disk == outcomes_adapter
         assert outcomes_disk == [
             UpsertOutcome.CREATED,
             UpsertOutcome.UNCHANGED,
-            UpsertOutcome.UPDATED,
-            UpsertOutcome.SKIPPED,
+            # Same instant, different severity: the stores must all call this a
+            # contradiction rather than an update, matching the host importer.
+            UpsertOutcome.CONFLICTED,
+            UpsertOutcome.SKIPPED,   # older than the stored stamp
             UpsertOutcome.CREATED,
         ]
 
     def test_the_same_rows_come_back_in_the_same_order(self, tmp_path):
-        memory, disk = self._both(tmp_path)
+        """All three, not just the two in-process ones the adapter sits behind."""
+        memory, disk, adapter = self._both(tmp_path)
         for cve, sev in [("CVE-2026-0601", "low"), ("CVE-2026-0602", "critical"),
                          ("CVE-2026-0603", "medium")]:
             _write(memory, cve=cve, severity=sev)
             _write(disk, cve=cve, severity=sev)
+            _write(adapter, cve=cve, severity=sev)
         for order in ("cve", "-cve", "severity", "-severity"):
             m, _ = memory.list(tenant_id="tenant-a", limit=10, order=order)
             d, _ = disk.list(tenant_id="tenant-a", limit=10, order=order)
-            assert [r["cve"] for r in m] == [r["cve"] for r in d], f"order={order}"
+            a, _ = adapter.list(tenant_id="tenant-a", limit=10, order=order)
+            assert [r["cve"] for r in m] == [r["cve"] for r in d] == [
+                r["cve"] for r in a
+            ], f"order={order}"
 
 
 class TestServedThroughTheRealApi:
