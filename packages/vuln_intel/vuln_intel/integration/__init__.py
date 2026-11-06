@@ -14,6 +14,13 @@ from .contracts import (
     UpsertResult,
     VulnerabilityStore,
 )
+from .host_adapter import (
+    HOST_PERMISSION_READ,
+    HostPrincipalResolver,
+    MountDescriptor,
+    mountable,
+    principal_resolver,
+)
 from .mapping import (
     ENRICHMENT_KEY,
     ENTITY_KIND,
@@ -31,12 +38,15 @@ from .store import InMemoryVulnerabilityStore, RecordingAudit, RefusingStore
 __all__ = [
     "ENRICHMENT_KEY",
     "ENTITY_KIND",
+    "HOST_PERMISSION_READ",
     "SCHEMA_VERSION",
     "AuditPort",
+    "HostPrincipalResolver",
     "ImportReport",
     "InMemoryVulnerabilityStore",
     "IngestionPolicy",
     "IngestionService",
+    "MountDescriptor",
     "RecordOutcome",
     "RecordingAudit",
     "RefusingStore",
@@ -47,6 +57,8 @@ __all__ = [
     "VulnerabilityStore",
     "assert_persistable",
     "build_app",
+    "mountable",
+    "principal_resolver",
     "to_enrichment",
     "to_entity_payload",
     "to_provenance",

@@ -299,3 +299,52 @@ class TestEveryPytestJobCanLoadEveryTestModule:
                 f"the test job no longer installs {tool}, so scripts/ci_preflight.sh "
                 "is checking something CI does not"
             )
+
+
+class TestIntegrationDocNamesTheRealComposition:
+    """INTEGRATION.md told hosts to hand-write a resolver. The demo one trusts a header.
+
+    `scripts/serve_demo.py` reads `x-demo-tenant` and believes it, which is fine for a
+    demo and catastrophic as a template. The document now points at `mountable()`,
+    which takes the tenant from the host's principal. These tests keep the document
+    pointing at the thing that is safe.
+    """
+
+    @staticmethod
+    def _doc() -> str:
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return (root / "docs" / "vulnerability-intelligence" / "INTEGRATION.md").read_text()
+
+    def test_the_mount_recipe_uses_the_adapter_that_reads_the_principal(self):
+        from vuln_intel.integration.host_adapter import mountable
+
+        doc = self._doc()
+        assert "mountable(" in doc, "the recipe must use the tested composition"
+        assert "read_principal" in doc and "authorize" in doc
+        assert callable(mountable)
+
+    def test_the_mount_section_does_not_tell_a_host_to_trust_a_header(self):
+        """Scoped to the mount section on purpose.
+
+        `x-demo-tenant` legitimately appears later as a `curl` line for the demo
+        harness. The rule is that it must not appear where a host copies a recipe.
+        """
+        doc = self._doc()
+        start = doc.index("## 2. Mounting")
+        end = doc.index("## 3.")
+        mount_section = doc[start:end]
+        assert "x-demo-tenant" not in mount_section
+        assert "resolve_tenant=lambda scope: tenant_from_verified_token" not in mount_section
+
+    def test_the_documented_health_state_is_the_implemented_one(self):
+        doc = self._doc()
+        assert "not_configured" in doc
+        # The real assertion: the descriptor actually reports it.
+        from vuln_intel.integration import InMemoryVulnerabilityStore, mountable
+
+        descriptor = mountable(
+            InMemoryVulnerabilityStore(allow_fixture=True),
+            read_principal=lambda scope: None,
+            authorize=lambda principal, permission: None,
+        )
+        assert descriptor.health()["state"] == "not_configured"
