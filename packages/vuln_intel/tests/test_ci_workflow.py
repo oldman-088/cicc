@@ -348,3 +348,73 @@ class TestIntegrationDocNamesTheRealComposition:
             authorize=lambda principal, permission: None,
         )
         assert descriptor.health()["state"] == "not_configured"
+
+
+class TestTheDeliverablesIndexIsTrue:
+    """§12 names fourteen documents. The index that maps them must not lie.
+
+    Thirteen exist under different filenames; one genuinely does not exist. A mapping
+    document is worthless if it can claim a file exists when it does not, so every
+    filename it names is checked here. If a file is renamed or deleted, this fails --
+    which is the point, because a reviewer following the index would otherwise be sent
+    to a path that no longer exists.
+    """
+
+    def _index(self):
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        path = root / "docs" / "vulnerability-intelligence" / "REQUIRED_DELIVERABLES.md"
+        return path, path.read_text(encoding="utf-8")
+
+    def test_the_index_exists(self):
+        path, _ = self._index()
+        assert path.is_file(), f"{path} is missing"
+
+    def test_every_file_it_names_exists(self):
+        import re
+
+        path, text = self._index()
+        directory = path.parent
+        root = directory.parents[1]
+        # Backticked names in the mapping table, e.g. `ARCHITECTURE.md`.
+        # Only the mapping table's own rows are checked. Files the text mentions as
+        # *absent* are supposed to be absent, and a naive "every filename exists"
+        # check would flag the honest admission -- which is the one thing this
+        # document must be able to say.
+        rows = re.findall(r"^\| \d+ \| [^|]+\| ([^|]+)\|", text, re.M)
+        assert rows, "the mapping table is gone"
+        mapped: set[str] = set()
+        for row in rows:
+            mapped.update(re.findall(r"`([A-Za-z0-9_]+\.(?:md|json|yaml|py))`", row))
+        admit_missing = {"AGENT_EXECUTION_RULES.md"}
+        missing = [
+            name
+            for name in sorted(mapped - admit_missing)
+            if not ((directory / name).is_file() or (root / name).is_file())
+        ]
+        assert missing == [], f"the index maps to files that do not exist: {missing}"
+
+    def test_it_admits_the_one_document_that_does_not_exist(self):
+        import pathlib
+
+        _, text = self._index()
+        assert "AGENT_EXECUTION_RULES.md" in text
+        assert "absent" in text.lower(), (
+            "the index must say which document is missing, not only which exist"
+        )
+        path = pathlib.Path(__file__).resolve().parents[3]
+        versioned = path / "docs" / "vulnerability-intelligence" / "AGENT_EXECUTION_RULES.md"
+        # If somebody writes it later, remove the "absent" row rather than this test.
+        assert not versioned.is_file() or "absent" not in text.lower()
+
+    def test_the_master_prompt_path_it_cites_is_the_real_one(self):
+        """The report says the prompt is README.md at the root; verify that claim."""
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        _, text = self._index()
+        assert "README.md" in text
+        prompt = root / "README.md"
+        assert prompt.is_file(), "the Master Prompt is not at the repository root"
+        assert "ULTIMATE MASTER PROMPT" in prompt.read_text(encoding="utf-8")
