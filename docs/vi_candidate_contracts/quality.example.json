@@ -1,0 +1,88 @@
+{
+  "evidence": {
+    "as_of": "2026-01-02T00:00:00Z",
+    "assessments": [],
+    "component_quality": [
+      {
+        "component": {
+          "bom_ref": "fixture-a",
+          "licenses": [],
+          "name": "EXPERIMENTAL_DEMO_DATA_ONLY component",
+          "purl": null,
+          "version": null
+        },
+        "identity_incomplete": true,
+        "license_ages": [],
+        "license_difference": false,
+        "license_missing_or_unknown": true
+      }
+    ],
+    "derived_ages": {
+      "inventory_age_seconds": 0.0,
+      "links": [],
+      "unresolved_observations": []
+    },
+    "explanation": "Exact caller-declared IDs and statements only; unknown is not absent or safe. Inventory completeness is declared, not verified; license differences are not adjudicated; collection age is not event freshness; distinct sources do not establish independence or truth.",
+    "inventory": {
+      "collected_at": "2026-01-02T00:00:00Z",
+      "component_completeness": "unknown",
+      "components": [
+        {
+          "bom_ref": "fixture-a",
+          "licenses": [],
+          "name": "EXPERIMENTAL_DEMO_DATA_ONLY component",
+          "purl": null,
+          "version": null
+        }
+      ],
+      "dependencies": [],
+      "dependency_completeness": "unknown",
+      "document_id": "EXPERIMENTAL_DEMO_DATA_ONLY sbom",
+      "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+      "provenance": "EXPERIMENTAL_DEMO_DATA_ONLY fixture#sha256:3dbb93daef95308ba393fb1cd95c6b43316b4fe6485bd497af63f411e6941df6",
+      "vulnerability_links": []
+    },
+    "inventory_scope_warning": true,
+    "max_observation_age_seconds": 86400.0,
+    "unresolved_observation_ids": [],
+    "unresolved_observations": []
+  },
+  "findings": [
+    {
+      "classification": "missing_evidence",
+      "code": "license_evidence_not_supplied",
+      "evidence_ids": [],
+      "subject": {
+        "bom_ref": "fixture-a",
+        "document_id": "EXPERIMENTAL_DEMO_DATA_ONLY sbom"
+      }
+    },
+    {
+      "classification": "unknown",
+      "code": "component_identity_incomplete",
+      "evidence_ids": [],
+      "subject": {
+        "bom_ref": "fixture-a",
+        "document_id": "EXPERIMENTAL_DEMO_DATA_ONLY sbom"
+      }
+    },
+    {
+      "classification": "unknown",
+      "code": "inventory_component_completeness",
+      "evidence_ids": [],
+      "subject": {
+        "document_id": "EXPERIMENTAL_DEMO_DATA_ONLY sbom"
+      }
+    },
+    {
+      "classification": "unknown",
+      "code": "inventory_dependency_completeness",
+      "evidence_ids": [],
+      "subject": {
+        "document_id": "EXPERIMENTAL_DEMO_DATA_ONLY sbom"
+      }
+    }
+  ],
+  "purpose": "evidence_quality_only",
+  "schema_version": "cicc.vulnerability-quality/1"
+}

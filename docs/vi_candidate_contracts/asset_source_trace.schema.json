@@ -1,0 +1,600 @@
+{
+  "$defs": {
+    "AssetBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "document_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Document Id",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset_id",
+        "document_id",
+        "provenance",
+        "collected_at",
+        "origin"
+      ],
+      "title": "AssetBinding",
+      "type": "object"
+    },
+    "Component": {
+      "additionalProperties": false,
+      "properties": {
+        "bom_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Bom Ref",
+          "type": "string"
+        },
+        "licenses": {
+          "items": {
+            "$ref": "#/$defs/LicenseEvidence"
+          },
+          "maxItems": 100,
+          "title": "Licenses",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "purl": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Purl"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        }
+      },
+      "required": [
+        "bom_ref",
+        "name",
+        "version",
+        "purl"
+      ],
+      "title": "Component",
+      "type": "object"
+    },
+    "LicenseEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "expression": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expression"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "expression",
+        "collected_at",
+        "provenance",
+        "origin"
+      ],
+      "title": "LicenseEvidence",
+      "type": "object"
+    },
+    "SourceEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "cve_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Cve Ids",
+          "type": "array"
+        },
+        "cvss_observations": {
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "maxItems": 50,
+          "title": "Cvss Observations",
+          "type": "array"
+        },
+        "epss_score": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Epss Score"
+        },
+        "epss_score_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Epss Score Date"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "other_identifiers": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Other Identifiers",
+          "type": "array"
+        },
+        "provenance": {
+          "maxLength": 900,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "NVD",
+            "OSV",
+            "GHSA",
+            "EPSS"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_modified_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Modified At"
+        },
+        "source_record_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Source Record Id",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "source_record_id",
+        "cve_ids",
+        "other_identifiers",
+        "source_modified_at",
+        "collected_at",
+        "provenance",
+        "source_sha256",
+        "origin",
+        "cvss_observations",
+        "epss_score",
+        "epss_score_date"
+      ],
+      "title": "SourceEvidence",
+      "type": "object"
+    },
+    "TraceAgeCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "age_status": {
+          "enum": [
+            "within_window",
+            "outside_window",
+            "future_collection_time"
+          ],
+          "title": "Age Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "age_seconds",
+        "age_status"
+      ],
+      "title": "TraceAgeCandidate",
+      "type": "object"
+    },
+    "TraceLinkCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "$ref": "#/$defs/Component"
+        },
+        "declared_link": {
+          "$ref": "#/$defs/VulnerabilityLink"
+        },
+        "link_age_seconds": {
+          "title": "Link Age Seconds",
+          "type": "number"
+        },
+        "link_age_status": {
+          "enum": [
+            "within_window",
+            "outside_window",
+            "future_collection_time"
+          ],
+          "title": "Link Age Status",
+          "type": "string"
+        },
+        "source_observation_state": {
+          "enum": [
+            "observed",
+            "unknown"
+          ],
+          "title": "Source Observation State",
+          "type": "string"
+        },
+        "source_observations": {
+          "items": {
+            "$ref": "#/$defs/TraceObservationCandidate"
+          },
+          "title": "Source Observations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "declared_link",
+        "link_age_seconds",
+        "link_age_status",
+        "component",
+        "source_observations",
+        "source_observation_state"
+      ],
+      "title": "TraceLinkCandidate",
+      "type": "object"
+    },
+    "TraceObservationCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_consistency": {
+          "enum": [
+            "consistent_with_supplied_bytes",
+            "not_checked"
+          ],
+          "title": "Byte Consistency",
+          "type": "string"
+        },
+        "collection_age_seconds": {
+          "title": "Collection Age Seconds",
+          "type": "number"
+        },
+        "collection_age_status": {
+          "enum": [
+            "future",
+            "stale",
+            "within_window"
+          ],
+          "title": "Collection Age Status",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/SourceEvidence"
+        },
+        "score_date_age_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Score Date Age Days"
+        },
+        "score_date_status": {
+          "enum": [
+            "unknown",
+            "future",
+            "supplied"
+          ],
+          "title": "Score Date Status",
+          "type": "string"
+        },
+        "source_modified_status": {
+          "enum": [
+            "unknown",
+            "future",
+            "supplied"
+          ],
+          "title": "Source Modified Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "collection_age_seconds",
+        "collection_age_status",
+        "source_modified_status",
+        "score_date_age_days",
+        "score_date_status",
+        "byte_consistency"
+      ],
+      "title": "TraceObservationCandidate",
+      "type": "object"
+    },
+    "TraceResultCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "applicability": {
+          "const": "unknown",
+          "title": "Applicability",
+          "type": "string"
+        },
+        "binding": {
+          "$ref": "#/$defs/AssetBinding"
+        },
+        "binding_age": {
+          "$ref": "#/$defs/TraceAgeCandidate"
+        },
+        "dependency_completeness": {
+          "enum": [
+            "declared_complete",
+            "declared_incomplete",
+            "unknown"
+          ],
+          "title": "Dependency Completeness",
+          "type": "string"
+        },
+        "exposure": {
+          "const": "unknown",
+          "title": "Exposure",
+          "type": "string"
+        },
+        "inventory_age": {
+          "$ref": "#/$defs/TraceAgeCandidate"
+        },
+        "inventory_collected_at": {
+          "title": "Inventory Collected At",
+          "type": "string"
+        },
+        "inventory_completeness": {
+          "enum": [
+            "declared_complete",
+            "declared_incomplete",
+            "unknown"
+          ],
+          "title": "Inventory Completeness",
+          "type": "string"
+        },
+        "inventory_origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Inventory Origin",
+          "type": "string"
+        },
+        "inventory_provenance": {
+          "title": "Inventory Provenance",
+          "type": "string"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/TraceLinkCandidate"
+          },
+          "title": "Links",
+          "type": "array"
+        }
+      },
+      "required": [
+        "binding",
+        "binding_age",
+        "inventory_provenance",
+        "inventory_origin",
+        "inventory_collected_at",
+        "inventory_age",
+        "inventory_completeness",
+        "dependency_completeness",
+        "links",
+        "applicability",
+        "exposure"
+      ],
+      "title": "TraceResultCandidate",
+      "type": "object"
+    },
+    "VulnerabilityLink": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "enum": [
+            "source_declared",
+            "analyst_declared"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "bom_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Bom Ref",
+          "type": "string"
+        },
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "cve_id": {
+          "maxLength": 64,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "link_id": {
+          "format": "uuid",
+          "title": "Link Id",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "link_id",
+        "bom_ref",
+        "cve_id",
+        "basis",
+        "provenance",
+        "collected_at",
+        "origin"
+      ],
+      "title": "VulnerabilityLink",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "as_of": {
+      "title": "As Of",
+      "type": "string"
+    },
+    "interpretation": {
+      "title": "Interpretation",
+      "type": "string"
+    },
+    "max_collection_age_seconds": {
+      "title": "Max Collection Age Seconds",
+      "type": "number"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/TraceResultCandidate"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "cicc.vi.asset-source-trace/1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "as_of",
+    "max_collection_age_seconds",
+    "results",
+    "interpretation"
+  ],
+  "title": "AssetSourceTraceCandidate",
+  "type": "object"
+}

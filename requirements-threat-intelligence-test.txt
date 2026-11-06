@@ -1,0 +1,3 @@
+-r requirements-threat-intelligence.txt
+pytest>=8,<10
+pgserver==0.1.4

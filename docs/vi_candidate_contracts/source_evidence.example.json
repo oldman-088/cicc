@@ -1,0 +1,71 @@
+{
+  "as_of": "2026-01-05T00:00:00+00:00",
+  "duplicate_content": [],
+  "interpretation": "Evidence comparison only; no source winner, applicability, exposure, confidence or priority.",
+  "max_collection_age_seconds": 86400.0,
+  "observations": [
+    {
+      "collection_age_seconds": 172800.0,
+      "collection_age_status": "stale",
+      "evidence": {
+        "collected_at": "2026-01-03T00:00:00Z",
+        "cve_ids": [
+          "CVE-2099-0001"
+        ],
+        "cvss_observations": [],
+        "epss_score": "0.1",
+        "epss_score_date": "2026-01-02",
+        "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+        "other_identifiers": [],
+        "provenance": "EXPERIMENTAL_DEMO_DATA_ONLY synthetic provider record",
+        "source": "EPSS",
+        "source_modified_at": null,
+        "source_record_id": "CVE-2099-0001",
+        "source_sha256": "8d68df7de83d0b62c2e14d425ce33ce62643f913bfbdc97b494f3f4533b9ab19"
+      },
+      "score_date_age_days": 3,
+      "score_date_status": "supplied",
+      "source_modified_status": "unknown"
+    },
+    {
+      "collection_age_seconds": 172800.0,
+      "collection_age_status": "stale",
+      "evidence": {
+        "collected_at": "2026-01-03T00:00:00Z",
+        "cve_ids": [
+          "CVE-2099-0001"
+        ],
+        "cvss_observations": [],
+        "epss_score": "0.2",
+        "epss_score_date": "2026-01-02",
+        "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+        "other_identifiers": [],
+        "provenance": "EXPERIMENTAL_DEMO_DATA_ONLY synthetic provider record",
+        "source": "EPSS",
+        "source_modified_at": null,
+        "source_record_id": "CVE-2099-0001",
+        "source_sha256": "94617ae99f590a966cf93b13cfc6e70b54869649b2d78c69920b2fc1d4114e22"
+      },
+      "score_date_age_days": 3,
+      "score_date_status": "supplied",
+      "source_modified_status": "unknown"
+    }
+  ],
+  "same_revision_conflicts": [
+    {
+      "differing_fields": {
+        "score": [
+          "0.1",
+          "0.2"
+        ]
+      },
+      "issuer": "provider-declared",
+      "metric": "epss",
+      "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+      "revision": "2026-01-02",
+      "source": "EPSS",
+      "source_record_id": "CVE-2099-0001"
+    }
+  ],
+  "schema_version": "cicc.vi.source-evidence-batch/1"
+}

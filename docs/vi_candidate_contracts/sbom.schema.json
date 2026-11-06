@@ -1,0 +1,70 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "enum": [
+        "SPDX",
+        "CycloneDX"
+      ],
+      "title": "Format",
+      "type": "string"
+    },
+    "ignored_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Ignored Fields",
+      "type": "array"
+    },
+    "inventory": {
+      "additionalProperties": true,
+      "title": "Inventory",
+      "type": "object"
+    },
+    "license_statements": {
+      "items": {
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "type": "array"
+      },
+      "title": "License Statements",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "cicc.vi.sbom-summary/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Source Sha256",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "format",
+    "version",
+    "source_sha256",
+    "inventory",
+    "ignored_fields",
+    "license_statements"
+  ],
+  "title": "SbomCandidate",
+  "type": "object"
+}

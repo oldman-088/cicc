@@ -1,0 +1,280 @@
+{
+  "$defs": {
+    "Component": {
+      "additionalProperties": false,
+      "properties": {
+        "bom_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Bom Ref",
+          "type": "string"
+        },
+        "licenses": {
+          "items": {
+            "$ref": "#/$defs/LicenseEvidence"
+          },
+          "maxItems": 100,
+          "title": "Licenses",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "purl": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Purl"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        }
+      },
+      "required": [
+        "bom_ref",
+        "name",
+        "version",
+        "purl"
+      ],
+      "title": "Component",
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": false,
+      "properties": {
+        "from_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "From Ref",
+          "type": "string"
+        },
+        "to_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "To Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_ref",
+        "to_ref"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
+    "LicenseEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "expression": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expression"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "expression",
+        "collected_at",
+        "provenance",
+        "origin"
+      ],
+      "title": "LicenseEvidence",
+      "type": "object"
+    },
+    "VulnerabilityLink": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "enum": [
+            "source_declared",
+            "analyst_declared"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "bom_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Bom Ref",
+          "type": "string"
+        },
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "cve_id": {
+          "maxLength": 64,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "link_id": {
+          "format": "uuid",
+          "title": "Link Id",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "link_id",
+        "bom_ref",
+        "cve_id",
+        "basis",
+        "provenance",
+        "collected_at",
+        "origin"
+      ],
+      "title": "VulnerabilityLink",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "collected_at": {
+      "format": "date-time",
+      "title": "Collected At",
+      "type": "string"
+    },
+    "component_completeness": {
+      "enum": [
+        "declared_complete",
+        "declared_incomplete",
+        "unknown"
+      ],
+      "title": "Component Completeness",
+      "type": "string"
+    },
+    "components": {
+      "items": {
+        "$ref": "#/$defs/Component"
+      },
+      "maxItems": 5000,
+      "title": "Components",
+      "type": "array"
+    },
+    "dependencies": {
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "maxItems": 10000,
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "dependency_completeness": {
+      "enum": [
+        "declared_complete",
+        "declared_incomplete",
+        "unknown"
+      ],
+      "title": "Dependency Completeness",
+      "type": "string"
+    },
+    "document_id": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Document Id",
+      "type": "string"
+    },
+    "origin": {
+      "enum": [
+        "EXPERIMENTAL_DEMO_DATA_ONLY",
+        "CALLER_SUPPLIED_UNVERIFIED"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "provenance": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Provenance",
+      "type": "string"
+    },
+    "vulnerability_links": {
+      "items": {
+        "$ref": "#/$defs/VulnerabilityLink"
+      },
+      "maxItems": 10000,
+      "title": "Vulnerability Links",
+      "type": "array"
+    }
+  },
+  "required": [
+    "document_id",
+    "component_completeness",
+    "dependency_completeness",
+    "provenance",
+    "collected_at",
+    "origin",
+    "components",
+    "dependencies",
+    "vulnerability_links"
+  ],
+  "title": "Inventory",
+  "type": "object"
+}

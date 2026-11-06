@@ -1,0 +1,32 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "note": {
+      "title": "Note",
+      "type": "string"
+    },
+    "persistent_history_available": {
+      "const": false,
+      "title": "Persistent History Available",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "cicc.vi.resolution-availability/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "const": "not_implemented",
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "status",
+    "persistent_history_available",
+    "note"
+  ],
+  "title": "ResolutionAvailabilityCandidate",
+  "type": "object"
+}

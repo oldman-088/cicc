@@ -1,0 +1,81 @@
+{
+  "as_of": "2026-01-05T00:00:00+00:00",
+  "interpretation": "Explicit asset/inventory/component/CVE declarations and same-CVE source claims only; no publisher authentication, source independence, applicability, exposure or remediation inference.",
+  "max_collection_age_seconds": 86400.0,
+  "results": [
+    {
+      "applicability": "unknown",
+      "binding": {
+        "asset_id": "EXPERIMENTAL_DEMO_DATA_ONLY asset",
+        "collected_at": "2026-01-02T00:00:00Z",
+        "document_id": "EXPERIMENTAL_DEMO_DATA_ONLY sbom",
+        "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+        "provenance": "EXPERIMENTAL_DEMO_DATA_ONLY binding"
+      },
+      "binding_age": {
+        "age_seconds": 259200.0,
+        "age_status": "outside_window"
+      },
+      "dependency_completeness": "unknown",
+      "exposure": "unknown",
+      "inventory_age": {
+        "age_seconds": 172800.0,
+        "age_status": "outside_window"
+      },
+      "inventory_collected_at": "2026-01-03T00:00:00+00:00",
+      "inventory_completeness": "unknown",
+      "inventory_origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+      "inventory_provenance": "EXPERIMENTAL_DEMO_DATA_ONLY sbom source#sha256:aa6b4cc6a4f5c19902a9650ad3ae75baf8b17a24f4b32b7e2f3db04f9c1c5707",
+      "links": [
+        {
+          "component": {
+            "bom_ref": "fixture-component",
+            "licenses": [],
+            "name": "EXPERIMENTAL_DEMO_DATA_ONLY package",
+            "purl": null,
+            "version": "1"
+          },
+          "declared_link": {
+            "basis": "analyst_declared",
+            "bom_ref": "fixture-component",
+            "collected_at": "2026-01-03T00:00:00Z",
+            "cve_id": "CVE-2099-1234",
+            "link_id": "00000000-0000-0000-0000-000000000001",
+            "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "provenance": "EXPERIMENTAL_DEMO_DATA_ONLY analyst claim"
+          },
+          "link_age_seconds": 172800.0,
+          "link_age_status": "outside_window",
+          "source_observation_state": "observed",
+          "source_observations": [
+            {
+              "byte_consistency": "consistent_with_supplied_bytes",
+              "collection_age_seconds": 172800.0,
+              "collection_age_status": "stale",
+              "evidence": {
+                "collected_at": "2026-01-03T00:00:00Z",
+                "cve_ids": [
+                  "CVE-2099-1234"
+                ],
+                "cvss_observations": [],
+                "epss_score": null,
+                "epss_score_date": null,
+                "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+                "other_identifiers": [],
+                "provenance": "fixture:OSV",
+                "source": "OSV",
+                "source_modified_at": null,
+                "source_record_id": "OSV-EXPERIMENTAL_DEMO_DATA_ONLY",
+                "source_sha256": "00b128799f159ea49125e29393b112223cd0b18124c4388a115586b828b412c2"
+              },
+              "score_date_age_days": null,
+              "score_date_status": "unknown",
+              "source_modified_status": "unknown"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "schema_version": "cicc.vi.asset-source-trace/1"
+}

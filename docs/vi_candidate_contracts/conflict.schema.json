@@ -1,0 +1,112 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "added_cves": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Added Cves",
+      "type": "array"
+    },
+    "candidate_blob_sha": {
+      "pattern": "^[a-f0-9]{40}$",
+      "title": "Candidate Blob Sha",
+      "type": "string"
+    },
+    "candidate_collected_at": {
+      "title": "Candidate Collected At",
+      "type": "string"
+    },
+    "candidate_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Candidate Sha256",
+      "type": "string"
+    },
+    "changed_cves": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Changed Cves",
+      "type": "array"
+    },
+    "conflict_id": {
+      "exclusiveMinimum": 0,
+      "title": "Conflict Id",
+      "type": "integer"
+    },
+    "metadata_fields_changed": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Metadata Fields Changed",
+      "type": "array"
+    },
+    "observed_at": {
+      "title": "Observed At",
+      "type": "string"
+    },
+    "origin": {
+      "enum": [
+        "EXPERIMENTAL_DEMO_DATA_ONLY",
+        "FETCHED_FROM_GITHUB_CISA_REPO"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "previous_blob_sha": {
+      "pattern": "^[a-f0-9]{40}$",
+      "title": "Previous Blob Sha",
+      "type": "string"
+    },
+    "previous_collected_at": {
+      "title": "Previous Collected At",
+      "type": "string"
+    },
+    "previous_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Previous Sha256",
+      "type": "string"
+    },
+    "previous_snapshot_id": {
+      "exclusiveMinimum": 0,
+      "title": "Previous Snapshot Id",
+      "type": "integer"
+    },
+    "release_at": {
+      "title": "Release At",
+      "type": "string"
+    },
+    "removed_cves": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Removed Cves",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "cicc.kev-conflict-summary/1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "conflict_id",
+    "previous_snapshot_id",
+    "origin",
+    "observed_at",
+    "release_at",
+    "previous_collected_at",
+    "candidate_collected_at",
+    "previous_sha256",
+    "candidate_sha256",
+    "previous_blob_sha",
+    "candidate_blob_sha",
+    "metadata_fields_changed",
+    "added_cves",
+    "removed_cves",
+    "changed_cves"
+  ],
+  "title": "ConflictCandidate",
+  "type": "object"
+}

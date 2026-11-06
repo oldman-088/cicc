@@ -1,0 +1,42 @@
+name: VI candidate PostgreSQL
+on:
+  push:
+    paths:
+      - 'apps/threat_intelligence/**'
+      - 'scripts/verify_vi_pg_junit.py'
+      - '.github/workflows/vi-candidate-postgres.yml'
+  pull_request:
+    paths:
+      - 'apps/threat_intelligence/**'
+      - 'scripts/verify_vi_pg_junit.py'
+      - '.github/workflows/vi-candidate-postgres.yml'
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install isolated PostgreSQL test dependencies
+        run: python -m pip install 'pytest>=8,<10' 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'sqlalchemy>=2,<3' 'psycopg[binary]>=3.1,<4' 'pgserver>=0.1,<1'
+      - name: Execute engine-specific tests (no live or actual-host tests)
+        env:
+          CICC_TEST_PG_EMBEDDED: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q -rs \
+            apps/threat_intelligence/tests/test_relationship_postgres.py \
+            apps/threat_intelligence/tests/test_relationship_rls.py \
+            apps/threat_intelligence/tests/test_role_bound_rls.py \
+            apps/threat_intelligence/tests/test_trusted_write.py \
+            apps/threat_intelligence/tests/test_host_adapter.py \
+            apps/threat_intelligence/tests/test_cisa_kev_persistence.py \
+            apps/threat_intelligence/tests/test_vulnerability_quality_pg.py \
+            apps/threat_intelligence/tests/test_kev_resolution_draft_pg.py \
+            apps/threat_intelligence/tests/test_resolution_atomicity_model_pg.py \
+            apps/threat_intelligence/tests/test_vi_read_only_adapter_pg.py \
+            -k 'not test_live_collection_persistence' --junitxml=/tmp/cicc-vi-pg.xml
+          python scripts/verify_vi_pg_junit.py /tmp/cicc-vi-pg.xml

@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "QualityFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "classification": {
+          "enum": [
+            "unknown",
+            "missing_evidence",
+            "stale_evidence",
+            "conflict"
+          ],
+          "title": "Classification",
+          "type": "string"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "subject": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Subject",
+          "type": "object"
+        }
+      },
+      "required": [
+        "classification",
+        "code",
+        "subject",
+        "evidence_ids"
+      ],
+      "title": "QualityFinding",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "evidence": {
+      "additionalProperties": true,
+      "title": "Evidence",
+      "type": "object"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/QualityFinding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "purpose": {
+      "const": "evidence_quality_only",
+      "title": "Purpose",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "cicc.vulnerability-quality/1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "purpose",
+    "findings",
+    "evidence"
+  ],
+  "title": "QualityCandidate",
+  "type": "object"
+}

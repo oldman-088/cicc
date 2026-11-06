@@ -1,0 +1,716 @@
+{
+  "$defs": {
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 16384,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "Component": {
+      "additionalProperties": false,
+      "properties": {
+        "bom_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Bom Ref",
+          "type": "string"
+        },
+        "licenses": {
+          "items": {
+            "$ref": "#/$defs/LicenseEvidence"
+          },
+          "maxItems": 100,
+          "title": "Licenses",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "purl": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Purl"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        }
+      },
+      "required": [
+        "bom_ref",
+        "name",
+        "version",
+        "purl"
+      ],
+      "title": "Component",
+      "type": "object"
+    },
+    "ComponentQuality": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "$ref": "#/$defs/Component"
+        },
+        "identity_incomplete": {
+          "title": "Identity Incomplete",
+          "type": "boolean"
+        },
+        "license_ages": {
+          "items": {
+            "$ref": "#/$defs/TimedLicense"
+          },
+          "title": "License Ages",
+          "type": "array"
+        },
+        "license_difference": {
+          "title": "License Difference",
+          "type": "boolean"
+        },
+        "license_missing_or_unknown": {
+          "title": "License Missing Or Unknown",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "component",
+        "license_difference",
+        "license_missing_or_unknown",
+        "identity_incomplete",
+        "license_ages"
+      ],
+      "title": "ComponentQuality",
+      "type": "object"
+    },
+    "CveAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "cve_id": {
+          "maxLength": 64,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "declared_field_differences": {
+          "items": {
+            "$ref": "#/$defs/Difference"
+          },
+          "title": "Declared Field Differences",
+          "type": "array"
+        },
+        "linked_components": {
+          "items": {
+            "$ref": "#/$defs/VulnerabilityLink"
+          },
+          "title": "Linked Components",
+          "type": "array"
+        },
+        "observations": {
+          "items": {
+            "$ref": "#/$defs/TimedObservation"
+          },
+          "title": "Observations",
+          "type": "array"
+        },
+        "same_revision_conflicts": {
+          "items": {
+            "$ref": "#/$defs/RecordConflict"
+          },
+          "title": "Same Revision Conflicts",
+          "type": "array"
+        },
+        "source_states": {
+          "items": {
+            "$ref": "#/$defs/SourceState"
+          },
+          "title": "Source States",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cve_id",
+        "observations",
+        "source_states",
+        "declared_field_differences",
+        "same_revision_conflicts",
+        "linked_components"
+      ],
+      "title": "CveAssessment",
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": false,
+      "properties": {
+        "from_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "From Ref",
+          "type": "string"
+        },
+        "to_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "To Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_ref",
+        "to_ref"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
+    "Difference": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "values": {
+          "additionalProperties": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "required": [
+        "field",
+        "values"
+      ],
+      "title": "Difference",
+      "type": "object"
+    },
+    "Inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "component_completeness": {
+          "enum": [
+            "declared_complete",
+            "declared_incomplete",
+            "unknown"
+          ],
+          "title": "Component Completeness",
+          "type": "string"
+        },
+        "components": {
+          "items": {
+            "$ref": "#/$defs/Component"
+          },
+          "maxItems": 5000,
+          "title": "Components",
+          "type": "array"
+        },
+        "dependencies": {
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          },
+          "maxItems": 10000,
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "dependency_completeness": {
+          "enum": [
+            "declared_complete",
+            "declared_incomplete",
+            "unknown"
+          ],
+          "title": "Dependency Completeness",
+          "type": "string"
+        },
+        "document_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Document Id",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        },
+        "vulnerability_links": {
+          "items": {
+            "$ref": "#/$defs/VulnerabilityLink"
+          },
+          "maxItems": 10000,
+          "title": "Vulnerability Links",
+          "type": "array"
+        }
+      },
+      "required": [
+        "document_id",
+        "component_completeness",
+        "dependency_completeness",
+        "provenance",
+        "collected_at",
+        "origin",
+        "components",
+        "dependencies",
+        "vulnerability_links"
+      ],
+      "title": "Inventory",
+      "type": "object"
+    },
+    "LicenseEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "expression": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expression"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "expression",
+        "collected_at",
+        "provenance",
+        "origin"
+      ],
+      "title": "LicenseEvidence",
+      "type": "object"
+    },
+    "Observation": {
+      "additionalProperties": false,
+      "properties": {
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "maxItems": 50,
+          "title": "Claims",
+          "type": "array"
+        },
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "cve_ids": {
+          "items": {
+            "maxLength": 64,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Cve Ids",
+          "type": "array"
+        },
+        "observation_id": {
+          "format": "uuid",
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "NVD",
+            "OSV",
+            "GHSA",
+            "KEV"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_modified_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Modified At"
+        },
+        "source_record_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Source Record Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "observation_id",
+        "source",
+        "source_record_id",
+        "cve_ids",
+        "collected_at",
+        "provenance",
+        "origin"
+      ],
+      "title": "Observation",
+      "type": "object"
+    },
+    "RecordConflict": {
+      "additionalProperties": false,
+      "properties": {
+        "observation_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Observation Ids",
+          "type": "array"
+        },
+        "source": {
+          "enum": [
+            "NVD",
+            "OSV",
+            "GHSA",
+            "KEV"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_modified_at": {
+          "format": "date-time",
+          "title": "Source Modified At",
+          "type": "string"
+        },
+        "source_record_id": {
+          "title": "Source Record Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "source_record_id",
+        "source_modified_at",
+        "observation_ids"
+      ],
+      "title": "RecordConflict",
+      "type": "object"
+    },
+    "SourceState": {
+      "additionalProperties": false,
+      "properties": {
+        "consultation": {
+          "enum": [
+            "complete",
+            "partial",
+            "failed",
+            "not_consulted",
+            "unspecified"
+          ],
+          "title": "Consultation",
+          "type": "string"
+        },
+        "observation_state": {
+          "enum": [
+            "observed",
+            "not_observed_in_complete_result",
+            "unknown"
+          ],
+          "title": "Observation State",
+          "type": "string"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Provenance"
+        },
+        "source": {
+          "enum": [
+            "NVD",
+            "OSV",
+            "GHSA",
+            "KEV"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "consultation",
+        "observation_state",
+        "provenance"
+      ],
+      "title": "SourceState",
+      "type": "object"
+    },
+    "TimedLicense": {
+      "additionalProperties": false,
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "age_status": {
+          "enum": [
+            "within_window",
+            "outside_window",
+            "future_collection_time"
+          ],
+          "title": "Age Status",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/LicenseEvidence"
+        }
+      },
+      "required": [
+        "evidence",
+        "age_seconds",
+        "age_status"
+      ],
+      "title": "TimedLicense",
+      "type": "object"
+    },
+    "TimedObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "age_seconds": {
+          "title": "Age Seconds",
+          "type": "number"
+        },
+        "age_status": {
+          "enum": [
+            "within_window",
+            "outside_window",
+            "future_collection_time"
+          ],
+          "title": "Age Status",
+          "type": "string"
+        },
+        "observation": {
+          "$ref": "#/$defs/Observation"
+        }
+      },
+      "required": [
+        "observation",
+        "age_seconds",
+        "age_status"
+      ],
+      "title": "TimedObservation",
+      "type": "object"
+    },
+    "VulnerabilityLink": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "enum": [
+            "source_declared",
+            "analyst_declared"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "bom_ref": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Bom Ref",
+          "type": "string"
+        },
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "cve_id": {
+          "maxLength": 64,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "link_id": {
+          "format": "uuid",
+          "title": "Link Id",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "provenance": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "link_id",
+        "bom_ref",
+        "cve_id",
+        "basis",
+        "provenance",
+        "collected_at",
+        "origin"
+      ],
+      "title": "VulnerabilityLink",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "as_of": {
+      "format": "date-time",
+      "title": "As Of",
+      "type": "string"
+    },
+    "assessments": {
+      "items": {
+        "$ref": "#/$defs/CveAssessment"
+      },
+      "title": "Assessments",
+      "type": "array"
+    },
+    "component_quality": {
+      "items": {
+        "$ref": "#/$defs/ComponentQuality"
+      },
+      "title": "Component Quality",
+      "type": "array"
+    },
+    "explanation": {
+      "title": "Explanation",
+      "type": "string"
+    },
+    "inventory": {
+      "$ref": "#/$defs/Inventory"
+    },
+    "inventory_scope_warning": {
+      "title": "Inventory Scope Warning",
+      "type": "boolean"
+    },
+    "max_observation_age_seconds": {
+      "title": "Max Observation Age Seconds",
+      "type": "number"
+    },
+    "unresolved_observation_ids": {
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "Unresolved Observation Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "inventory",
+    "as_of",
+    "max_observation_age_seconds",
+    "assessments",
+    "component_quality",
+    "unresolved_observation_ids",
+    "inventory_scope_warning",
+    "explanation"
+  ],
+  "title": "QualityReport",
+  "type": "object"
+}

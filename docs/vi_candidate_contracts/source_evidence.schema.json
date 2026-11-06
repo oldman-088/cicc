@@ -1,0 +1,341 @@
+{
+  "$defs": {
+    "DuplicateContentCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "observation_count": {
+          "title": "Observation Count",
+          "type": "integer"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "NVD",
+            "OSV",
+            "GHSA",
+            "EPSS"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_record_id": {
+          "title": "Source Record Id",
+          "type": "string"
+        },
+        "source_sha256": {
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "source",
+        "source_record_id",
+        "source_sha256",
+        "observation_count"
+      ],
+      "title": "DuplicateContentCandidate",
+      "type": "object"
+    },
+    "EvidenceObservationCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "collection_age_seconds": {
+          "title": "Collection Age Seconds",
+          "type": "number"
+        },
+        "collection_age_status": {
+          "enum": [
+            "future",
+            "stale",
+            "within_window"
+          ],
+          "title": "Collection Age Status",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/SourceEvidence"
+        },
+        "score_date_age_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Score Date Age Days"
+        },
+        "score_date_status": {
+          "enum": [
+            "unknown",
+            "future",
+            "supplied"
+          ],
+          "title": "Score Date Status",
+          "type": "string"
+        },
+        "source_modified_status": {
+          "enum": [
+            "unknown",
+            "future",
+            "supplied"
+          ],
+          "title": "Source Modified Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "collection_age_seconds",
+        "collection_age_status",
+        "source_modified_status",
+        "score_date_age_days",
+        "score_date_status"
+      ],
+      "title": "EvidenceObservationCandidate",
+      "type": "object"
+    },
+    "SourceConflictCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "differing_fields": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Differing Fields",
+          "type": "object"
+        },
+        "issuer": {
+          "title": "Issuer",
+          "type": "string"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "NVD",
+            "EPSS"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_record_id": {
+          "title": "Source Record Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "source",
+        "source_record_id",
+        "revision",
+        "metric",
+        "issuer",
+        "differing_fields"
+      ],
+      "title": "SourceConflictCandidate",
+      "type": "object"
+    },
+    "SourceEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "collected_at": {
+          "format": "date-time",
+          "title": "Collected At",
+          "type": "string"
+        },
+        "cve_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Cve Ids",
+          "type": "array"
+        },
+        "cvss_observations": {
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "maxItems": 50,
+          "title": "Cvss Observations",
+          "type": "array"
+        },
+        "epss_score": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Epss Score"
+        },
+        "epss_score_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Epss Score Date"
+        },
+        "origin": {
+          "enum": [
+            "EXPERIMENTAL_DEMO_DATA_ONLY",
+            "CALLER_SUPPLIED_UNVERIFIED"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "other_identifiers": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Other Identifiers",
+          "type": "array"
+        },
+        "provenance": {
+          "maxLength": 900,
+          "minLength": 1,
+          "title": "Provenance",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "NVD",
+            "OSV",
+            "GHSA",
+            "EPSS"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_modified_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Modified At"
+        },
+        "source_record_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Source Record Id",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "source_record_id",
+        "cve_ids",
+        "other_identifiers",
+        "source_modified_at",
+        "collected_at",
+        "provenance",
+        "source_sha256",
+        "origin",
+        "cvss_observations",
+        "epss_score",
+        "epss_score_date"
+      ],
+      "title": "SourceEvidence",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "as_of": {
+      "title": "As Of",
+      "type": "string"
+    },
+    "duplicate_content": {
+      "items": {
+        "$ref": "#/$defs/DuplicateContentCandidate"
+      },
+      "title": "Duplicate Content",
+      "type": "array"
+    },
+    "interpretation": {
+      "title": "Interpretation",
+      "type": "string"
+    },
+    "max_collection_age_seconds": {
+      "title": "Max Collection Age Seconds",
+      "type": "number"
+    },
+    "observations": {
+      "items": {
+        "$ref": "#/$defs/EvidenceObservationCandidate"
+      },
+      "title": "Observations",
+      "type": "array"
+    },
+    "same_revision_conflicts": {
+      "items": {
+        "$ref": "#/$defs/SourceConflictCandidate"
+      },
+      "title": "Same Revision Conflicts",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "cicc.vi.source-evidence-batch/1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "as_of",
+    "max_collection_age_seconds",
+    "observations",
+    "duplicate_content",
+    "same_revision_conflicts",
+    "interpretation"
+  ],
+  "title": "SourceEvidenceBatchCandidate",
+  "type": "object"
+}
