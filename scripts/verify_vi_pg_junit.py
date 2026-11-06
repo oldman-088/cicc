@@ -4,7 +4,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 
-def check(path, minimum=102):
+def check(path, minimum=103):
     root=ET.parse(Path(path)).getroot()
     cases=root.findall('.//testcase')
     skipped=[c for c in cases if c.find('skipped') is not None]

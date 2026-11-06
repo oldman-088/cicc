@@ -101,3 +101,42 @@ class SourceEvidenceBatchCandidate(Candidate):
     duplicate_content: list[DuplicateContentCandidate]
     same_revision_conflicts: list[SourceConflictCandidate]
     interpretation: str
+
+# M54 local source-to-asset trace; no HTTP contract or authorization implied.
+from .vi_asset_correlation import AssetBinding
+from .vulnerability_quality import Component, VulnerabilityLink
+
+class TraceAgeCandidate(Candidate):
+    age_seconds: float
+    age_status: Literal['within_window','outside_window','future_collection_time']
+
+class TraceObservationCandidate(EvidenceObservationCandidate):
+    byte_consistency: Literal['consistent_with_supplied_bytes','not_checked']
+
+class TraceLinkCandidate(Candidate):
+    declared_link: VulnerabilityLink
+    link_age_seconds: float
+    link_age_status: Literal['within_window','outside_window','future_collection_time']
+    component: Component
+    source_observations: list[TraceObservationCandidate]
+    source_observation_state: Literal['observed','unknown']
+
+class TraceResultCandidate(Candidate):
+    binding: AssetBinding
+    binding_age: TraceAgeCandidate
+    inventory_provenance: str
+    inventory_origin: Literal['EXPERIMENTAL_DEMO_DATA_ONLY','CALLER_SUPPLIED_UNVERIFIED']
+    inventory_collected_at: str
+    inventory_age: TraceAgeCandidate
+    inventory_completeness: Literal['declared_complete','declared_incomplete','unknown']
+    dependency_completeness: Literal['declared_complete','declared_incomplete','unknown']
+    links: list[TraceLinkCandidate]
+    applicability: Literal['unknown']
+    exposure: Literal['unknown']
+
+class AssetSourceTraceCandidate(Candidate):
+    schema_version: Literal['cicc.vi.asset-source-trace/1']
+    as_of: str
+    max_collection_age_seconds: float
+    results: list[TraceResultCandidate]
+    interpretation: str

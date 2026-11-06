@@ -4,7 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 import pytest
 from apps.threat_intelligence.frontend_vi_candidates import (QualityCandidate,SbomCandidate,ConflictCandidate,
-    ResolutionAvailabilityCandidate,SourceEvidenceBatchCandidate,sbom_summary,resolution_availability)
+    ResolutionAvailabilityCandidate,SourceEvidenceBatchCandidate,AssetSourceTraceCandidate,sbom_summary,resolution_availability)
 from apps.threat_intelligence.vulnerability_quality import quality_document, Inventory, QualityReport
 from test_vulnerability_quality import inventory,obs,CVE,NOW
 from test_sbom_ingestion import load,cyclone
@@ -12,7 +12,7 @@ from test_sbom_ingestion import load,cyclone
 ROOT=Path(__file__).parents[3]/'docs'/'vi_candidate_contracts'
 
 def test_fixture_schemas_and_candidate_versions():
-    mapping={'quality':QualityCandidate,'sbom':SbomCandidate,'conflict':ConflictCandidate,'resolution_availability':ResolutionAvailabilityCandidate,'source_evidence':SourceEvidenceBatchCandidate}
+    mapping={'quality':QualityCandidate,'sbom':SbomCandidate,'conflict':ConflictCandidate,'resolution_availability':ResolutionAvailabilityCandidate,'source_evidence':SourceEvidenceBatchCandidate,'asset_source_trace':AssetSourceTraceCandidate}
     for name,model in mapping.items():
         schema=json.loads((ROOT/(name+'.schema.json')).read_text())
         example=json.loads((ROOT/(name+'.example.json')).read_text())
