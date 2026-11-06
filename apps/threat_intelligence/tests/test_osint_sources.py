@@ -365,3 +365,18 @@ class TestOSINTIngestionService:
         assert source.experimental_label == EXPERIMENTAL_DEMO_DATA_ONLY
         assert record.experimental_label == EXPERIMENTAL_DEMO_DATA_ONLY
         assert history.experimental_label == EXPERIMENTAL_DEMO_DATA_ONLY
+
+
+def test_experimental_osint_logs_exclude_untrusted_source_and_payload(caplog):
+    import logging
+    service=OSINTIngestionService()
+    marker='EXPERIMENTAL_DEMO_DATA_ONLY_SENSITIVE_FIXTURE'
+    source=OSINTSourceModel(source_name=marker,source_type='ioc',provenance='fixture')
+    with caplog.at_level(logging.INFO,logger='apps.threat_intelligence.osint_sources'):
+        service.register_source(source)
+        result=service.ingest_stix_bundle(source.source_id,[{'name':marker},
+            {'id':'indicator--fixture','type':'indicator','name':{'content':marker}}])
+    assert result==[]
+    assert marker not in caplog.text
+    assert 'missing ID or type' in caplog.text
+    assert 'could not be ingested' in caplog.text

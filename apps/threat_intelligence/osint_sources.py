@@ -207,7 +207,7 @@ class OSINTIngestionService:
             raise ValueError("Confidence score must be between 0.0 and 1.0")
         
         self.sources[source.source_id] = source
-        self.logger.info(f"Registered OSINT source: {source.source_name} ({source.source_type})")
+        self.logger.info("Registered experimental OSINT source")
         
         # Audit logging simulation
         self._record_history(source.source_id, "register", None, source.model_dump(), record_id=None)
@@ -238,7 +238,7 @@ class OSINTIngestionService:
             try:
                 # Safe handling of malformed data
                 if not isinstance(obj, dict):
-                    self.logger.warning(f"Malformed STIX object skipped: {type(obj)}")
+                    self.logger.warning("Malformed STIX object skipped")
                     continue
                 
                 # Extract STIX 2.1 fields
@@ -246,7 +246,7 @@ class OSINTIngestionService:
                 obj_type = obj.get("type")
                 
                 if not stix_id or not obj_type:
-                    self.logger.warning(f"Missing STIX ID or type in object: {obj}")
+                    self.logger.warning("STIX object missing ID or type")
                     continue
                 
                 # Normalize record
@@ -283,8 +283,8 @@ class OSINTIngestionService:
                 # Historical tracking
                 self._record_history(source_id, "ingest", None, record.model_dump(), record_id=record.record_id)
                 
-            except Exception as e:
-                self.logger.error(f"Error ingesting STIX object: {e}")
+            except Exception:
+                self.logger.error("Experimental STIX object could not be ingested")
                 # Safe failure - continue with next object (avoid silent discard)
                 continue
         
