@@ -324,7 +324,34 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate vectors from the real implementations
-        run: ./scripts/generate_runtime_vectors.sh
+        # Capture output and turn any failure into an annotation. The job log needs a
+        # GitHub sign-in and the artifact is unreachable from the environment that
+        # maintains this branch, while check annotations are readable through the API.
+        # Without this, a failure here costs a round trip and yields "exit code 127".
+        run: |
+          set +e
+          output="$(./scripts/generate_runtime_vectors.sh 2>&1)"
+          status=$?
+          printf '%s\n' "$output"
+
+          # Keep the tail: a traceback is the useful part and annotation bodies are
+          # capped, so annotating the whole output would truncate the diagnosis away.
+          tail_text="$(printf '%s' "$output" | tail -c 900)"
+          tail_text="${tail_text//'%'/'%25'}"
+          tail_text="${tail_text//$'\r'/'%0D'}"
+          tail_text="${tail_text//$'\n'/'%0A'}"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=generator failed ($status)::$tail_text"
+            {
+              echo "### Generator failed with exit $status"
+              echo ""
+              echo '```'
+              printf '%s\n' "$output" | tail -40
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$status"
+          fi
 
       - name: Publish the generated vectors as an artifact
         # So a reviewer can inspect the evidence without reproducing the run.
