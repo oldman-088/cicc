@@ -138,3 +138,44 @@ class TestTheOracleJobsSayWhatTheyClaim:
         text = " ".join(str(step.get("run", "")) for step in job["steps"])
         assert "test_comparator_facts.py" in text
         assert "generate_runtime_vectors.sh" not in text
+
+
+class TestThePreflightMirrorsCi:
+    """scripts/ci_preflight.sh must run the same steps the workflow does.
+
+    It exists because two pushes passed my local commands and failed CI: the curated
+    ruff rules flagged a bandit subprocess warning, and the test job installs hypothesis
+    and openapi-spec-validator so tests that skip locally execute there. Neither was
+    subtle; both were avoidable by running the job rather than my recollection of it.
+
+    A preflight that drifts from the workflow re-creates the problem it was written to
+    prevent, so the drift is asserted.
+    """
+
+    def _preflight(self) -> str:
+        path = WORKFLOW.parents[2] / "packages" / "vuln_intel" / "scripts" / "ci_preflight.sh"
+        assert path.exists(), f"missing {path}"
+        return path.read_text(encoding="utf-8")
+
+    def test_it_runs_every_linting_step_ci_runs(self):
+        text = self._preflight()
+        for tool in ("pyflakes", "ruff check", "mypy", "pytest", "vuln_intel.demo"):
+            assert tool in text, f"preflight does not run {tool!r}, so CI can still surprise us"
+
+    def test_it_fails_the_build_when_a_step_fails(self):
+        """A preflight that prints FAIL and exits 0 is worse than none."""
+        text = self._preflight()
+        assert "exit 1" in text
+        assert "failures=$((failures + 1))" in text
+
+    def test_it_does_not_hardcode_a_sandbox_interpreter_path(self):
+        """PYTHON/VIRTUAL_ENV resolution, not a /tmp path pinned from one machine."""
+        text = self._preflight()
+        assert "/tmp/" not in text
+        assert "VIRTUAL_ENV" in text or "PYTHON" in text
+
+    def test_the_workflow_lints_with_the_repository_config(self, workflow):
+        """`ruff check vuln_intel tests` picks up ruff.toml; a bare `ruff check` would not."""
+        steps = workflow["jobs"]["test"]["steps"]
+        runs = " ".join(str(step.get("run", "")) for step in steps)
+        assert "ruff check vuln_intel tests" in runs

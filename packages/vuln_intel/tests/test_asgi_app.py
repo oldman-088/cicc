@@ -305,7 +305,11 @@ class TestThePackageStaysFrameworkFree:
             "loaded = {m for m in sys.modules if m.split('.')[0] in banned}; "
             "print(','.join(sorted(loaded)))"
         )
-        result = subprocess.run(
+        # argv is built here from literals plus sys.executable; there is no untrusted
+        # input, which is what the bandit heuristics cannot see. S603 is suppressed for
+        # this call specifically rather than for the file, so a future subprocess call
+        # taking outside data still trips it.
+        result = subprocess.run(  # noqa: S603
             [sys.executable, "-c", code], capture_output=True, text=True, cwd="."
         )
         assert result.returncode == 0, result.stderr
