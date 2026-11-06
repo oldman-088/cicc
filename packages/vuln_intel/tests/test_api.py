@@ -500,6 +500,57 @@ class TestProjectStateFile:
             f"PROJECT_STATE.json declares {declared} mypy files; mypy reports {found.group(1)}"
         )
 
+class TestTheRecordedHeadIsARealCommit:
+    """`head` drifted five commits behind while every other guard passed.
+
+    A commit cannot name itself, so this cannot assert `head == today's HEAD`.
+    What it can do is stop the field from naming something that never existed,
+    and make the staleness cost a lookup instead of a wrong report.
+    """
+
+    def _state(self):
+        import json
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return json.loads(
+            (root / "docs" / "vulnerability-intelligence" / "PROJECT_STATE.json").read_text()
+        )
+
+    def test_the_head_is_recorded_as_a_hex_sha(self):
+        head = self._state()["head"]
+        assert isinstance(head, str) and 7 <= len(head) <= 40
+        int(head, 16)  # raises if it is not hexadecimal
+
+    def test_the_head_names_a_commit_in_this_repository(self):
+        import pathlib
+        import shutil
+        import subprocess
+
+        head = self._state()["head"]
+        if len(head) < 7 or any(c not in "0123456789abcdef" for c in head):
+            import pytest
+
+            pytest.fail(f"head {head!r} is not a hex sha, so no lookup is meaningful")
+        git = shutil.which("git")
+        if git is None:
+            import pytest
+
+            pytest.skip("git is not on PATH, so the recorded head was NOT checked")
+        root = pathlib.Path(__file__).resolve().parents[1]
+        # The argument is the already-validated hex sha above, not external input.
+        found = subprocess.run(  # noqa: S603
+            [git, "cat-file", "-t", head],
+            capture_output=True, text=True, cwd=str(root), check=False,
+        )
+        # git ran, so "not found" is an answer about the file, not about the
+        # environment. Skipping here would let a wrong head pass as unverified.
+        assert "commit" in found.stdout, (
+            f"PROJECT_STATE.json records head {head!r}, which is not a commit in this "
+            f"repository (git said: {(found.stderr or found.stdout).strip() or 'nothing'})"
+        )
+
+
 class TestStandingAndConflictsReachTheApi:
     """The read contract silently dropped every field added this week.
 
