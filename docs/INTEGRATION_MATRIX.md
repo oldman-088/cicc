@@ -1529,6 +1529,7 @@ Only read-only codeload exports were used; no other branch or PR was modified.
 - PR #1 HEAD `a942baabc3260683ec1a2b8c9d953c04dceaae9a` OPEN; PR #2 `e745cc2b8ff995b040896212eab2995607c48963` OPEN; PR #3 `7136538f74ab08b33607774c507785fc0c59cd03` OPEN/Draft. PR #3 currently contains the Agent 2 TI handover and Replacement Agent 3 VI work; this is not evidence that both owners approved a shared adapter.
 
 ### Readiness evidence
+- After publication, PR #4 was verified OPEN/CLEAN at `7e480d26be3b07515b6bc63b722f5b61b37e43f4` (2026-11-06 13:38 UTC); its status-check rollup is empty and `gh pr checks 4` reports no checks. This is not an Agent 1 CI pass.
 - Agent 1 local API 309/309; isolated PostgreSQL-selected tests 42/42; web tests 35/35; TypeScript typecheck passed. M47-focused preflight/reliability tests 23/23. These are **SANDBOX/BRANCH** evidence only.
 - The M44 fixture trial passed 17/17 on clean and non-empty disposable SQLite with `CICC_DOMAIN_CIRCUIT_FAILURES=3`. The default-threshold run returned 16/17 because the script expects 3 while service default is 5. The successful trials do not mount TI/VI or establish live feeds.
 - `scripts/m47_merged_app_acceptance.py` no-manifest preflight is **BLOCKED** (exit 2) before API startup. PR #1/#3 remain open and no owner-approved manifest or tenant driver exists. **MERGED-APPLICATION NOT RUN.**

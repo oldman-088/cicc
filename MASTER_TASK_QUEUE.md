@@ -25796,7 +25796,7 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 
 ## M47 — Reliability contract and Lead handover (2026-11-06)
 
-- **Status:** IMPLEMENTED + LOCALLY TESTED on Agent 1 branch; GitHub PR #4 remains open. Exact merged-app acceptance BLOCKED pending source/owner/tenant approvals; not production-ready.
+- **Status:** IMPLEMENTED + LOCALLY TESTED on Agent 1 branch; published in commit `7e480d26be3b07515b6bc63b722f5b61b37e43f4`; GitHub PR #4 remains open. Exact merged-app acceptance BLOCKED pending source/owner/tenant approvals; not production-ready.
 - **Changes:** unique expiring probe lease, exact mount-generation guard, concurrency/read-only/restore regressions, nullable build SHA and lease metrics, exact-revision fail-closed acceptance runner; operational and cross-agent docs; full Lead handover.
 - **Tests run:** API 309/309; PostgreSQL-selected 42/42; web 35/35; TypeScript typecheck passed; M47 focused group 23/23. M44 fixture trials 17/17 on clean and non-empty disposable SQLite with `CICC_DOMAIN_CIRCUIT_FAILURES=3`.
 - **Blockers:** PR #1/#3 open; PR #3 combines Agent 2 TI handover with Replacement Agent 3 VI work, but no accepted host contract (0/8 actual host tests); Agent 1 TI adapter targets a mismatched legacy simulated dispatcher. PR #2 frontend contracts are candidate/unapproved and not wired in Agent 1's checkout. No trusted principal/tenant isolation, approved tenant driver, CI checks on Agent 1 PR #4, or exact merged-app result. AMD-003 remains pending.
