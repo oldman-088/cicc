@@ -81,15 +81,26 @@
   line-height: 1.7;
 }
 
+.integrationScope,
 .plannedScope {
   max-width: 70rem;
-  margin-block-start: 1.5rem;
+  margin-block-start: 1.2rem;
   padding: 1.15rem 1.2rem;
-  border: 1px solid #1e3448;
   border-radius: 0.85rem;
+}
+
+.integrationScope {
+  border: 1px solid rgb(238 186 101 / 34%);
+  background: linear-gradient(105deg, rgb(67 50 28 / 22%), rgb(11 23 35 / 82%));
+}
+
+.plannedScope {
+  margin-block-start: 1.5rem;
+  border: 1px solid #1e3448;
   background: rgb(11 23 35 / 82%);
 }
 
+.integrationScope h2,
 .plannedScope h2 {
   margin: 0;
   color: #dbe8f6;
@@ -97,6 +108,7 @@
   font-weight: 680;
 }
 
+.integrationScope ul,
 .plannedScope ul {
   display: grid;
   gap: 0.55rem;
@@ -151,6 +163,7 @@
     padding: 0.95rem;
   }
 
+  .integrationScope,
   .plannedScope {
     padding: 0.95rem;
   }

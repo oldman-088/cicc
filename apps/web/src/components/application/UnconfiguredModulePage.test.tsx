@@ -55,6 +55,12 @@ describe("unconfigured workspace modules", () => {
     expect(disclosure).toHaveTextContent(/host-supplied authentication, tenant, storage, and audit dependencies/);
     expect(disclosure).toHaveTextContent(/sandbox gateway trial uses the legacy dispatcher, not these routes/);
     expect(disclosure).toHaveTextContent(/No actors, indicators, relationships, or live feed health are displayed/);
+
+    expect(screen.getByRole("heading", { name: "Integration readiness — pending", level: 2 })).toBeInTheDocument();
+    expect(screen.getByText(/an owner-approved, versioned read-only CICC route and exact prefix/)).toBeInTheDocument();
+    expect(screen.getByText(/verified authorization and server-derived tenant scope/)).toBeInTheDocument();
+    expect(screen.getByText(/review of write side effects from GET reads/)).toBeInTheDocument();
+    expect(screen.getByText(/controlled request to the actual mounted host before rendering records/)).toBeInTheDocument();
   });
 
   it("sets RTL on the Farsi module shell and keeps module labels localized", () => {

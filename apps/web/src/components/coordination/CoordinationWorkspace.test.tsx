@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CiccApplication } from "../application/CiccApplication";
@@ -196,6 +196,25 @@ describe("Agent Coordination workspace", () => {
     expect(screen.getByText("No returned task records match the selected filters.")).toBeInTheDocument();
 
     expect(fetchMock).toHaveBeenCalledTimes(6);
+    for (const [url, options] of fetchMock.mock.calls) {
+      expect(String(url)).toMatch(/^\/api\/integrations\/coordination\//);
+      expect(options?.method).toBe("GET");
+      expect(options?.headers).not.toHaveProperty("Authorization");
+    }
+  });
+
+  it("refreshes all provider panels through read-only requests", async () => {
+    const fetchMock = stubProvider();
+    render(<CoordinationWorkspace />);
+
+    const refreshButton = await screen.findByRole("button", { name: "Refresh all provider data" });
+    await waitFor(() => expect(refreshButton).toBeEnabled());
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(12));
+    await waitFor(() => expect(refreshButton).toBeEnabled());
+
     for (const [url, options] of fetchMock.mock.calls) {
       expect(String(url)).toMatch(/^\/api\/integrations\/coordination\//);
       expect(options?.method).toBe("GET");

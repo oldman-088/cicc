@@ -18,6 +18,8 @@ type ModuleCopy = {
   description: string;
   statusTitle: string;
   statusDescription: string;
+  integrationTitle?: string;
+  integrationGates?: readonly string[];
   plannedTitle: string;
   plannedAreas: readonly string[];
   backToOverview: string;
@@ -31,6 +33,14 @@ const moduleMessages: Record<Locale, Record<UnconfiguredModuleId, ModuleCopy>> =
       description: "This workspace is reserved for evidence-led threat analysis and investigation workflows.",
       statusTitle: "Threat data is not connected",
       statusDescription: "The legacy Threat Intelligence dispatcher has explicitly experimental sample handlers. PR #3 also adds standalone experimental relationship routes, but they are not mounted in the CICC host and require host-supplied authentication, tenant, storage, and audit dependencies. Agent 1's sandbox gateway trial uses the legacy dispatcher, not these routes. No actors, indicators, relationships, or live feed health are displayed.",
+      integrationTitle: "Integration readiness — pending",
+      integrationGates: [
+        "Host mount: an owner-approved, versioned read-only CICC route and exact prefix; a package ASGI app is not a mounted endpoint.",
+        "Identity: verified authorization and server-derived tenant scope; callers cannot choose a tenant.",
+        "Data contract: typed DTOs with live-vs-demo origin, provenance, confidence, freshness, pagination/limits, and error/unavailable behavior.",
+        "Storage and audit: approved schema and audit policy, including review of write side effects from GET reads.",
+        "Verification: a controlled request to the actual mounted host before rendering records; no fixture fallback.",
+      ],
       plannedTitle: "Planned scope — not yet available",
       plannedAreas: [
         "Threat actor, campaign, malware, and technique exploration",
@@ -91,6 +101,14 @@ const moduleMessages: Record<Locale, Record<UnconfiguredModuleId, ModuleCopy>> =
       description: "مساحة مخصصة لتحليل التهديدات القائم على الأدلة وسير عمل التحقيق.",
       statusTitle: "بيانات التهديدات غير متصلة",
       statusDescription: "يحتوي موزّع استخبارات التهديدات القديم على معالجات عينات تجريبية صراحةً. يضيف PR #3 أيضًا مسارات علاقات تجريبية مستقلة، لكنها غير مركّبة في مضيف CICC وتتطلب من المضيف توفير المصادقة والمستأجر والتخزين والتدقيق. تستخدم تجربة البوابة التي أبلغ عنها الوكيل 1 الموزّع القديم، لا هذه المسارات. لا تُعرض جهات أو مؤشرات أو علاقات أو صحة تغذية مباشرة.",
+      integrationTitle: "جاهزية التكامل — بانتظار الحسم",
+      integrationGates: [
+        "تركيب المضيف: مسار قراءة بإصدار وبادئة CICC محدّدين ومعتمدين من المالك؛ تطبيق ASGI للحزمة ليس نقطة نهاية مركّبة.",
+        "الهوية: مصادقة وتفويض موثّقان ونطاق مستأجر يحدده الخادم؛ لا يختار المتصل المستأجر.",
+        "عقد البيانات: DTO مكتوب الأنواع يحدد مصدر البيانات الحيّة أو التجريبية والمنشأ والثقة والحداثة والتصفح والحدود وسلوك الأخطاء وعدم الإتاحة.",
+        "التخزين والتدقيق: اعتماد المخطط وسياسة التدقيق، بما في ذلك مراجعة آثار الكتابة لطلبات GET.",
+        "التحقق: طلب مضبوط إلى المضيف المركّب فعليًا قبل عرض السجلات، من دون بديل من عينات الحزمة.",
+      ],
       plannedTitle: "نطاق مخطط — غير متاح بعد",
       plannedAreas: [
         "استكشاف الجهات والحملات والبرمجيات الخبيثة والأساليب",
@@ -151,6 +169,14 @@ const moduleMessages: Record<Locale, Record<UnconfiguredModuleId, ModuleCopy>> =
       description: "این فضا برای تحلیل مبتنی بر شواهد و گردش‌کارهای بررسی تهدید در نظر گرفته شده است.",
       statusTitle: "دادهٔ تهدید متصل نیست",
       statusDescription: "پخش‌کنندهٔ قدیمی اطلاعات تهدید، گرداننده‌های نمونهٔ صریحاً آزمایشی دارد. PR #3 مسیرهای آزمایشی مستقلی برای روابط نیز اضافه کرده است، اما این مسیرها روی میزبان CICC نصب نشده‌اند و به احراز هویت، تعیین مستأجر، ذخیره‌سازی و ثبت رویدادهایی نیاز دارند که میزبان باید فراهم کند. آزمون دروازه‌ای گزارش‌شده از سوی عامل ۱ از پخش‌کنندهٔ قدیمی استفاده می‌کند، نه این مسیرها. هیچ عامل، شاخص، رابطه یا وضعیت زندهٔ خوراک نمایش داده نمی‌شود.",
+      integrationTitle: "آمادگی یکپارچه‌سازی — در انتظار تصمیم",
+      integrationGates: [
+        "نصب در میزبان: مسیر خواندن نسخه‌دار و پیشوند دقیق CICC با تأیید مالک؛ برنامهٔ ASGI بسته به‌تنهایی نقطه‌پایان نصب‌شده نیست.",
+        "هویت: احراز هویت و مجوزدهی معتبر، و محدودهٔ مستأجر تعیین‌شده در سرور؛ درخواست‌کننده نمی‌تواند مستأجر را انتخاب کند.",
+        "قرارداد داده: DTO تایپ‌شده برای مبدأ زنده/آزمایشی، منشأ، اطمینان، تازگی، صفحه‌بندی/محدودیت‌ها و رفتار خطا یا عدم دسترسی.",
+        "ذخیره‌سازی و ممیزی: تأیید طرح‌واره و سیاست ممیزی، از جمله بررسی اثرهای نوشتن در درخواست‌های GET.",
+        "راستی‌آزمایی: پیش از نمایش رکورد، درخواست کنترل‌شده به میزبان واقعاً نصب‌شده انجام شود؛ بدون جایگزینی با نمونه‌های بسته.",
+      ],
       plannedTitle: "دامنهٔ برنامه‌ریزی‌شده — هنوز در دسترس نیست",
       plannedAreas: [
         "کاوش عامل‌های تهدید، کارزارها، بدافزار و روش‌ها",
@@ -232,6 +258,15 @@ export function UnconfiguredModulePage({ moduleId }: { moduleId: UnconfiguredMod
           <p>{messages.statusDescription}</p>
         </div>
       </section>
+
+      {messages.integrationTitle && messages.integrationGates && (
+        <section className={styles.integrationScope} aria-labelledby={`${id}-integration-title`}>
+          <h2 id={`${id}-integration-title`}>{messages.integrationTitle}</h2>
+          <ul>
+            {messages.integrationGates.map((gate) => <li key={gate}>{gate}</li>)}
+          </ul>
+        </section>
+      )}
 
       <section className={styles.plannedScope} aria-labelledby={`${id}-planned-title`}>
         <h2 id={`${id}-planned-title`}>{messages.plannedTitle}</h2>

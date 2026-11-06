@@ -33,6 +33,7 @@ type BaseMessages = {
   title: string;
   intro: string;
   readOnly: string;
+  refreshAll: string;
   scopeWarning: string;
   metrics: string;
   agents: string;
@@ -172,6 +173,7 @@ const copy: Record<Locale, BaseMessages> = {
     title: "Agent Coordination",
     intro: "Provider-backed agent, task, metric, and webhook-event views. Task creation is available only when its server-side gate is enabled; routing and other task-state writes are not exposed by this frontend.",
     readOnly: "READ + GATED TASK CREATION",
+    refreshAll: "Refresh all provider data",
     scopeWarning: "Trusted single-tenant scope: these provider records have no tenant isolation, and this frontend does not authenticate users. Do not expose this deployment to untrusted users or multiple tenants.",
     metrics: "Coordination metrics",
     agents: "Registered agents",
@@ -273,6 +275,7 @@ const copy: Record<Locale, BaseMessages> = {
     title: "تنسيق الوكلاء",
     intro: "عرض سجلات الوكلاء والمهام والمقاييس وأحداث الويب هوك من مزوّد التنسيق. لا يتاح إنشاء المهام إلا عند تفعيل بوابته على الخادم؛ ولا تعرض هذه الواجهة التوجيه أو غيره من تغييرات حالة المهام.",
     readOnly: "قراءة + إنشاء مقيّد",
+    refreshAll: "تحديث كل بيانات المزوّد",
     scopeWarning: "نطاق موثوق لمستأجر واحد: لا تتضمن سجلات المزوّد عزل المستأجرين، ولا تصادق هذه الواجهة على المستخدمين. لا تعرض هذا النشر لمستخدمين غير موثوقين أو لعدة مستأجرين.",
     metrics: "مقاييس التنسيق",
     agents: "الوكلاء المسجّلون",
@@ -374,6 +377,7 @@ const copy: Record<Locale, BaseMessages> = {
     title: "هماهنگی عامل‌ها",
     intro: "نمای رکوردهای عامل‌ها، وظایف، معیارها و رویدادهای وب‌هوک از منبع هماهنگی. ایجاد وظیفه فقط با فعال‌بودن دروازهٔ سرور در دسترس است؛ این رابط مسیردهی یا دیگر تغییرهای وضعیت وظیفه را ارائه نمی‌کند.",
     readOnly: "خواندن + ایجاد محدود",
+    refreshAll: "تازه‌سازی همهٔ داده‌های منبع",
     scopeWarning: "محدودهٔ استقرار مورداعتماد و تک‌مستاجری: رکوردهای منبع جداسازی مستأجر ندارند و این رابط کاربران را احراز هویت نمی‌کند. این استقرار را در معرض کاربران نامطمئن یا چند مستأجر قرار ندهید.",
     metrics: "معیارهای هماهنگی",
     agents: "عامل‌های ثبت‌شده",
@@ -1263,6 +1267,23 @@ export function CoordinationWorkspace() {
     parseCoordinationWriteCapabilities,
   );
   const taskKindOptions = Object.keys(metrics.state.data?.by_kind ?? {}).sort();
+  const isWorkspaceLoading = [
+    health.state,
+    metrics.state,
+    agents.state,
+    tasks.state,
+    events.state,
+    writeCapabilities.state,
+  ].some((resource) => resource.status === "loading");
+
+  function refreshAllWorkspaceData() {
+    health.refresh();
+    metrics.refresh();
+    agents.refresh();
+    tasks.refresh();
+    events.refresh();
+    writeCapabilities.refresh();
+  }
 
   function refreshCoordinationData() {
     tasks.refresh();
@@ -1284,7 +1305,18 @@ export function CoordinationWorkspace() {
           <h1>{text.title}</h1>
           <p className={styles.intro}>{text.intro}</p>
         </div>
-        <span className={styles.readOnly}>{text.readOnly}</span>
+        <div className={styles.headerActions}>
+          <span className={styles.readOnly}>{text.readOnly}</span>
+          <button
+            type="button"
+            className={styles.workspaceRefresh}
+            onClick={refreshAllWorkspaceData}
+            disabled={isWorkspaceLoading}
+            aria-busy={isWorkspaceLoading}
+          >
+            {text.refreshAll}
+          </button>
+        </div>
       </header>
 
       <aside className={styles.scopeWarning} aria-labelledby={`${id}-scope`}>

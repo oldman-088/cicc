@@ -228,6 +228,26 @@ test("renders API-reported health and lazily loads the selected task audit trace
   expect(traceRequests).toBeGreaterThan(0);
 });
 
+test("refreshes all Coordination panels with GET requests only", async ({ page }) => {
+  const requests: { path: string; method: string }[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/integrations/coordination/")) {
+      requests.push({ path, method: request.method() });
+    }
+  });
+  await mockWorkspace(page);
+  await page.goto("/coordination");
+
+  const refreshButton = page.getByRole("button", { name: "Refresh all provider data" });
+  await expect(refreshButton).toBeEnabled();
+  expect(requests).toHaveLength(6);
+  await refreshButton.click();
+  await expect.poll(() => requests.length).toBe(12);
+  await expect(refreshButton).toBeEnabled();
+  expect(requests.every((request) => request.method === "GET")).toBe(true);
+});
+
 test("surfaces permission denial locally without hiding independent coordination data", async ({ page }) => {
   await mockWorkspace(page, { healthStatus: 403 });
   await page.goto("/coordination");
@@ -335,8 +355,12 @@ test("announces provider loading while a read request is pending", async ({ page
   await page.goto("/coordination");
   await metricsStarted;
   await expect(page.getByRole("status").filter({ hasText: "Requesting provider data…" }).first()).toBeVisible();
+  const refreshButton = page.getByRole("button", { name: "Refresh all provider data" });
+  await expect(refreshButton).toBeDisabled();
+  await expect(refreshButton).toHaveAttribute("aria-busy", "true");
   releaseMetrics();
   await expect(page.getByText("Tasks total")).toBeVisible();
+  await expect(refreshButton).toBeEnabled();
 });
 
 test("renders explicit empty provider responses for agents, tasks, and events", async ({ page }) => {
@@ -432,11 +456,18 @@ test("passes axe-core WCAG A/AA checks in the Arabic mobile layout", async ({ pa
 });
 
 test("keeps threat and vulnerability workspaces explicitly disconnected and accessible", async ({ page }) => {
+  let integrationRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/integrations/")) integrationRequests += 1;
+  });
+
   await page.goto("/threat-intelligence");
   await expect(page.getByRole("heading", { name: "Threat Intelligence" })).toBeVisible();
   await expect(page.getByText(/standalone experimental relationship routes, but they are not mounted in the CICC host/)).toBeVisible();
   await expect(page.getByText(/host-supplied authentication, tenant, storage, and audit dependencies/)).toBeVisible();
   await expect(page.getByText(/sandbox gateway trial uses the legacy dispatcher, not these routes/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Integration readiness — pending" })).toBeVisible();
+  await expect(page.getByText(/review of write side effects from GET reads/)).toBeVisible();
   await expectNoWcagViolations(page);
 
   await page.goto("/vulnerability-intelligence");
@@ -445,6 +476,7 @@ test("keeps threat and vulnerability workspaces explicitly disconnected and acce
   await expect(page.getByText(/CycloneDX VEX, OpenVEX, and SARIF exports/)).toBeVisible();
   await expect(page.getByText(/No provider is connected/)).toBeVisible();
   await expectNoWcagViolations(page);
+  expect(integrationRequests).toBe(0);
 });
 
 const disconnectedModuleLocaleCases = [
@@ -453,6 +485,8 @@ const disconnectedModuleLocaleCases = [
     threatTitle: "استخبارات التهديدات",
     threatStatus: "بيانات التهديدات غير متصلة",
     threatDisclosure: /مسارات علاقات تجريبية مستقلة، لكنها غير مركّبة في مضيف CICC/,
+    threatIntegrationTitle: "جاهزية التكامل — بانتظار الحسم",
+    threatIntegrationGate: /تطبيق ASGI للحزمة ليس نقطة نهاية مركّبة/,
     vulnerabilityTitle: "استخبارات الثغرات",
     vulnerabilityStatus: "اقتراح API للثغرات غير مركّب",
     vulnerabilityDisclosure: /عقد OpenAPI ما زال مقترحًا/,
@@ -462,6 +496,8 @@ const disconnectedModuleLocaleCases = [
     threatTitle: "اطلاعات تهدید",
     threatStatus: "دادهٔ تهدید متصل نیست",
     threatDisclosure: /مسیرهای آزمایشی مستقلی برای روابط.*روی میزبان CICC نصب نشده‌اند/,
+    threatIntegrationTitle: "آمادگی یکپارچه‌سازی — در انتظار تصمیم",
+    threatIntegrationGate: /برنامهٔ ASGI بسته به‌تنهایی نقطه‌پایان نصب‌شده نیست/,
     vulnerabilityTitle: "اطلاعات آسیب‌پذیری",
     vulnerabilityStatus: "پیشنهاد API آسیب‌پذیری نصب نشده است",
     vulnerabilityDisclosure: /قرارداد OpenAPI هنوز پیشنهادی است/,
@@ -476,6 +512,8 @@ for (const localeCase of disconnectedModuleLocaleCases) {
     await expect(page.getByRole("heading", { name: localeCase.threatTitle })).toBeVisible();
     await expect(page.getByRole("heading", { name: localeCase.threatStatus })).toBeVisible();
     await expect(page.getByText(localeCase.threatDisclosure)).toBeVisible();
+    await expect(page.getByRole("heading", { name: localeCase.threatIntegrationTitle })).toBeVisible();
+    await expect(page.getByText(localeCase.threatIntegrationGate)).toBeVisible();
     await expectNoWcagViolations(page);
 
     await page.goto("/vulnerability-intelligence");
