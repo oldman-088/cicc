@@ -57,6 +57,14 @@ TenantResolver = Callable[[Scope], str]
 
 _METHODS = ("GET", "HEAD")
 
+#: Rows fetched per store call while assembling an export. Small enough to bound memory
+#: on a wide tenant, large enough that 500 records is two round trips, not fifty.
+_EXPORT_PAGE_SIZE = 200
+
+#: Hard ceiling. Beyond this the request is refused with an explicit message: a
+#: truncated export would be indistinguishable from a complete one at the consumer.
+_EXPORT_MAX_RECORDS = 5000
+
 _STATUS_TEXT = {
     200: "OK",
     400: "Bad Request",
@@ -169,8 +177,31 @@ class VulnerabilityAsgiApp:
                 )
             dependencies = parsed
 
+        # A VEX document that silently omits records is worse than no document: a
+        # consumer reads it as "these are all the vulnerabilities", so a truncated one
+        # quietly deletes work from someone's queue. Page to the end instead of taking
+        # a single capped page and dropping the cursor.
+        rows: list[Mapping[str, Any]] = []
+        cursor: str | None = None
         try:
-            rows, _cursor = self.api.store.list(tenant_id=tenant, limit=500)
+            while True:
+                page, cursor = self.api.store.list(
+                    tenant_id=tenant, limit=_EXPORT_PAGE_SIZE, cursor=cursor
+                )
+                rows.extend(page)
+                # Checked before the break: a tenant small enough to arrive in one page
+                # still has to be under the ceiling, or the guard only ever fires for
+                # the case it is least likely to meet.
+                if len(rows) > _EXPORT_MAX_RECORDS:
+                    # Refuse rather than serve a partial document we cannot mark.
+                    raise ApiError(
+                        "invalid_request",
+                        f"tenant has more than {_EXPORT_MAX_RECORDS} records; "
+                        "export a narrower set rather than receive a truncated VEX",
+                        field_name="dependencies",
+                    )
+                if cursor is None or not page:
+                    break
         except ApiError:
             raise
         except Exception as exc:

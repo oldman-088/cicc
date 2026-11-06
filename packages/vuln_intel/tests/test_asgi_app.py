@@ -476,6 +476,84 @@ class TestInteropExportsAreServed:
         assert recorder.status == 409
         assert recorder.body["error"]["code"] == "stored_record_invalid"
 
+    def test_pagination_is_followed_so_records_are_not_silently_dropped(self, store):
+        """A capped single page produced a VEX that looked complete and was not.
+
+        The handler used to call ``store.list(limit=500)`` once and throw the cursor
+        away. A consumer reads a VEX as the complete set of verdicts, so a missing
+        record is work silently deleted from someone's queue, with nothing in the
+        document saying it is partial.
+
+        The store here *ignores* the requested limit and returns two rows per call.
+        Only a handler that follows ``next_cursor`` to exhaustion can report all five,
+        so this fails against the old one-call implementation for the right reason
+        rather than because a constant was small.
+        """
+        inner = store
+
+        class _StingyStore:
+            """A store that refuses to honour a large page, like a real one under load."""
+
+            pages_served = 0
+
+            def find(self, **kwargs):
+                return inner.find(**kwargs)
+
+            def list(self, *, tenant_id, limit, cursor=None, **kwargs):
+                page, next_cursor = inner.list(
+                    tenant_id=tenant_id, limit=min(limit, 2), cursor=cursor, **kwargs
+                )
+                type(self).pages_served += 1
+                return page, next_cursor
+
+            def upsert(self, **kwargs):
+                return inner.upsert(**kwargs)
+
+        for index in range(5):
+            inner.upsert(
+                tenant_id="tenant-a",
+                cve=f"CVE-2026-{7000 + index}",
+                entity={},
+                details={"origin": "fixture"},
+                enrichment={"origin": "fixture"},
+                provenance={"source": "test"},
+                collected_at=NOW,
+                dry_run=False,
+            )
+        stingy = _StingyStore()
+        app = build_app(stingy, resolve_tenant=lambda scope: "tenant-a")
+        recorder = call(app, path="/v1/vulnerabilities/export/vex")
+
+        assert recorder.status == 200
+        ids = {v["id"] for v in recorder.body["document"]["vulnerabilities"]}
+        assert len(ids) == 5, f"expected every record, got {sorted(ids)}"
+        assert recorder.body["meta"]["record_count"] == 5
+        assert _StingyStore.pages_served >= 3, "the cursor was not followed"
+
+    def test_exceeding_the_ceiling_is_an_explicit_refusal(self, store, app):
+        """Truncation must be loud: a partial VEX is indistinguishable from a full one."""
+        from vuln_intel.integration import asgi as asgi_module
+
+        original = asgi_module._EXPORT_MAX_RECORDS
+        asgi_module._EXPORT_MAX_RECORDS = 1
+        try:
+            for index in range(3):
+                store.upsert(
+                    tenant_id="tenant-a",
+                    cve=f"CVE-2026-{8000 + index}",
+                    entity={},
+                    details={"origin": "fixture"},
+                    enrichment={"origin": "fixture"},
+                    provenance={"source": "test"},
+                    collected_at=NOW,
+                    dry_run=False,
+                )
+            recorder = call(app, path="/v1/vulnerabilities/export/vex")
+        finally:
+            asgi_module._EXPORT_MAX_RECORDS = original
+        assert recorder.status == 400
+        assert "truncated" in recorder.body["error"]["message"]
+
     def test_the_export_is_deterministic_for_the_same_rows(self, store, app):
         """Two exports of unchanged data must not differ only by a timestamp id."""
         self._seed_log4j(store)
