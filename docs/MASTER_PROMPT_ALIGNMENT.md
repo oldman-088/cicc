@@ -117,3 +117,64 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   frontend-originated execution VERIFIED (reference dashboard BFF, PR #4);
   Backup Agent 4's own execution still UNVERIFIED. DoD §17 unmet -> not
   production-ready.
+
+## M46 original Master Prompt review (2026-11-06)
+
+- **File reviewed from the repository:** `/home/user/cicc/README.md` on `main`,
+  commit `ca8f82c0500637e22851d7128cddf99081ef3c08`, title/version
+  **ULTIMATE MASTER PROMPT v1.0**. The branch copy has the same blob
+  `07e42297fe5294b6c0aa220c4483aecc8975a881`; `git diff main -- README.md` was
+  empty. Sections 1, 2, 9, 10, and 17 were read directly. The original prompt
+  was not modified.
+- **Assignment alignment:** §1 requires execution, implementation, testing,
+  truthful integration claims, and documentation; M46 carried out independent
+  reliability work and added an executable, fail-closed merged-app acceptance
+  gate. The authorized four-agent division of labor assigns Agent 1 central
+  coordination + operations; Agents 2/3/4 retain TI/VI/frontend ownership.
+  No other agent branch or PR was modified.
+- **Completed in Agent 1 scope:** M46 tests exercise threshold/cooldown and
+  concurrent half-open behavior with exact probe identity, remount/deregister
+  reset, acknowledged-alert reactivation, restart persistence, bounded metrics,
+  stale recovery, and sanitized errors. Full API 295/295, PG 42/42, web 35/35;
+  live contract, E2E, M44/M45/M40 and operational checks are recorded in the
+  M46 devlog.
+- **Partial:** §2 evidence/provenance/modularity objectives are supported by
+  gateway adapters and current PR-head TI/VI executions through the sandbox
+  gateway. Those are explicitly SANDBOX/UNMERGED-BRANCH results. The exact-SHA
+  MERGED-APPLICATION procedure is ready, but it was NOT RUN because PR #1 and
+  PR #3 remain unmerged from main. No real-source ingestion or production
+  result is inferred.
+- **§9 3D experience/design-system alignment:** this Agent 1 milestone does not
+  implement the prompt's immersive command theater, 3D graph, Three.js/R3F, or
+  product-wide accessibility/i18n requirements. The frontend is Agent 4-owned;
+  the tested BFF integration here is read-only. §9 remains a whole-product
+  partial/missing item, not an Agent 1 completion claim.
+- **§10 security alignment:** input/auth gates, audit history, bounded labels,
+  sanitized errors, server-side BFF token handling, and browser write denial
+  have test/sandbox evidence. However, current ops tokens are not production
+  platform authentication; `tenant_id` is still UNVERIFIED metadata; principal
+  resolution, tenant isolation/RLS, and cross-tenant denial are not implemented
+  or claimed. These remain owner-reserved.
+- **§17 Definition of Done:** automated tests, health/monitoring, backup/restore
+  procedures, and known limitations have evidence. Product-wide core modules,
+  unified live data integrations, production authentication/tenant isolation,
+  merged-app acceptance, full release readiness, and §9 3D requirements are
+  incomplete. RabbitMQ live verification remains unperformed in this sandbox,
+  but RabbitMQ is not a blocker for the current human-assisted model. No
+  production-readiness claim is made.
+- **Deviation and blockers:** the original prompt describes one team building
+  the entire CICC; owner/Arena execution splits implementation across four
+  agents, and the repository's `apps/api` + `apps/web` architecture is retained
+  rather than restructuring to the prompt's illustrative layout. These are
+  authorized coordination choices, not unilateral scope changes. AMD-003 stays
+  PENDING; its schema proposal was not applied. Exact TI/VI merged-app testing
+  awaits those PRs actually landing on main, but sandbox and reliability work
+  continues independently.
+- **Progress estimate:** Agent 1's assigned coordination/ops scope is
+  approximately **90% implemented and tested**; owner-reserved trusted-tenant
+  isolation/platform-auth and any unverified live broker behavior remain open.
+  Whole-product §17 completion is approximately **40–45%**: strong Agent 1
+  evidence and substantial open-agent branches exist, but the required PR #1/#3
+  merge gate is false, no merged-app result exists, and major product/security/
+  3D requirements remain incomplete. This is an evidence-based estimate, not a
+  production-readiness assessment.

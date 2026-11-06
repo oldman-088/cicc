@@ -25924,3 +25924,40 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - test_m45_beta_readiness.py 7/7. scripts/m45_mvp_beta_trial.py --manage-api 26/26 @10:33:17Z — 11 acceptance items: startup+DB readiness, coordination health, REAL PR#3@f3d3a7f TI + PR#1@f8e96c7 VI mounted+invoked via gateway (SANDBOX/UNMERGED-BRANCH; EXPERIMENTAL_DEMO_DATA_ONLY + non-live data_origin preserved), auth gating (401s, read-token write refused), tenant claim UNVERIFIED + no leaks, stale/skew provenance, trace/audit + alert history, timeout + circuit open->sanitized 503->cooldown->recovery with alert resolve, BFF read-only visibility (domains+metrics 200, browser invoke 403), SIGKILL restart recovery (persisted counters + mounts_total + alert history survive; circuit process-local fail-safe; last_success_at resets — documented). MERGED-APPLICATION NOT RUN; PRODUCTION-VERIFIED never claimed.
 - AMD-003: docs/M45_AMD003_IMPLEMENTATION_PLAN.md — exact approval text, additive extra_json column proposal + rollback, lifecycle flow, executable verification; no reserved shared changes applied.
 - Suites: API 282/282, PG 42/42, web 35/35, contract 31/31, e2e 24/24, mvp 23/23, cross-domain 32/32, m40 19/20 fresh (TI ABSENT — PR#3 unmerged), m41 17/17, m42 16/16, m43 11/11, m44 17/17 fresh. Heads: PR#3 f3d3a7f, PR#1 f8e96c7, PR#2 b6cf817, PR#8 3bc6527 (merged into PR#1 branch 09:33Z; main ca8f82c).
+
+## 2026-11-06T12:26Z — M46
+- Reliability fixes: mount/remount resets the prior handler's breaker and
+  consecutive-failure threshold; deregister clears in-memory stats/breaker.
+  A per-process lock admits exactly one half-open probe and passes its lease
+  identity to outcome recording, so only that probe can close/re-arm the
+  breaker. Failed probes re-arm cooldown without double-counting `opens` and
+  emit a sanitized audit event. Acknowledged domain alerts resolve on recovery
+  and re-activate/increment on a later failure, clearing stale ack metadata.
+- Metrics persistence hardening: equal persisted invoke counts no longer replace
+  current process state, preserving volatile timeout/retry/stale/skew/latency
+  and breaker counters across reads. The M44 live trial now establishes its
+  process-local metric baseline after remount, so reruns work with non-empty DBs.
+  No route/DTO/DB schema/shared migration was added.
+- Tests: `test_m46_ops_reliability.py` 9/9 (threshold/reject, failed-probe
+  cooldown, single probe, only actual probe success closes, remount/deregister,
+  alert ack/assign/reactivate/recovery, restart persistence, status/metrics,
+  stale recovery and sanitization); `test_m46_acceptance_gate.py` 4/4. Full API
+  295/295 (2 existing warnings), PostgreSQL 42/42 (253 deselected, 1 warning),
+  web 35/35. Regression focus and all suites passed; logs in `/tmp/m46_*_final*`.
+- Live SANDBOX checks: M44 17/17 @12:21:42Z, M43 11/11 @12:20:46Z, M45
+  latest-head MVP 26/26 @12:25:40Z, M40 latest-TI 23/23 @12:26:11Z, and M46
+  ops acceptance 7/7 @12:26:21Z. Contract 31/31, E2E 24/24, MVP 23/23,
+  cross-domain 32/32, M41 17/17, and M42 16/16 passed at 12:20:25–12:20:42Z.
+  M45 read-only exports were exact PR #3 `5fec62ef39ab66e6fe36ccc483b302eddb7c5a38`
+  and PR #1 `78f869b82f5262ab4cacfb996847173274c259ef`; M40 used the exact PR #3
+  SHA. TI experimental label and VI non-live origin stayed intact.
+- M46 gate verified `main=ca8f82c0500637e22851d7128cddf99081ef3c08`; PR #1
+  `78f869b82f5262ab4cacfb996847173274c259ef` and PR #3
+  `5fec62ef39ab66e6fe36ccc483b302eddb7c5a38` were OPEN/unmerged and not on
+  main. API-returned candidate merge SHAs were not treated as merged commits;
+  MERGED-APPLICATION NOT RUN. PR #2 remained OPEN at
+  `e745cc2b8ff995b040896212eab2995607c48963`.
+- AMD-003 remains PENDING: no schema or owner-reserved change applied. Tenant
+  claims remain UNVERIFIED; no isolation, production-auth, live-ingestion,
+  RabbitMQ-live, or production-readiness claim. Original Master Prompt review
+  for M46 is recorded in `docs/MASTER_PROMPT_ALIGNMENT.md`.

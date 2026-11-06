@@ -19,7 +19,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app import ops, ratelimit
+from sqlalchemy import select
+
+from app import models, ops, ratelimit
 from app.coordination import domains
 
 W = {"Authorization": "Bearer w", "Content-Type": "application/json"}
@@ -79,6 +81,15 @@ def test_metrics_aggregation_accuracy(client):
         r = client.post("/api/v1/coordination/domains/threat_intel/invoke",
                         json={"payload": {}, "idempotency_key": key}, headers=W)
         assert r.status_code in (201, 502), (key, r.status_code)
+    # A persisted row with the same invoke count is not newer. Refreshing it
+    # must not erase process-local observability counters before metrics reads.
+    before_refresh = domains.domain_metrics()["domains"]["threat_intel"]
+    with ops.SessionLocal() as s:
+        rows = list(s.execute(select(models.CoordinationDomainStat)).scalars())
+    domains.load_persisted_stats(rows, include_unmounted=True)
+    after_refresh = domains.domain_metrics()["domains"]["threat_intel"]
+    for field in ("timeouts", "retries", "stale_count", "skew_count"):
+        assert after_refresh[field] == before_refresh[field], field
     m = client.get("/api/v1/coordination/domains/metrics", headers=R).json()["domains"]["threat_intel"]
     assert m["invokes"] == 7 and m["successes"] == 4 and m["failures"] == 3
     assert m["success_rate"] == round(4 / 7, 4)

@@ -655,10 +655,12 @@ def record_domain_alert(kind: str, status: str, detail: str, s=None) -> None:
     sess = s or SessionLocal()
     try:
         now = utcnow()
+        # M46: an ACKNOWLEDGED alert is still live — recovery must resolve it too,
+        # and a new failure re-activates it (full lifecycle, no stuck states)
         existing = sess.execute(
             select(models.Alert).where(models.Alert.rule == rule,
                                        models.Alert.component_key == ck,
-                                       models.Alert.status == "active")).scalar_one_or_none()
+                                       models.Alert.status.in_(["active", "acknowledged"]))).scalar_one_or_none()
         if status == "EXECUTION_VERIFIED":
             if existing is not None:
                 existing.status = "resolved"
@@ -675,6 +677,11 @@ def record_domain_alert(kind: str, status: str, detail: str, s=None) -> None:
                 existing.occurrences += 1
                 existing.last_seen = now
                 existing.message = msg
+                if existing.status == "acknowledged":
+                    existing.status = "active"  # re-raised after ack
+                    existing.acked_at = None
+                    existing.acked_by = None
+                    record_event("warning", "alerts", f"domain alert re-activated kind={kind}", s=sess)
                 if sev == "critical" and existing.severity != "critical":
                     existing.severity = "critical"
                     existing.escalated = True

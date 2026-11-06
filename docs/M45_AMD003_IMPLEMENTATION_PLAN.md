@@ -92,3 +92,26 @@ evidence (200, not an error).
   main (`ca8f82c`) yet — mounts today are SANDBOX/UNMERGED-BRANCH only.
 - Tenant enforcement (RLS/roles), platform auth, RabbitMQ live verification,
   outbound notifications — all owner-reserved; see TENANT_AUTH_READINESS.md.
+
+## M46 readiness overlay (AMD-003 still PENDING)
+
+M46 adds only independent operational behavior: breaker reset on handler remount
+/ deregister, a process-local single half-open probe with cooldown re-arming on
+probe failure, and an acknowledged-alert reactivation lifecycle. It makes no
+`coord_domain_stats` DDL change, adds no shared endpoint/DTO field, and does not
+require AMD-003 approval. The proposed `extra_json` persistence extension above
+remains unapplied and is not a prerequisite for these tests.
+
+`test_m46_ops_reliability.py` (9/9), `test_m46_acceptance_gate.py` (4/4), and
+full API 295/295 + PG 42/42 verify these independent paths. M46 also keeps
+process-local metric counters intact when a persisted row has the same invoke
+count; the M44 live trial is rerunnable after remount on a non-empty DB. The
+repeatable `scripts/m46_merged_app_acceptance.py` gate verifies exact PR
+merge-result commit reachability from a queried main SHA before any merged-app
+mount. At 2026-11-06T12:26:21Z, main was
+`ca8f82c0500637e22851d7128cddf99081ef3c08`; PR #1 at
+`78f869b82f5262ab4cacfb996847173274c259ef` and PR #3 at
+`5fec62ef39ab66e6fe36ccc483b302eddb7c5a38` were open/unmerged, so the
+MERGED-APPLICATION phase was **NOT RUN**. The separate M45 trial at 12:25Z used
+those exact branch heads through the sandbox gateway only; it is not merged-app
+or production evidence. AMD-003 remains owner-reserved; no shared changes applied.

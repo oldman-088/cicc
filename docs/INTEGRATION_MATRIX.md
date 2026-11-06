@@ -1435,3 +1435,88 @@ owner decision. Master prompt: README.md @ main `ca8f82c` v1.0.
 - AMD-003 still PENDING: precise reversible plan committed as `docs/M45_AMD003_IMPLEMENTATION_PLAN.md` (exact approval text, additive `extra_json` column proposal for coord_domain_stats with rollback, lifecycle flow, executable verification). No reserved shared changes applied.
 - Tests: test_m45_beta_readiness.py 7/7 (restart recovery, persisted circuit audit, mounts_total, auth/tenant boundaries, error isolation, sanitization, lifespan events). Suites: API 282/282, PG 42/42, web 35/35, contract 31/31, e2e 24/24, mvp 23/23, cross-domain 32/32, m40 19/20 fresh (TI ABSENT — PR#3 unmerged), m41 17/17, m42 16/16, m43 11/11, m44 17/17 fresh.
 - **scripts/m45_mvp_beta_trial.py --manage-api 26/26 @10:33:17Z** covering the 11 M45 acceptance items incl. REAL PR-head TI `f3d3a7f` + VI `f8e96c7` mounted and invoked through the gateway (SANDBOX/UNMERGED-BRANCH, EXPERIMENTAL label + non-live data_origin preserved), auth/tenant boundaries, provenance/freshness, trace/audit, timeout+circuit recovery with alert history, BFF read-only visibility + browser-write 403, and a SIGKILL restart-recovery pass (persisted counters survive; circuit process-local fail-safe; mounts_total + alert history persist). MERGED-APPLICATION: NOT RUN; PRODUCTION-VERIFIED: never claimed.
+
+## M46 addendum (2026-11-06T12:26Z)
+
+### Exact merge gate and evidence classes
+
+- At the live check (2026-11-06T12:26:21Z), `main` was
+  `ca8f82c0500637e22851d7128cddf99081ef3c08`. PR #1 was OPEN/unmerged at head
+  `78f869b82f5262ab4cacfb996847173274c259ef`; PR #3 was OPEN/unmerged at head
+  `5fec62ef39ab66e6fe36ccc483b302eddb7c5a38`. GitHub's PR API returned
+  `merge_commit_sha` values `27626a47c891a6a0dc4a653aa3b736bf1aea4c12` and
+  `9a2f6c135afe82d7f13bc9cc386c11f6c64c2314`, respectively, but because both
+  PRs were OPEN those are not treated as merged commits. The live compare gate
+  confirmed both PR head SHAs were not ancestors of main. PR #2 was also OPEN
+  at `e745cc2b8ff995b040896212eab2995607c48963`.
+- `scripts/m46_merged_app_acceptance.py` re-queries main and PR metadata,
+  checks each merged PR's exact `merge_commit_sha` is reachable from that exact
+  main SHA (and records whether the PR head itself is reachable), then exports
+  only that immutable main tree. It mounts and invokes TI and VI through the
+  host gateway only when PR #1 and PR #3 are merged to `main` and both exact
+  merge-result commits pass reachability checks. Open-PR merge candidates,
+  package presence, and unmerged branch heads cannot open the gate. Python 3.11
+  codeload extraction is path/link/device checked before extraction.
+- Live run at 2026-11-06T12:26:21Z: **M46 7/7 PASS** for sandbox operational
+  checks; exact result `main=ca8f82c...`, PR #1/#3 still OPEN, heads
+  `78f869b82f5262ab4cacfb996847173274c259ef` and
+  `5fec62ef39ab66e6fe36ccc483b302eddb7c5a38` both `head_on_main=false`;
+  **MERGED-APPLICATION NOT RUN**. No merged integration
+  or production result is claimed. Acceptance-gate unit tests cover open PR,
+  squash-merge (merge SHA reachable while head is not), unreachable merge SHA,
+  and non-main base.
+- Final regressions: M46 reliability 9/9 + exact-SHA gate 4/4; focused M43–M46
+  reliability/regression set 31/31; API 295/295, PostgreSQL 42/42, web 35/35.
+
+### Read-only current-head trials (not merged integration)
+
+- Latest read-only codeload exports were verified against live PR heads:
+  PR #3 TI `5fec62ef39ab66e6fe36ccc483b302eddb7c5a38` and PR #1 VI
+  `78f869b82f5262ab4cacfb996847173274c259ef`. At 2026-11-06T12:25:40Z,
+  `scripts/m45_mvp_beta_trial.py --manage-api` completed **26/26**. TI mounted
+  and invoked at `POST /api/v1/coordination/domains/threat_intel/{mount,invoke}`
+  (201/201), preserving `EXPERIMENTAL_DEMO_DATA_ONLY`; VI mounted and invoked
+  at `POST /api/v1/coordination/domains/vuln_intel/{mount,invoke}` (201/201),
+  `count=1`, with non-live `data_origin`. Trace/audit, auth, UNVERIFIED tenant
+  claim, restart persistence, and BFF read-only/browser-write-403 checks passed.
+  These are **SANDBOX/UNMERGED-BRANCH** executions using demo/fixture data.
+- `scripts/m40_integration_trial.py` at 2026-11-06T12:26:11Z completed
+  **23/23** with exact TI SHA `5fec62ef39ab66e6fe36ccc483b302eddb7c5a38`
+  supplied via `--ti-sha`; TI provenance preserved the experimental label and
+  trace result. VI was honestly reported NOT_MOUNTED on this host branch.
+  This is **SANDBOX/UNMERGED-BRANCH** for TI and **SANDBOX/FIXTURE** for the
+  remaining checks, not merged application, live ingestion, or production.
+- `scripts/m44_observability_trial.py` **17/17** at 12:21:42Z and
+  `scripts/m43_trial.py` **11/11** at 12:20:46Z passed as SANDBOX/FIXTURE.
+  M44 now captures volatile-metric deltas after remount, so reruns remain valid
+  when a non-empty DB contains older process-local observations. `contract_check.py`
+  31/31, `e2e_check.py` 24/24, MVP 23/23, cross-domain 32/32, M41 17/17, and
+  M42 16/16 passed at 12:20:25–12:20:42Z.
+
+### Stable cross-agent boundary (no agent branch or DTO takeover)
+
+- **Domain status DTO:** routes and state names remain the existing contract in
+  this document; M46 changes breaker/probe and alert lifecycle internals and
+  preserves process-local counters on equal persisted-stat refreshes. No shared
+  DTO/schema change was made.
+- **Authentication / tenant propagation:** API read/write ops tokens are the
+  current sandbox gate, not platform authentication or a verified principal.
+  A body `tenant_id` remains an UNVERIFIED claim only; there is no tenant
+  isolation claim or trusted principal-to-tenant resolution.
+- **Gateway tracing:** `GET /api/v1/coordination/tasks/{task_id}/trace` returns
+  `task_id`, `correlation.idempotency_key`, `correlation.event_id`, and events.
+  It does not currently expose a separate `trace_id`; acceptance logs record
+  the task ID as the trace handle and the actual correlation fields rather
+  than inventing a trace ID.
+- **Frontend:** the BFF exposes read-only domain visibility/metrics without a
+  browser token. The existing only approved BFF write path remains
+  `POST /api/v1/coordination/tasks`; browser domain mount/deregister/invoke
+  remain blocked (403).
+- **Errors / freshness:** existing sanitized HTTP envelopes remain in force
+  (including 401/403/409/413/422/429/502/503); error details expose no
+  exception class, payload, tenant identifier, or credential. Freshness
+  remains derived from `freshness_s` or `produced_at`; future timestamps are
+  flagged as clock skew and stale recovery clears `last_stale`.
+
+Agents 2, 3, and 4 retain ownership of their PRs and specialized implementations.
+Only read-only codeload exports were used; no other branch or PR was modified.

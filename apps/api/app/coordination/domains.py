@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -107,8 +108,9 @@ def is_result_stale(provenance: dict, now=None) -> bool:
 
 def load_persisted_stats(rows: list, include_unmounted: bool = False) -> None:
     """M38: restore evidence from coord_domain_stats rows (restart persistence).
-    By default only fills kinds that are currently mounted; in-memory values win
-    on conflict only when they are strictly fresher (higher invokes).
+    By default only fills kinds that are currently mounted. Persisted evidence
+    replaces current state only when its invoke count is strictly higher; on a
+    tie, retain in-memory values so process-local metrics are not reset by reads.
     M45: include_unmounted=True (startup + metrics reads) also restores rows for
     kinds that are not mounted right now — after a restart handlers are gone
     (status stays honestly NOT_MOUNTED via domain_status) but persisted counters
@@ -124,7 +126,7 @@ def load_persisted_stats(rows: list, include_unmounted: bool = False) -> None:
                      "last_status": row.last_status, "last_error": row.last_error,
                      "last_invoke_at": row.last_invoke_at,
                      "last_stale": bool(getattr(row, "last_stale", 0))}
-        if cur is None or persisted["invokes"] >= cur["invokes"]:
+        if cur is None or persisted["invokes"] > cur["invokes"]:
             merged = _empty_stat()
             merged.update({k: v for k, v in persisted.items() if v is not None})
             if cur is not None:
@@ -162,7 +164,8 @@ class DomainCircuitOpen(DomainError):
     code = "circuit_open"
 
 
-_CIRCUIT: dict[str, dict] = {}  # kind -> {open, opened_at}
+_CIRCUIT: dict[str, dict] = {}  # kind -> {open, opened_at, probe_inflight?}
+_CIRCUIT_LOCK = threading.RLock()  # per-process atomicity for breaker transitions/probe leases
 
 
 def circuit_failures_threshold() -> int:
@@ -174,10 +177,29 @@ def circuit_cooldown_s() -> float:
 
 
 def circuit_state(kind: str) -> dict:
-    c = _CIRCUIT.get(kind, {})
-    open_now = bool(c.get("open")) and (time.time() - c.get("opened_at", 0)) < circuit_cooldown_s()
-    return {"open": open_now, "opened_at": c.get("opened_at"), "threshold": circuit_failures_threshold(),
-            "cooldown_s": circuit_cooldown_s()}
+    with _CIRCUIT_LOCK:
+        c = _CIRCUIT.get(kind, {})
+        open_now = bool(c.get("open")) and (time.time() - c.get("opened_at", 0)) < circuit_cooldown_s()
+        return {"open": open_now, "opened_at": c.get("opened_at"),
+                "threshold": circuit_failures_threshold(), "cooldown_s": circuit_cooldown_s()}
+
+
+def _begin_invoke(kind: str, probe_state: dict | None = None) -> bool:
+    """Atomically admit a call, leasing and identifying the sole half-open probe."""
+    if probe_state is not None:
+        probe_state["half_open_probe"] = False
+    with _CIRCUIT_LOCK:
+        c = _CIRCUIT.get(kind)
+        if not c or not c.get("open"):
+            return True
+        if time.time() - c.get("opened_at", 0) < circuit_cooldown_s():
+            return False
+        if c.get("probe_inflight"):
+            return False
+        c["probe_inflight"] = True
+        if probe_state is not None:
+            probe_state["half_open_probe"] = True
+        return True
 
 
 def _now() -> str:
@@ -200,17 +222,22 @@ def register_domain(kind: str, handler, version: str, source_ref: str) -> dict:
         "kind": kind, "handler": handler, "version": version, "source_ref": source_ref,
         "mounted_at": _now(), "validated": True,
     }
-    prev = _REGISTRY.get(kind)
-    _REGISTRY[kind] = entry
-    st = _STATS.setdefault(kind, _empty_stat())
-    st["mount_count"] = st.get("mount_count", 0) + 1
-    st["previous_version"] = prev["version"] if prev else None
+    with _CIRCUIT_LOCK:
+        prev = _REGISTRY.get(kind)
+        _REGISTRY[kind] = entry
+        _CIRCUIT.pop(kind, None)  # M46: a (re)mount installs a fresh handler -> fresh circuit
+        st = _STATS.setdefault(kind, _empty_stat())
+        st["consecutive_failures"] = 0  # do not carry the prior handler's breaker threshold into a new mount
+        st["mount_count"] = st.get("mount_count", 0) + 1
+        st["previous_version"] = prev["version"] if prev else None
     return {k: v for k, v in entry.items() if k != "handler"}
 
 
 def unregister_domain(kind: str) -> bool:
-    _STATS.pop(kind, None)
-    return _REGISTRY.pop(kind, None) is not None
+    with _CIRCUIT_LOCK:
+        _STATS.pop(kind, None)
+        _CIRCUIT.pop(kind, None)  # M46: deregistered kind carries no circuit state
+        return _REGISTRY.pop(kind, None) is not None
 
 
 def load_handler_from_module(kind: str, module_path: str, attr: str,
@@ -241,10 +268,14 @@ def is_mounted(kind: str) -> bool:
 
 def record_outcome(kind: str, ok: bool, error: str | None = None, stale: bool = False,
                    latency_s: float | None = None, attempts: int = 1,
-                   timed_out: bool = False, skew: bool = False) -> None:
-    """Record observable invoke evidence (called by the router once per invoke;
-    persisted counters survive restart via coord_domain_stats, the fine-grained
-    M44 latency/timeout counters are process-local — documented limitation)."""
+                   timed_out: bool = False, skew: bool = False,
+                   half_open_probe: bool = False) -> None:
+    """Record observable invoke evidence (called by the router once per invoke).
+    ``half_open_probe`` is the exact admission lease from _begin_invoke; only
+    that invocation may close or re-arm an open breaker. Persisted counters
+    survive restart via coord_domain_stats; fine-grained M44 counters are
+    process-local and documented as such.
+    """
     st = _STATS.setdefault(kind, _empty_stat())
     st["invokes"] += 1
     st["last_invoke_at"] = _now()
@@ -258,7 +289,6 @@ def record_outcome(kind: str, ok: bool, error: str | None = None, stale: bool = 
         st["last_latency_s"] = latency_s
     if ok:
         st["successes"] += 1
-        st["consecutive_failures"] = 0
         st["last_status"] = "ok"
         st["last_success_at"] = _now()  # M45: last successful invocation (process-local)
         st["last_error"] = None
@@ -267,16 +297,31 @@ def record_outcome(kind: str, ok: bool, error: str | None = None, stale: bool = 
             st["stale_count"] = st.get("stale_count", 0) + 1
         if skew:
             st["skew_count"] = st.get("skew_count", 0) + 1
-        if _CIRCUIT.get(kind, {}).get("open"):
-            _CIRCUIT[kind] = {"open": False, "opened_at": None}  # half-open success -> closed
-            st["circuit_closes"] = st.get("circuit_closes", 0) + 1
+        with _CIRCUIT_LOCK:
+            breaker = _CIRCUIT.get(kind, {})
+            if breaker.get("open"):
+                # Only the admitted half-open probe may close an open breaker;
+                # an older in-flight success is not evidence from that probe.
+                if half_open_probe and breaker.get("probe_inflight"):
+                    _CIRCUIT[kind] = {"open": False, "opened_at": None, "probe_inflight": False}
+                    st["consecutive_failures"] = 0
+                    st["circuit_closes"] = st.get("circuit_closes", 0) + 1
+            else:
+                st["consecutive_failures"] = 0
     else:
-        st["consecutive_failures"] = st.get("consecutive_failures", 0) + 1
         st["last_status"] = "error"
         st["last_error"] = (error or "error")[:200]  # sanitized, truncated
-        if st["consecutive_failures"] >= circuit_failures_threshold() and not _CIRCUIT.get(kind, {}).get("open"):
-            _CIRCUIT[kind] = {"open": True, "opened_at": time.time()}
-            st["circuit_opens"] = st.get("circuit_opens", 0) + 1
+        with _CIRCUIT_LOCK:
+            st["consecutive_failures"] = st.get("consecutive_failures", 0) + 1
+            breaker = _CIRCUIT.get(kind, {})
+            if breaker.get("open"):
+                # Only the admitted half-open probe re-arms cooldown; unrelated
+                # calls already in flight when the circuit opened are not probes.
+                if half_open_probe and breaker.get("probe_inflight"):
+                    _CIRCUIT[kind] = {"open": True, "opened_at": time.time(), "probe_inflight": False}
+            elif st["consecutive_failures"] >= circuit_failures_threshold():
+                _CIRCUIT[kind] = {"open": True, "opened_at": time.time(), "probe_inflight": False}
+                st["circuit_opens"] = st.get("circuit_opens", 0) + 1
 
 
 def domain_status(kind: str) -> str:
@@ -365,18 +410,19 @@ def _validate_response(kind: str, resp) -> dict:
     return {"result": resp["result"], "provenance": prov}
 
 
-def invoke(kind: str, payload: dict, task=None) -> dict:
+def invoke(kind: str, payload: dict, task=None, probe_state: dict | None = None) -> dict:
     """Execute the mounted domain handler. Raises DomainNotMounted / DomainError /
     DomainInvalid. Retries with the SAME idempotency key (handlers must be
-    idempotent); per-attempt timeout. Callers persist events + stats."""
+    idempotent); per-attempt timeout. Optional ``probe_state`` is internal
+    request metadata populated atomically with half-open probe admission.
+    Callers persist events + stats."""
     entry = _REGISTRY.get(kind)
     if entry is None:
         raise DomainNotMounted(f"no handler mounted for kind '{kind}'")
-    cs = circuit_state(kind)
-    if cs["open"]:
+    if not _begin_invoke(kind, probe_state=probe_state):
         raise DomainCircuitOpen(
             f"{kind}: circuit open after {circuit_failures_threshold()} consecutive failures "
-            f"(cooldown {circuit_cooldown_s()}s)")
+            f"(cooldown {circuit_cooldown_s()}s or half-open probe already in flight)")
     timeout_s = float(os.getenv("CICC_DOMAIN_INVOKE_TIMEOUT_S", "10"))
     retries = int(os.getenv("CICC_DOMAIN_INVOKE_RETRIES", "1"))
     attempts = 1 + max(0, retries)

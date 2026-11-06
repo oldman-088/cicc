@@ -77,3 +77,17 @@ requirements remain owner-reserved below.
 - Enabling platform auth / tenant resolution (shared infra).
 - Any RLS/tenant column in shared models (schema change).
 - Changing the BFF auth model.
+
+## M46 note (2026-11-06T12:26Z)
+
+M46 reliability and cross-agent checks did not change authentication or tenant
+semantics. The optional invoke-body `tenant_id` remains a **UNVERIFIED claim**
+recorded for trace/audit only; it is not identity, authorization, or isolation.
+Current read/write ops-token checks are sandbox gates, not production platform
+authentication. The latest-head M45 sandbox trial verified that tenant markers
+do not leak into metrics/diagnostics, read tokens cannot invoke, and browser
+domain invocation remains 403 at the BFF. The BFF read surface stays read-only
+for domain status/metrics; its only separately approved write path remains
+`POST /api/v1/coordination/tasks`. Trusted principal resolution, cross-tenant
+denial tests, RLS/schema changes, and production authentication remain
+UNVERIFIED/owner-reserved.

@@ -14,11 +14,12 @@ SANDBOX / FIXTURE evidence only — NOT production verification.
 
 Usage: API=http://127.0.0.1:8000 WEB=http://127.0.0.1:3000 \
        WRITE_TOKEN=smoke-write READ_TOKEN=smoke-read \
-       python3 scripts/m40_integration_trial.py [--ti-module /path/to/agent2/api.py]
+       python3 scripts/m40_integration_trial.py [--ti-module /path/to/agent2/api.py] [--ti-sha <40-char-commit>]
 """
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -81,7 +82,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ti-module", default=os.environ.get("CICC_TI_MODULE_PATH", ""),
                     help="path to Agent 2's real api.py export for the readiness section (optional)")
+    ap.add_argument("--ti-sha", default=os.environ.get("CICC_TI_SHA", ""),
+                    help="exact 40-character PR #3 commit for the supplied read-only export")
     args = ap.parse_args()
+    if args.ti_sha and not re.fullmatch(r"[0-9a-fA-F]{40}", args.ti_sha):
+        ap.error("--ti-sha must be the exact 40-character commit SHA")
     run = str(int(time.time()))
     print(f"== M40 INTEGRATION TRIAL @ {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} run={run} — SANDBOX/FIXTURE, NOT production ==")
 
@@ -96,7 +101,8 @@ def main():
     vi_real = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "packages", "vuln_intel")
     vi_real = os.path.abspath(vi_real)
     check("readiness: Agent 2 TI module present", bool(ti_real),
-          f"path={ti_real or 'ABSENT (PR #3 unmerged) -> TI is NOT_MOUNTED'}")
+          f"path={ti_real or 'ABSENT (PR #3 unmerged) -> TI is NOT_MOUNTED'} "
+          f"sha={args.ti_sha or 'UNVERIFIED'}")
     check("readiness: VI package presence reported honestly (exists on PR #8 @222fdfc, not on this branch)",
           os.path.isdir(vi_real) == os.path.isdir(vi_real),
           f"on this branch: exists={os.path.isdir(vi_real)} (package lives on PR #8/PR #1 branches) -> NOT_MOUNTED here")
@@ -207,8 +213,10 @@ def main():
             f"handle = make_handler({ti_real!r})\n")
         wrapper.close()
         st, m, _ = call(API, "POST", "/api/v1/coordination/domains/threat_intel/mount",
-                        {"module_path": wrapper.name, "attr": "handle", "version": "P1-05@4f1776f-export",
-                         "source_ref": f"PR #3 @ {os.path.basename(ti_real)} (read-only export; branch unmerged)"}, W)
+                        {"module_path": wrapper.name, "attr": "handle",
+                         "version": f"PR#3-head@{args.ti_sha[:12] if args.ti_sha else 'sha-unverified'}",
+                         "source_ref": f"PR #3 @ {args.ti_sha or 'SHA unverified'} "
+                                      f"({os.path.basename(ti_real)}; read-only export; branch unmerged)"}, W)
         check("REAL TI module mounted read-only via adapter", st == 201, str(m)[:120])
         if st == 201:
             st, inv2, _ = call(API, "POST", "/api/v1/coordination/domains/threat_intel/invoke",

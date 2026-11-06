@@ -78,13 +78,11 @@ def main():
     fx.write(FIXTURE)
     fx.close()
     KIND = "threat_intel"
-    # baseline so the trial is rerunnable on a non-empty DB (assert deltas)
-    _, b0, _ = call(API, "GET", "/api/v1/coordination/domains/metrics", token=R)
-    b = b0.get("domains", {}).get(KIND, {})
-    base = {k: b.get(k, 0) for k in ("invokes", "successes", "timeouts", "retries",
-                                      "stale_count", "skew_count")}
-    base["opens"] = b.get("circuit", {}).get("opens", 0)
-    base["mounts_total"] = b.get("mounts_total", 0)
+    # Durable mount history is captured before remount. Per-process metrics
+    # reset when the old handler is deregistered, so counter deltas are baselined
+    # after the fresh mount below (this keeps reruns valid on a non-empty DB).
+    _, before_mount, _ = call(API, "GET", "/api/v1/coordination/domains/metrics", token=R)
+    mounts_total_base = before_mount.get("domains", {}).get(KIND, {}).get("mounts_total", 0)
 
     call(API, "POST", f"/api/v1/coordination/domains/{KIND}/deregister", None, W)
     st, _, _ = call(API, "POST", f"/api/v1/coordination/domains/{KIND}/mount",
@@ -95,6 +93,15 @@ def main():
                     {"module_path": fx.name, "attr": "handle", "version": "2.0",
                      "source_ref": "m44 fixture"}, W)
     check("re-mount v2.0 (mount history)", st == 201, f"st={st}")
+
+    # Counters are reset by deregistration/remount, while durable invokes and
+    # successes restore from DB. Start deltas after that merge has completed.
+    _, after_mount, _ = call(API, "GET", "/api/v1/coordination/domains/metrics", token=R)
+    b = after_mount.get("domains", {}).get(KIND, {})
+    base = {k: b.get(k, 0) for k in ("invokes", "successes", "timeouts", "retries",
+                                      "stale_count", "skew_count")}
+    base["opens"] = b.get("circuit", {}).get("opens", 0)
+    base["mounts_total"] = mounts_total_base
 
     # metrics endpoint is read-gated
     st, _, _ = call(API, "GET", "/api/v1/coordination/domains/metrics")

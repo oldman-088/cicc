@@ -137,3 +137,48 @@ Uniform codes: 401/403/404/409/410/413/422/429/502/503. Domain-specific: 409
 (sanitized — never internals/credentials). UI mapping: loading = in-flight;
 empty = `domains:[]`; unmounted = NOT_MOUNTED; unavailable = DEGRADED/FAILED
 (show `last_error`, sanitized); verified = EXECUTION_VERIFIED; unknown = UNKNOWN.
+
+## M46 operational-reliability addendum (2026-11-06T12:26Z)
+
+M46 changes gateway internals only; no route, status enum, DTO field, database
+schema, or shared migration was introduced.
+
+- **Mount / deregister breaker semantics:** mounting a replacement handler
+  resets the process-local breaker and its `consecutive_failures` count so the
+  new handler does not inherit the old handler's threshold. Invocation totals,
+  successes, mount history, and audit history remain historical evidence.
+  Deregister clears the live registry, in-memory stats, and breaker; it does
+  not delete the persisted stats/audit rows. M45 startup restore may therefore
+  expose historical counters again for an unmounted kind, while its status
+  remains honestly `NOT_MOUNTED`.
+- **Half-open behavior:** after cooldown, only one half-open probe per API
+  process is admitted and that invocation carries an exact probe lease. Only the
+  admitted probe can close or re-arm the open breaker; a success/failure from an
+  unrelated call that was already in flight cannot consume the lease. A failed
+  probe re-arms cooldown without incrementing `opens` a second time (`opens`
+  counts closed-to-open transitions). Other calls receive sanitized 503
+  fast-rejects and do not count as handler invocations. A sanitized
+  `HALF-OPEN probe failed; cooldown reset` audit event records the recovery
+  attempt. Breaker state and probe lease are process-local, not distributed
+  across replicas.
+- **Alert lifecycle:** `acknowledged` remains an unresolved/live domain alert.
+  Recovery resolves it; a new failure re-activates the same alert and increments
+  `occurrences`; stale `acked_at`/`acked_by` metadata is cleared. Ack/assign
+  attempts on a resolved alert remain 409. History retains the transition,
+  including the sanitized re-activation audit event.
+- **Persisted-stat merge:** persisted invokes/successes replace in-memory
+  evidence only when the persisted invoke count is strictly higher. A tie keeps
+  current process-local timeout/retry/stale/skew/latency and breaker counters
+  intact rather than resetting them on a metrics read. Those volatile values
+  still reset after a real process restart, as documented.
+- **Security/freshness contract unchanged:** `tenant_id` is still an
+  UNVERIFIED claim, never a verified principal; labels remain `kind` only;
+  502/503 responses and diagnostics remain sanitized. `freshness_s` and
+  `produced_at` semantics (`stale`, basis/age, clock skew, `last_stale` and
+  recovery) are unchanged.
+
+Verification: `test_m46_ops_reliability.py` 9/9 and
+`test_m46_acceptance_gate.py` 4/4; full API suite 295/295, PostgreSQL suite
+42/42, web 35/35. Live M44 17/17, M45 26/26, and M46 ops acceptance 7/7 are
+SANDBOX results only; see `docs/INTEGRATION_MATRIX.md`. AMD-003 remains PENDING
+and no schema change has been applied.

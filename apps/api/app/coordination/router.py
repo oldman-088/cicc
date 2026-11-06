@@ -430,6 +430,14 @@ def _record_circuit_transition(s, kind: str, pre_open: bool) -> None:
                          f"threshold={domains.circuit_failures_threshold()}", s=s)
 
 
+def _record_half_open_probe_failure(s, kind: str, was_probe: bool) -> None:
+    """M46: retain an operational breadcrumb when a failed probe re-arms cooldown."""
+    if was_probe and domains._CIRCUIT.get(kind, {}).get("open"):
+        ops.record_event("warning", "coordination.domains",
+                         f"domain circuit HALF-OPEN probe failed; cooldown reset kind={kind} "
+                         f"threshold={domains.circuit_failures_threshold()}", s=s)
+
+
 @router.post("/domains/{kind}/invoke", status_code=201)
 def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_dependency),
                   authorization: str | None = Header(default=None)):
@@ -471,18 +479,24 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
         _t0 = _t.time()
         # M45: raw internal flag (circuit_state is cooldown-adjusted; half-open still counts as open)
         _pre_circuit_open = bool(domains._CIRCUIT.get(kind, {}).get("open"))  # M45: detect transition for persisted audit
+        _probe_state = {}
+        _half_open_probe = False
         try:
-            out = domains.invoke(kind, payload, task=t)  # M37/M43/M44: timeout+retries, same key, circuit breaker
+            out = domains.invoke(kind, payload, task=t, probe_state=_probe_state)  # M46 records exact probe lease
+            _half_open_probe = bool(_probe_state.get("half_open_probe"))
             _lat = _t.time() - _t0
         except domains.DomainCircuitOpen as e:
             registry.record_event(s, task_id, "domain_circuit_open", str(e))
             s.commit()
             raise HTTPException(status_code=503, detail=str(e))
         except domains.DomainError as e:
+            _half_open_probe = bool(_probe_state.get("half_open_probe"))
             domains.record_outcome(kind, False, str(e), latency_s=_t.time() - _t0,
                                    attempts=getattr(e, "attempts", 1),
-                                   timed_out=bool(getattr(e, "timed_out", False)))
+                                   timed_out=bool(getattr(e, "timed_out", False)),
+                                   half_open_probe=_half_open_probe)
             _record_circuit_transition(s, kind, _pre_circuit_open)  # M45: persisted circuit audit
+            _record_half_open_probe_failure(s, kind, _half_open_probe)
             registry.record_event(s, task_id, "domain_error", str(e))
             st_now = domains.domain_status(kind)
             ops.record_domain_alert(kind, st_now, str(e), s=s)
@@ -490,9 +504,12 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             s.commit()
             raise HTTPException(status_code=502, detail=str(e))
         except domains.DomainInvalid as e:
+            _half_open_probe = bool(_probe_state.get("half_open_probe"))
             domains.record_outcome(kind, False, str(e), latency_s=_t.time() - _t0,
-                                   attempts=getattr(e, "attempts", 1))
+                                   attempts=getattr(e, "attempts", 1),
+                                   half_open_probe=_half_open_probe)
             _record_circuit_transition(s, kind, _pre_circuit_open)  # M45
+            _record_half_open_probe_failure(s, kind, _half_open_probe)
             registry.record_event(s, task_id, "domain_invalid", str(e))
             ops.record_domain_alert(kind, domains.domain_status(kind), str(e), s=s)
             _persist_domain_stats(s)
@@ -501,7 +518,8 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
         freshness = domains.analyze_freshness(out["provenance"])  # M42: basis + clock skew
         stale = freshness["stale"]
         domains.record_outcome(kind, True, stale=stale, latency_s=_lat,
-                               skew=freshness["clock_skew_s"] > 0)  # M44 metrics
+                               skew=freshness["clock_skew_s"] > 0,
+                               half_open_probe=_half_open_probe)  # M44/M46 metrics + exact probe state
         _record_circuit_transition(s, kind, _pre_circuit_open)  # M45: half-open success closes -> persisted audit
         ops.record_event("info", "coordination.domains",
                          f"domain invoke ok kind={kind} task={task_id} stale={stale} by=api-write-token", s=s)
