@@ -83,7 +83,7 @@ test("shows provider-reported status while keeping unmounted TI/VI and contract 
   await expect(page.getByText("Package API not mounted in CICC")).toBeVisible();
   await expect(page.getByText("Proposed API and fixtures only")).toBeVisible();
   await expect(page.getByText(/A source label is not independent proof that data is live or authentic/)).toBeVisible();
-  await expect(page.getByText(/not a whole-platform health guarantee/)).toBeVisible();
+  await expect(page.getByText(/there is no combined health inference/)).toBeVisible();
   await expect(page.getByText(/CVE-2026-/)).toHaveCount(0);
 });
 
