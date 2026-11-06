@@ -85,6 +85,64 @@ jobs:
         run: python -m pytest tests/test_network_denial.py -q
 
   # ---------------------------------------------------------------------------
+  # PostgreSQL job
+  #
+  # Separate from `test` because it downloads a real server and a driver, and the
+  # `test` job is deliberately fast. It exists because of a defect found in M48: the
+  # PostgreSQL tests were written with `importorskip` and `skipif(_PG_DSN is None)`,
+  # and CI never installed psycopg or a server -- so every one of them skipped on
+  # every run, and `CONFLICTED` was never exercised on the engine actually deployed.
+  #
+  # A skipped engine test is not a passing engine test, so this job FAILS if the
+  # PostgreSQL tests do not run. `--strict` on the deselection and the explicit
+  # `pytest.raises`-free count check below are what make that true.
+  # ---------------------------------------------------------------------------
+  postgres:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/vuln_intel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      # psycopg is the driver the host uses; pgserver brings its own server binaries,
+      # so this does not depend on a system PostgreSQL being present or a version
+      # matching whatever the runner ships.
+      # pyyaml is not optional here: this job also runs the full suite below, and
+      # without it `importorskip("yaml")` silently removes whole modules from it.
+      - run: python -m pip install "pytest>=8,<10" "pyyaml>=6" "psycopg[binary]>=3.1" pgserver "sqlalchemy>=2"
+      - name: Fail if any PostgreSQL test skips
+        # This is the check that would have caught the original gap. It runs the
+        # engine-specific tests and fails on a skip rather than reporting success
+        # for tests that did not execute.
+        run: |
+          python -m pytest tests/test_dbapi_store.py tests/test_migration_authored.py             -q -rs -p no:randomly -k "Postgres or Migration"             --junit-xml=/tmp/pg.xml
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse("/tmp/pg.xml").getroot()
+          suite = root if root.tag == "testsuite" else root[0]
+          tests = int(suite.get("tests"))
+          skipped = int(suite.get("skipped"))
+          failures = int(suite.get("failures")) + int(suite.get("errors"))
+          print(f"tests={tests} skipped={skipped} failures={failures}")
+          if failures:
+              sys.exit("PostgreSQL tests failed")
+          if skipped:
+              sys.exit(f"{skipped} PostgreSQL test(s) skipped: the engine was NOT exercised")
+          if tests < 10:
+              sys.exit(f"only {tests} PostgreSQL tests ran; expected the full set")
+          print("all PostgreSQL tests executed against a real server")
+          PY
+      - name: Full suite still passes with a real server available
+        # With a server present the PostgreSQL branches run alongside everything
+        # else, which is how a conflict between the two paths would surface.
+        run: python -m pytest -q -p no:randomly
+
+  # ---------------------------------------------------------------------------
   # Differential ("oracle") job
   #
   # Separate from `test` on purpose. The unit job deliberately installs only the

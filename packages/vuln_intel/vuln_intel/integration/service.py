@@ -206,6 +206,7 @@ class IngestionService:
             outcome=result.outcome,
             reason=result.reason,
             entity_id=result.entity_id,
+            conflict=result.conflict,
         )
 
 

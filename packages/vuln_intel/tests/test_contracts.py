@@ -102,6 +102,10 @@ class TestOutcomeVocabulary:
             "entity_id": None,
             "provenance_id": None,
             "reason": "x",
+            # Always present, `None` unless the write was refused as a contradiction.
+            # A key that appeared only sometimes would make a consumer's `["conflict"]`
+            # raise on the happy path.
+            "conflict": None,
         }
 
 

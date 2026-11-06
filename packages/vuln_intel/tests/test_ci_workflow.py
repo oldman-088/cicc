@@ -418,3 +418,60 @@ class TestTheDeliverablesIndexIsTrue:
         prompt = root / "README.md"
         assert prompt.is_file(), "the Master Prompt is not at the repository root"
         assert "ULTIMATE MASTER PROMPT" in prompt.read_text(encoding="utf-8")
+
+
+class TestTheEngineTestsActuallyRunInCI:
+    """The gap this class exists to close, found in M48.
+
+    Every PostgreSQL test in this package was written as `importorskip("psycopg")` or
+    `skipif(_PG_DSN is None)`, and the `test` job installed neither psycopg nor a
+    server. So they skipped on every CI run, and the `CONFLICTED` rule — the whole
+    point of the M47 change — was never exercised on the engine this package is
+    deployed against. A skipped engine test reports as green, which is how it survived.
+
+    These tests pin the fix: a job must install a driver, and that job must fail rather
+    than pass when a PostgreSQL test skips.
+    """
+
+    @staticmethod
+    def _postgres_job(workflow):
+        jobs = workflow["jobs"]
+        candidates = [
+            name
+            for name, job in jobs.items()
+            if any("psycopg" in str(step.get("run", "")) for step in job.get("steps", []))
+        ]
+        assert candidates, (
+            "no CI job installs psycopg, so every PostgreSQL test skips and the "
+            "engine this package deploys against is never exercised"
+        )
+        return candidates[0], jobs[candidates[0]]
+
+    def test_a_job_installs_a_real_postgres_driver(self, workflow):
+        name, _ = self._postgres_job(workflow)
+        assert name
+
+    def test_that_job_provisions_a_server_not_only_a_driver(self, workflow):
+        """A driver with nothing to connect to still skips."""
+        _, job = self._postgres_job(workflow)
+        runs = " ".join(str(step.get("run", "")) for step in job["steps"])
+        assert "pgserver" in runs or "CICC_TEST_POSTGRES_DSN" in runs, (
+            "the driver is installed but no server is provisioned; _postgres_dsn() "
+            "will return None and every test will skip"
+        )
+
+    def test_that_job_fails_when_a_postgres_test_skips(self, workflow):
+        _, job = self._postgres_job(workflow)
+        text = " ".join(str(step.get("run", "")) for step in job["steps"])
+        assert "skipped" in text, (
+            "the PostgreSQL job does not inspect the skip count, so a run where "
+            "every engine test skipped would still be green"
+        )
+        # It must exit non-zero on a skip, not merely print the number.
+        assert "sys.exit" in text and "skipped" in text
+
+    def test_the_skip_check_reads_a_junit_report_not_stdout(self, workflow):
+        """Parsing console output is how a '1 skipped' line gets missed."""
+        _, job = self._postgres_job(workflow)
+        text = " ".join(str(step.get("run", "")) for step in job["steps"])
+        assert "--junit-xml" in text

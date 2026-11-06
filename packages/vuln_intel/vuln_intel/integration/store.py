@@ -23,10 +23,19 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 from ..schema import severity_rank
-from .contracts import UpsertOutcome, UpsertResult
+from .contracts import CONFLICT_REASON, UpsertOutcome, UpsertResult, conflict_detail
 from .mapping import ENRICHMENT_KEY, assert_persistable, event_types
 
 __all__ = ["InMemoryVulnerabilityStore", "RecordingAudit", "RefusingStore"]
+
+
+def _source_of(provenance: Sequence[Mapping[str, Any]]) -> str | None:
+    """Source named by the most recent provenance block, if any names one."""
+    for block in reversed(list(provenance)):
+        source = block.get("source")
+        if source:
+            return str(source)
+    return None
 
 
 def _aware(value: datetime) -> datetime:
@@ -228,13 +237,19 @@ class InMemoryVulnerabilityStore:
 
         if incoming == existing.collected_at and existing.details != merged_details:
             # Same rule as the DB-API store and the host importer: an equal-instant
-            # disagreement is a contradiction, not an update.
+            # disagreement is a contradiction, not an update. The stored body is left
+            # exactly as it was, and the refused body is described rather than
+            # discarded, so a reviewer can see what disagreed.
             return UpsertResult(
                 UpsertOutcome.CONFLICTED,
                 entity_id=existing.entity_id,
-                reason=(
-                    "conflicting observation for the same instant: refusing to let one "
-                    "source overwrite another at equal timestamps"
+                reason=CONFLICT_REASON,
+                conflict=conflict_detail(
+                    existing_details=existing.details,
+                    incoming_details=merged_details,
+                    instant=incoming.isoformat(),
+                    existing_source=_source_of(existing.provenance),
+                    incoming_source=_source_of([provenance]),
                 ),
             )
 

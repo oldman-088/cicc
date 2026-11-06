@@ -473,3 +473,123 @@ class TestAgainstRealPostgres:
         a, b = "00000000-0000-0000-0000-00000000000d", "00000000-0000-0000-0000-00000000000e"
         _upsert(store, tenant=a, entity_id=_ENTITY_UUID)
         assert store.find(tenant_id=b, cve="CVE-2021-44228") is None
+
+
+@pytest.mark.skipif(_PG_DSN is None, reason="no PostgreSQL available: NOT exercised on PostgreSQL")
+class TestConflictSemanticsOnRealPostgres:
+    """The ``CONFLICTED`` rule, proven on the deployed engine rather than in memory.
+
+    The older-observation rule already had a PostgreSQL test. The equal-instant rule
+    did not, so the one outcome this package introspects (structured conflict detail,
+    provenance lookup for the kept source) was verified only against in-memory and
+    SQLite databases. These tests exist because the interesting failures on PostgreSQL
+    are the ones a fake engine cannot reproduce: JSONB round-tripping, UUID typing, and
+    the fact that a description built after ``rollback()`` would describe a row that
+    another writer may already have replaced.
+    """
+
+    @pytest.fixture()
+    def pg(self):
+        psycopg = pytest.importorskip("psycopg", reason="psycopg is not installed")
+        conn = psycopg.connect(_PG_DSN)
+        with conn.cursor() as cur:
+            cur.execute(POSTGRES_SCHEMA)
+            cur.execute("TRUNCATE vulnerability_record CASCADE")
+        conn.commit()
+        conn.close()
+        return _PG_DSN
+
+    def _store(self):
+        psycopg = pytest.importorskip("psycopg")
+        return DBAPIVulnerabilityStore(
+            connect=lambda: psycopg.connect(_PG_DSN),
+            paramstyle="format",
+            json_mode="json_wrapper",
+            boolean_kev=True,
+        )
+
+    def _conflict(self, store, tenant):
+        _upsert(store, tenant=tenant, when=_T0, details={"severity": "critical"},
+                provenance={"source": "NVD", "observed_at": _T0.isoformat()},
+                entity_id=_ENTITY_UUID)
+        return _upsert(store, tenant=tenant, when=_T0, details={"severity": "low"},
+                       provenance={"source": "OSV", "observed_at": _T0.isoformat()},
+                       entity_id=_ENTITY_UUID)
+
+    def test_an_equal_instant_disagreement_is_conflicted(self, pg):
+        store = self._store()
+        tenant = "00000000-0000-0000-0000-0000000000f1"
+        result = self._conflict(store, tenant)
+        assert result.outcome == UpsertOutcome.CONFLICTED
+        assert result.conflicted is True
+
+    def test_the_accepted_evidence_survives_the_refusal(self, pg):
+        """The stored JSONB document is untouched, not merely rolled back to equal."""
+        store = self._store()
+        tenant = "00000000-0000-0000-0000-0000000000f2"
+        self._conflict(store, tenant)
+        found = store.find(tenant_id=tenant, cve="CVE-2021-44228")
+        assert found["details"]["severity"] == "critical"
+
+    def test_the_refusal_adds_no_provenance_event(self, pg):
+        store = self._store()
+        tenant = "00000000-0000-0000-0000-0000000000f3"
+        self._conflict(store, tenant)
+        events = store.provenance_for(tenant_id=tenant, cve="CVE-2021-44228")
+        assert len(events) == 1
+        assert events[0]["event_type"] == "source_record_created"
+
+    def test_the_detail_names_both_sources_from_the_real_tables(self, pg):
+        """`existing_source` is read from provenance on the server, not assumed."""
+        store = self._store()
+        tenant = "00000000-0000-0000-0000-0000000000f4"
+        result = self._conflict(store, tenant)
+        assert result.conflict is not None
+        assert result.conflict.existing_source == "NVD"
+        assert result.conflict.incoming_source == "OSV"
+
+    def test_the_detail_identifies_the_differing_field(self, pg):
+        store = self._store()
+        tenant = "00000000-0000-0000-0000-0000000000f5"
+        result = self._conflict(store, tenant)
+        assert "severity" in result.conflict.differing_fields
+
+    def test_repeated_conflicts_are_deterministic_on_postgres(self, pg):
+        store = self._store()
+        tenant = "00000000-0000-0000-0000-0000000000f6"
+        _upsert(store, tenant=tenant, when=_T0, details={"severity": "critical"},
+                entity_id=_ENTITY_UUID)
+        results = [
+            _upsert(store, tenant=tenant, when=_T0, details={"severity": "low"},
+                    entity_id=_ENTITY_UUID)
+            for _ in range(4)
+        ]
+        assert {r.outcome for r in results} == {UpsertOutcome.CONFLICTED}
+        assert len({r.conflict.existing_digest for r in results}) == 1
+        assert len(store.provenance_for(tenant_id=tenant, cve="CVE-2021-44228")) == 1
+        assert store.find(tenant_id=tenant, cve="CVE-2021-44228")["details"][
+            "severity"
+        ] == "critical"
+
+    def test_a_batch_continues_after_a_conflict_on_postgres(self, pg):
+        store = self._store()
+        tenant = "00000000-0000-0000-0000-0000000000f7"
+        _upsert(store, tenant=tenant, cve="CVE-2021-0002", when=_T0,
+                details={"severity": "critical"}, entity_id=_ENTITY_UUID)
+        conflicted = _upsert(store, tenant=tenant, cve="CVE-2021-0002", when=_T0,
+                             details={"severity": "low"}, entity_id=_ENTITY_UUID)
+        assert conflicted.outcome == UpsertOutcome.CONFLICTED
+        after = _upsert(store, tenant=tenant, cve="CVE-2021-0001", when=_T0,
+                        details={"severity": "high"}, entity_id=_ENTITY_UUID)
+        assert after.outcome == UpsertOutcome.CREATED
+
+    def test_the_conflict_survives_a_jsonb_round_trip(self, pg):
+        """The detail must serialise the same way the details column does."""
+        import json
+
+        store = self._store()
+        tenant = "00000000-0000-0000-0000-0000000000f8"
+        result = self._conflict(store, tenant)
+        body = json.loads(json.dumps(result.as_dict(), default=str))
+        assert body["conflict"]["differing_fields"] == ["severity"]
+        assert body["conflict"]["existing_digest"] != body["conflict"]["incoming_digest"]

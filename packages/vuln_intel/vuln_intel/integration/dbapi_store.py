@@ -65,8 +65,16 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterator, List, Mapping, Protocol, Sequence
 
 from ..schema import severity_rank
-from .contracts import UpsertOutcome, UpsertResult
+from .contracts import CONFLICT_REASON, UpsertOutcome, UpsertResult, conflict_detail
 from .mapping import ENRICHMENT_KEY, assert_persistable, event_types
+
+
+def _source_of_block(block: Mapping[str, Any] | None) -> str | None:
+    """Source named by one provenance block, if it names one."""
+    if not block:
+        return None
+    source = block.get("source")
+    return str(source) if source else None
 
 __all__ = [
     "POSTGRES_SCHEMA",
@@ -399,6 +407,26 @@ class DBAPIVulnerabilityStore:
             return 0
         return int(self._as_mapping(row, ("n",))["n"])
 
+    def _latest_source(self, conn: Any, tenant_id: str, cve: str) -> str | None:
+        """Source of the most recent accepted observation, read from provenance.
+
+        Queried rather than inferred from the incoming payload: the detail attached to
+        a conflict must name a source that actually wrote the stored record, otherwise
+        it would report the refused observation contradicting itself.
+        """
+        p = self._p
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT source FROM vulnerability_provenance_event "
+            f"WHERE tenant_id = {p} AND cve = {p} ORDER BY id DESC",
+            (tenant_id, cve),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        value = self._as_mapping(row, ("source",))["source"]
+        return str(value) if value else None
+
     def provenance_for(self, *, tenant_id: str, cve: str) -> List[dict[str, Any]]:  # noqa: UP006
         p = self._p
         with self.connection() as conn:
@@ -510,14 +538,21 @@ class DBAPIVulnerabilityStore:
                     # other and neither is newer. The host refuses this outright; doing
                     # so silently as an "update" meant the last writer won and the
                     # disagreement was never recorded. Refused, and named.
+                    # Both bodies are in hand, so the refusal describes what it
+                    # refused instead of only saying that it refused something.
+                    detail = conflict_detail(
+                        existing_details=existing_details,
+                        incoming_details=merged,
+                        instant=existing_stamp.isoformat(),
+                        existing_source=self._latest_source(conn, tenant_id, cve),
+                        incoming_source=_source_of_block(provenance),
+                    )
                     conn.rollback()
                     return UpsertResult(
                         UpsertOutcome.CONFLICTED,
                         entity_id=str(existing["entity_id"]),
-                        reason=(
-                            "conflicting observation for the same instant: refusing to "
-                            "let one source overwrite another at equal timestamps"
-                        ),
+                        reason=CONFLICT_REASON,
+                        conflict=detail,
                     )
 
                 if dry_run:

@@ -11,19 +11,88 @@ used by tests and by the dry-run preview.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
 __all__ = [
+    "CONFLICT_REASON",
     "AuditPort",
+    "ConflictDetail",
     "ImportReport",
     "RecordOutcome",
     "UpsertOutcome",
     "UpsertResult",
     "VulnerabilityStore",
+    "conflict_detail",
     "verify_port",
 ]
+
+
+#: One wording for one rule, in one place.
+#:
+#: This string was copied into all three stores. Three copies of a rule is how the
+#: three stores drifted apart in the first place (the SQLite adapter kept applying
+#: equal-instant disagreements as updates for a whole milestone after the other two
+#: refused them), so the wording lives here now and the stores import it.
+CONFLICT_REASON = (
+    "conflicting observation for the same instant: refusing to let one source "
+    "overwrite another at equal timestamps"
+)
+
+
+def _digest(body: Mapping[str, Any]) -> str:
+    """Stable hash of an observation body, for comparison across stores."""
+    canonical = json.dumps(body, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def _flatten(body: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
+    """Nested mappings to dotted paths, so a difference names a field, not a blob."""
+    flat: dict[str, Any] = {}
+    for key, value in body.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, Mapping):
+            flat.update(_flatten(value, prefix=f"{path}."))
+        else:
+            flat[path] = value
+    return flat
+
+
+def conflict_detail(
+    *,
+    existing_details: Mapping[str, Any],
+    incoming_details: Mapping[str, Any],
+    instant: str,
+    existing_source: str | None = None,
+    incoming_source: str | None = None,
+) -> ConflictDetail:
+    """Describe a same-instant disagreement without resolving it.
+
+    Never picks a winner: this only records what differed. The caller has already
+    decided the incoming body loses; this explains why it was refused.
+    """
+    left, right = _flatten(existing_details), _flatten(incoming_details)
+    differing = tuple(
+        sorted(
+            path
+            for path in set(left) | set(right)
+            if left.get(path, _MISSING) != right.get(path, _MISSING)
+        )
+    )
+    return ConflictDetail(
+        instant=instant,
+        existing_source=existing_source,
+        incoming_source=incoming_source,
+        differing_fields=differing,
+        existing_digest=_digest(existing_details),
+        incoming_digest=_digest(incoming_details),
+    )
+
+
+_MISSING = object()
 
 
 class UpsertOutcome(str):
@@ -50,6 +119,46 @@ class UpsertOutcome(str):
 
 
 @dataclass(frozen=True)
+class ConflictDetail:
+    """What a refused write was carrying, kept because the refusal is evidence.
+
+    A conflict is a fact about two sources disagreeing, and the disagreement is the
+    only reason the record was refused. Reporting it as a prose string threw away
+    exactly the information needed to resolve it: which source contradicted which,
+    when each claimed to have observed it, and which fields differed.
+
+    The fields are deliberately plain JSON-compatible values so a host can store this
+    block without a schema change and an operator can read it without code.
+    """
+
+    #: Instant both observations claim. Neither is newer, which is the whole problem.
+    instant: str
+    #: Source of the observation that was accepted and is still stored, if known.
+    existing_source: str | None
+    #: Source of the observation that was refused.
+    incoming_source: str | None
+    #: Field names whose values differ, sorted. Empty (with a hash mismatch) means the
+    #: difference is somewhere the field walk cannot see.
+    differing_fields: tuple[str, ...]
+    #: Hash of each body, so a reviewer can tell "same fields, different value" from
+    #: "the shapes differ and the walk missed it".
+    existing_digest: str
+    incoming_digest: str
+    message: str = CONFLICT_REASON
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "instant": self.instant,
+            "existing_source": self.existing_source,
+            "incoming_source": self.incoming_source,
+            "differing_fields": list(self.differing_fields),
+            "existing_digest": self.existing_digest,
+            "incoming_digest": self.incoming_digest,
+            "message": self.message,
+        }
+
+
+@dataclass(frozen=True)
 class UpsertResult:
     """What the store did with one record."""
 
@@ -58,6 +167,15 @@ class UpsertResult:
     provenance_id: str | None = None
     #: Set when the store refused the write; the service surfaces it verbatim.
     reason: str | None = None
+    #: Populated only for :attr:`UpsertOutcome.CONFLICTED`: what the refused
+    #: observation was carrying, and how it differed from the body that was kept.
+    #: ``None`` for every other outcome, so a caller can rely on it being present
+    #: exactly when the write was refused as a contradiction.
+    conflict: ConflictDetail | None = None
+
+    @property
+    def conflicted(self) -> bool:
+        return self.outcome == UpsertOutcome.CONFLICTED
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +183,7 @@ class UpsertResult:
             "entity_id": self.entity_id,
             "provenance_id": self.provenance_id,
             "reason": self.reason,
+            "conflict": self.conflict.as_dict() if self.conflict else None,
         }
 
 
@@ -167,6 +286,9 @@ class RecordOutcome:
     outcome: str
     reason: str | None = None
     entity_id: str | None = None
+    #: Present only when ``outcome`` is ``CONFLICTED``; the report carries the
+    #: disagreement rather than just counting it.
+    conflict: ConflictDetail | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -174,6 +296,7 @@ class RecordOutcome:
             "outcome": self.outcome,
             "reason": self.reason,
             "entity_id": self.entity_id,
+            "conflict": self.conflict.as_dict() if self.conflict else None,
         }
 
 
@@ -210,6 +333,11 @@ class ImportReport:
         return sum(1 for o in self.outcomes if o.outcome == UpsertOutcome.CONFLICTED)
 
     @property
+    def conflicts(self) -> list[RecordOutcome]:
+        """The refused observations themselves, not only how many there were."""
+        return [o for o in self.outcomes if o.outcome == UpsertOutcome.CONFLICTED]
+
+    @property
     def failed(self) -> int:
         # A conflict is not a failure of the run; it is a disagreement that was
         # detected and refused. Counting it as failed would make a source that
@@ -227,6 +355,9 @@ class ImportReport:
             "updated": self.updated,
             "unchanged": self.unchanged,
             "previewed": self.previewed,
+            # Counted apart from `failed`: a disagreement is not an outage.
+            "conflicted": self.conflicted,
+            "conflicts": [o.as_dict() for o in self.conflicts],
             "failed": self.failed,
             "outcomes": [o.as_dict() for o in self.outcomes],
             "rejected": list(self.rejected),

@@ -64,7 +64,7 @@ from pathlib import Path
 from typing import Any, Iterator, List, Mapping
 
 from ..schema import severity_rank
-from .contracts import UpsertOutcome, UpsertResult
+from .contracts import CONFLICT_REASON, UpsertOutcome, UpsertResult, conflict_detail
 from .mapping import ENRICHMENT_KEY, assert_persistable, event_types
 
 __all__ = ["SCHEMA", "SCHEMA_VERSION", "SQLiteVulnerabilityStore"]
@@ -142,6 +142,28 @@ def _iso(value: datetime) -> str:
 
 def _parse_iso(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def _source_of_block(block: Mapping[str, Any] | None) -> str | None:
+    """Source named by one provenance block, if it names one."""
+    if not block:
+        return None
+    source = block.get("source")
+    return str(source) if source else None
+
+
+def _latest_source(conn: sqlite3.Connection, tenant_id: str, cve: str) -> str | None:
+    """Source of the most recent accepted observation for this record.
+
+    Read from the stored provenance rather than guessed, so the conflict detail names
+    a source that actually wrote the record instead of the one that was refused.
+    """
+    row = conn.execute(
+        "SELECT source FROM provenance_event WHERE tenant_id = ? AND cve = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (tenant_id, cve),
+    ).fetchone()
+    return str(row["source"]) if row and row["source"] else None
 
 
 @dataclass
@@ -361,14 +383,23 @@ class SQLiteVulnerabilityStore:
                     # Equal instant, different content: a contradiction. The host
                     # importer refuses this; applying it as an "update" let the last
                     # writer win and hid the disagreement.
+                    # Both bodies are in hand here, so the refusal can say what it
+                    # refused. Read before ROLLBACK: the row lock is released on
+                    # rollback, and a description built afterwards could describe a
+                    # body that another writer has since replaced.
+                    detail = conflict_detail(
+                        existing_details=json.loads(existing["details"]),
+                        incoming_details=merged_details,
+                        instant=existing_stamp.isoformat(),
+                        existing_source=_latest_source(conn, tenant_id, cve),
+                        incoming_source=_source_of_block(provenance),
+                    )
                     conn.execute("ROLLBACK")
                     return UpsertResult(
                         UpsertOutcome.CONFLICTED,
                         entity_id=existing["entity_id"],
-                        reason=(
-                            "conflicting observation for the same instant: refusing to "
-                            "let one source overwrite another at equal timestamps"
-                        ),
+                        reason=CONFLICT_REASON,
+                        conflict=detail,
                     )
 
                 if dry_run:
