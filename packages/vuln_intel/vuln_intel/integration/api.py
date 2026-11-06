@@ -67,6 +67,9 @@ ERROR_CODES = {
     # A read-only surface that receives a write must say 405, not 400: 400 tells a
     # client its body was malformed, and there is no body it could have sent.
     "method_not_allowed": 405,
+    # A stored row that cannot be faithfully rebuilt (e.g. no origin) is a data problem,
+    # not a transport or auth problem: 409 tells the client retrying will not help.
+    "stored_record_invalid": 409,
     "store_unavailable": 503,
 }
 

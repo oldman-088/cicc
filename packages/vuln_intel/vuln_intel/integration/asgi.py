@@ -37,6 +37,7 @@ changes nothing.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Mapping, MutableMapping
 
 from ..errors import ValidationError
@@ -128,6 +129,87 @@ class VulnerabilityAsgiApp:
                 await send({"type": "lifespan.shutdown.complete"})
                 return
 
+    # -- interop exports -----------------------------------------------------
+    def _export(self, fmt: str, *, tenant: str, query: Mapping[str, str]) -> ApiResponse:
+        """Serve CycloneDX VEX, OpenVEX or SARIF for this tenant.
+
+        Inventory is optional and is passed as JSON in ``?dependencies=``. Omitting it is
+        *not* the same as passing an empty list: no inventory means exposure was never
+        evaluated, and the document reports every CVE as unassessed rather than implying
+        a clean estate. The response carries that distinction in ``meta``.
+        """
+        from .exports import ExportUnavailable, export_openvex, export_sarif, export_vex
+
+        builders = {
+            "vex": export_vex,
+            "openvex": export_openvex,
+        }
+        if fmt != "sarif" and fmt not in builders:
+            raise ApiError(
+                "not_found",
+                f"unknown export format {fmt!r}; expected one of vex, openvex, sarif",
+            )
+
+        raw_dependencies = query.get("dependencies")
+        dependencies: list[Mapping[str, Any]] | None = None
+        if raw_dependencies is not None:
+            try:
+                parsed = json.loads(raw_dependencies)
+            except json.JSONDecodeError as exc:
+                raise ApiError(
+                    "invalid_request",
+                    "dependencies must be a JSON array of {ecosystem, name, version}",
+                    field_name="dependencies",
+                ) from exc
+            if not isinstance(parsed, list):
+                raise ApiError(
+                    "invalid_request",
+                    "dependencies must be a JSON array",
+                    field_name="dependencies",
+                )
+            dependencies = parsed
+
+        try:
+            rows, _cursor = self.api.store.list(tenant_id=tenant, limit=500)
+        except ApiError:
+            raise
+        except Exception as exc:
+            raise ApiError(
+                "store_unavailable", f"storage list failed: {type(exc).__name__}"
+            ) from exc
+
+        moment = datetime.now(tz=timezone.utc)
+        try:
+            if fmt == "sarif":
+                export = export_sarif(rows, now=moment, dependencies=dependencies)
+                document = export.document
+                unassessed: tuple[str, ...] = ()
+            else:
+                export, _detail = builders[fmt](rows, now=moment, dependencies=dependencies)
+                document, unassessed = export.document, export.unassessed
+        except ExportUnavailable as exc:
+            # A stored row we cannot faithfully rebuild is a 409, not a 500: the request
+            # is well formed and the data is the problem, so a client should not retry.
+            return ApiResponse(
+                status=409,
+                body=_error("stored_record_invalid", str(exc)),
+            )
+
+        return ApiResponse(
+            status=200,
+            body={
+                "document": document,
+                "meta": {
+                    "format": fmt,
+                    "generated_at": moment.isoformat(),
+                    "record_count": export.record_count,
+                    "exposure_evaluated": dependencies is not None,
+                    "unassessed": list(unassessed),
+                    "empty": export.empty,
+                },
+            },
+        )
+
     # -- synchronous core, so it is testable without an event loop -----------
     def handle(self, scope: Scope) -> ApiResponse:
         """Resolve a request to a response. No I/O, no awaits, no framework."""
@@ -181,6 +263,9 @@ class VulnerabilityAsgiApp:
                 from .api import GetVulnerabilityRequest
 
                 return self.api.get(GetVulnerabilityRequest(tenant_id=tenant, cve=route[2]))
+            # /v1/vulnerabilities/export/<format> — the interop adapters, served.
+            if len(route) == 4 and route[2] == "export":
+                return self._export(route[3], tenant=tenant, query=query)
             raise ApiError("not_found", "unknown route")
 
         except ApiError as exc:

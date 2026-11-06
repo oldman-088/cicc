@@ -330,3 +330,157 @@ class TestThePackageStaysFrameworkFree:
             if isinstance(node, ast.Import)
         }
         assert "uvicorn" not in top_level
+
+
+class TestInteropExportsAreServed:
+    """The VEX/OpenVEX/SARIF adapters were tested and unreachable from the service.
+
+    A downstream team that wanted our verdicts had no way to fetch them; the exporters
+    could only be called from Python by someone who already held an AssessmentReport.
+    These tests go through the HTTP surface, which is the difference between a library
+    function and a capability.
+    """
+
+    def _seed_log4j(self, store, *, tenant="tenant-a"):
+        from vuln_intel.integration.mapping import to_store_payload
+        from vuln_intel.schema import (
+            AffectedPackage,
+            CveId,
+            CvssScore,
+            NormalizedVulnerability,
+            Origin,
+            Severity,
+        )
+
+        record = NormalizedVulnerability(
+            cve=CveId.parse("CVE-2021-44228"),
+            origin=Origin.FIXTURE,
+            summary="RCE in Log4j2",
+            affected=(
+                AffectedPackage(
+                    ecosystem="maven", name="log4j-core",
+                    introduced="2.0.0", fixed="2.15.0",
+                ),
+            ),
+            cvss=(
+                CvssScore(
+                    version="3.1", base_score=10.0, severity=Severity.CRITICAL,
+                    vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H", source="nvd",
+                ),
+            ),
+            kev=True,
+            sources=("nvd", "cisa-kev"),
+        )
+        payload = to_store_payload(record, tenant_id=tenant, collected_at=NOW)
+        store.upsert(
+            tenant_id=tenant, cve="CVE-2021-44228", entity=payload["entity"],
+            details=payload["details"], enrichment=payload["enrichment"],
+            provenance=payload["provenance"], collected_at=NOW, dry_run=False,
+        )
+
+    _INVENTORY = (
+        '[{"ecosystem":"maven","name":"log4j-core","version":"2.14.1","asset":"payments"}]'
+    )
+
+    @staticmethod
+    def _deps_query() -> str:
+        from urllib.parse import urlencode
+
+        return urlencode({"dependencies": TestInteropExportsAreServed._INVENTORY})
+
+    def test_cyclonedx_vex_is_served_and_says_exploitable(self, store, app):
+        """With an inventory, a KEV-listed affected package must read as exploitable.
+
+        Without one there is no exposure evaluation and therefore no ``analysis`` block
+        at all — the adjacent test pins that, because "no analysis" and "not affected"
+        must never be confused.
+        """
+        self._seed_log4j(store)
+        recorder = call(app, path="/v1/vulnerabilities/export/vex", query=self._deps_query())
+        assert recorder.status == 200
+        body = recorder.body
+        assert body["meta"]["format"] == "vex"
+        assert body["meta"]["record_count"] == 1
+        assert body["meta"]["exposure_evaluated"] is True
+        vulnerabilities = body["document"]["vulnerabilities"]
+        assert any(v.get("analysis", {}).get("state") == "exploitable" for v in vulnerabilities)
+
+    def test_openvex_is_served_with_a_legal_status(self, store, app):
+        self._seed_log4j(store)
+        recorder = call(app, path="/v1/vulnerabilities/export/openvex", query=self._deps_query())
+        assert recorder.status == 200
+        statements = recorder.body["document"]["statements"]
+        assert statements
+        assert all(s["status"] in {"affected", "not_affected", "fixed", "under_investigation"}
+                   for s in statements)
+
+    def test_sarif_is_served_with_a_version(self, store, app):
+        self._seed_log4j(store)
+        recorder = call(app, path="/v1/vulnerabilities/export/sarif", query=self._deps_query())
+        assert recorder.status == 200
+        document = recorder.body["document"]
+        assert document["version"] == "2.1.0"
+        assert document["runs"]
+
+    def test_an_unknown_format_is_404(self, app):
+        assert call(app, path="/v1/vulnerabilities/export/csv").status == 404
+
+    def test_exports_are_tenant_scoped(self, store, app):
+        """A second tenant must not receive another tenant's VEX statements."""
+        self._seed_log4j(store, tenant="tenant-a")
+        other = build_app(store, resolve_tenant=lambda scope: "tenant-b")
+        recorder = call(other, path="/v1/vulnerabilities/export/openvex")
+        assert recorder.status == 200
+        assert recorder.body["document"]["statements"] == []
+        assert recorder.body["meta"]["record_count"] == 0
+        assert recorder.body["meta"]["empty"] is True
+
+    def test_without_inventory_the_export_is_honest_about_it(self, store, app):
+        """No inventory means exposure was never evaluated — say so, do not imply clean."""
+        self._seed_log4j(store)
+        recorder = call(app, path="/v1/vulnerabilities/export/vex")
+        meta = recorder.body["meta"]
+        assert meta["exposure_evaluated"] is False
+        assert "CVE-2021-44228" in meta["unassessed"]
+
+    def test_with_inventory_exposure_is_evaluated(self, store, app):
+        self._seed_log4j(store)
+        recorder = call(app, path="/v1/vulnerabilities/export/vex", query=self._deps_query())
+        assert recorder.status == 200
+        assert recorder.body["meta"]["exposure_evaluated"] is True
+
+    def test_without_inventory_there_is_no_analysis_block(self, store, app):
+        """`analysis: absent` must not be mistaken for `state: not_affected`."""
+        self._seed_log4j(store)
+        recorder = call(app, path="/v1/vulnerabilities/export/vex")
+        for vulnerability in recorder.body["document"]["vulnerabilities"]:
+            assert "analysis" not in vulnerability
+
+    def test_malformed_inventory_json_is_400(self, app):
+        recorder = call(app, path="/v1/vulnerabilities/export/vex", query="dependencies=notjson")
+        assert recorder.status == 400
+
+    def test_inventory_that_is_not_an_array_is_400(self, app):
+        recorder = call(app, path="/v1/vulnerabilities/export/vex", query='dependencies={"a":1}')
+        assert recorder.status == 400
+
+    def test_a_row_without_origin_is_409_not_a_document(self, store, app):
+        """A row we cannot faithfully rebuild must not become an empty verdict."""
+        store.upsert(
+            tenant_id="tenant-a", cve="CVE-2026-5001", entity={},
+            details={"severity": "high"},  # no origin anywhere
+            enrichment=None, provenance={"source": "x"},
+            collected_at=NOW, dry_run=False,
+        )
+        recorder = call(app, path="/v1/vulnerabilities/export/vex")
+        assert recorder.status == 409
+        assert recorder.body["error"]["code"] == "stored_record_invalid"
+
+    def test_the_export_is_deterministic_for_the_same_rows(self, store, app):
+        """Two exports of unchanged data must not differ only by a timestamp id."""
+        self._seed_log4j(store)
+        first = call(app, path="/v1/vulnerabilities/export/openvex").body["document"]
+        second = call(app, path="/v1/vulnerabilities/export/openvex").body["document"]
+        assert [s["vulnerability"] for s in first["statements"]] == [
+            s["vulnerability"] for s in second["statements"]
+        ]
