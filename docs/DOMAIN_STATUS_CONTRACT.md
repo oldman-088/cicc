@@ -10,8 +10,8 @@ assignment, or state mutation is exposed or planned.
 
 | domain_id | Owner | Current status on merged surface |
 |---|---|---|
-| `threat_intel` | Agent 2 (PR #3, head `4f1776f`, unmerged) | NOT_MOUNTED |
-| `vuln_intel` | Replacement Agent 3 (PR #8 head `7f6db2a` / PR #1, unmerged; merge order owner-reserved) | NOT_MOUNTED |
+| `threat_intel` | Agent 2 (PR #3, head `5d2ab6b` @2026-11-06T09:40Z, unmerged) | NOT_MOUNTED |
+| `vuln_intel` | Agent 3 (PR #8 `3bc6527` merged into PR #1 branch `arena/fa0df787-cicc` 09:33Z; PR #1 head `a56c316`; none on main `ca8f82c`) | NOT_MOUNTED |
 | `frontend_e2e` | Agent 4 self-verification kind | n/a (not a gateway domain) |
 
 New domains register under their `kind`; IDs are stable once registered.
@@ -79,9 +79,51 @@ Writes (invoke/mount/deregister): API write token, server-side only — NOT
 exposed to the browser. Tenant scoping: **pending owner decision** — until
 then, no tenant claim is made; do not build tenant-filtered UI assumptions.
 
+## Circuit breaker (M43)
+
+- Open after `CICC_DOMAIN_CIRCUIT_FAILURES` (default 5) consecutive failures;
+  while open, invokes fast-reject **503 `domain_circuit_open`** (sanitized; the
+  handler is NOT executed). After `CICC_DOMAIN_CIRCUIT_COOLDOWN_S` (default 30)
+  the circuit is half-open: one probe invoke; success closes it, failure
+  re-opens. Circuit state is exposed in status `evidence.circuit`.
+- **Process-local limitation:** circuit state lives in the API process memory.
+  A restart resets it to closed (failures are re-counted from persisted
+  `consecutive_failures` where applicable; an open circuit does NOT survive a
+  restart). This is intentional fail-safe behavior and is documented here.
+- Domain health alerts: rule `domain_status` per kind in
+  `GET /api/v1/ops/alerts` (critical on FAILED), auto-resolved on
+  EXECUTION_VERIFIED; full state/recovery history (incl. resolved) via
+  `GET /api/v1/ops/alerts/history?rule=domain_status`. The generic alert
+  evaluator never auto-resolves `domain_*` rules.
+
+## Gateway observability metrics (M44)
+
+`GET /api/v1/coordination/domains/metrics` (read token) →
+```json
+{"domains": {"<kind>": {"invokes", "successes", "failures", "success_rate",
+   "timeouts", "retries", "stale_count", "skew_count",
+   "latency": {"count", "avg_s", "max_s", "last_s"},
+   "circuit": {"open", "opened_at", "threshold", "cooldown_s", "opens", "closes"},
+   "mount_count", "status"}},
+ "labels": ["kind"],
+ "note": "bounded-cardinality labels (kind only); no tenant ids / tokens /
+ payloads; latency+retry counters are process-local (restart resets them;
+ invokes/successes persist via coord_domain_stats)"}
+```
+- Labels are bounded to `kind` — kinds are server-registered only; tenant ids,
+  tokens, payload values, and any user-controlled strings NEVER appear in
+  metrics or diagnostics (enforced by tests).
+- `status` per kind is the same lifecycle value as the status DTO above —
+  metrics are consistent with this contract.
+- **Process-local limitation:** latency aggregates, timeout/retry counters,
+  stale/skew counts, and circuit transition counters live in process memory
+  and reset on restart; `invokes`/`successes`/`consecutive_failures` persist
+  in `coord_domain_stats`. Single-process deployments (current) are exact;
+  multi-replica deployments would need external aggregation (not present).
+
 ## Error / unavailable-state behavior
 
-Uniform codes: 401/403/404/409/410/413/422/429/502. Domain-specific: 409
+Uniform codes: 401/403/404/409/410/413/422/429/502/503. Domain-specific: 409
 `domain_not_mounted:{kind}`, 422 `domain_invalid`, 502 `domain_error`
 (sanitized — never internals/credentials). UI mapping: loading = in-flight;
 empty = `domains:[]`; unmounted = NOT_MOUNTED; unavailable = DEGRADED/FAILED

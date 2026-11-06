@@ -334,6 +334,15 @@ def list_domains(_gate: None = Depends(read_token_dependency)):
             "note": "empty list = no domain API mounted in this deployment; status is evidence-based (NOT_MOUNTED/MOUNTED/AVAILABLE/EXECUTION_VERIFIED/DEGRADED/FAILED/UNKNOWN)"}
 
 
+@router.get("/domains/metrics")
+def domain_metrics(_gate: None = Depends(read_token_dependency)):
+    """M44: per-domain gateway metrics (read-only). Bounded-cardinality labels
+    (kind only); never tenant ids, tokens, payloads, or user-controlled values."""
+    with ops.SessionLocal() as s:
+        _load_persisted_stats(s)
+    return domains.domain_metrics()
+
+
 @router.get("/domains/{kind}/status")
 def domain_status(kind: str, _gate: None = Depends(read_token_dependency)):
     """M37: evidence-based lifecycle status for one domain + observable stats."""
@@ -435,14 +444,19 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             registry.record_event(s, task_id, "domain_not_mounted", f"kind={kind}")
             s.commit()
             raise HTTPException(status_code=409, detail=f"domain_not_mounted: {kind}")
+        import time as _t
+        _t0 = _t.time()
         try:
-            out = domains.invoke(kind, payload, task=t)  # M37/M43: per-attempt timeout + retries, same idempotency key + circuit breaker
+            out = domains.invoke(kind, payload, task=t)  # M37/M43/M44: timeout+retries, same key, circuit breaker
+            _lat = _t.time() - _t0
         except domains.DomainCircuitOpen as e:
             registry.record_event(s, task_id, "domain_circuit_open", str(e))
             s.commit()
             raise HTTPException(status_code=503, detail=str(e))
         except domains.DomainError as e:
-            domains.record_outcome(kind, False, str(e))
+            domains.record_outcome(kind, False, str(e), latency_s=_t.time() - _t0,
+                                   attempts=getattr(e, "attempts", 1),
+                                   timed_out=bool(getattr(e, "timed_out", False)))
             registry.record_event(s, task_id, "domain_error", str(e))
             st_now = domains.domain_status(kind)
             ops.record_domain_alert(kind, st_now, str(e), s=s)
@@ -450,7 +464,8 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             s.commit()
             raise HTTPException(status_code=502, detail=str(e))
         except domains.DomainInvalid as e:
-            domains.record_outcome(kind, False, str(e))
+            domains.record_outcome(kind, False, str(e), latency_s=_t.time() - _t0,
+                                   attempts=getattr(e, "attempts", 1))
             registry.record_event(s, task_id, "domain_invalid", str(e))
             ops.record_domain_alert(kind, domains.domain_status(kind), str(e), s=s)
             _persist_domain_stats(s)
@@ -458,7 +473,8 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             raise HTTPException(status_code=422, detail=str(e))
         freshness = domains.analyze_freshness(out["provenance"])  # M42: basis + clock skew
         stale = freshness["stale"]
-        domains.record_outcome(kind, True, stale=stale)
+        domains.record_outcome(kind, True, stale=stale, latency_s=_lat,
+                               skew=freshness["clock_skew_s"] > 0)  # M44 metrics
         ops.record_event("info", "coordination.domains",
                          f"domain invoke ok kind={kind} task={task_id} stale={stale} by=api-write-token", s=s)
         ops.record_domain_alert(kind, "EXECUTION_VERIFIED", "recovered", s=s)

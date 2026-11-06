@@ -1,7 +1,7 @@
 {
  "schema": "cicc-project-state/1",
  "updated": "2026-11-06",
- "maintainer": "Agent 1 \u2014 Central Coordination & System Health/Operations",
+ "maintainer": "Agent 1 — Central Coordination & System Health/Operations",
  "branch": "arena/961971ed-cicc",
  "pr": 4,
  "domains": {
@@ -19,7 +19,7 @@
     "DAG",
     "sweep"
    ],
-   "tests": "API 269/269; PG 42/42; web 35/35; contract 31/31; e2e 24/24; trials 23/23 + 32/32 + M40 23/23 + M41 19/19 + M42 18/18 + M43 11/11 (sandbox-labeled)"
+   "tests": "API 275/275; PG 42/42; web 35/35; contract 31/31; e2e 24/24; trials 23/23 + 32/32 + M40 19/20 (TI ABSENT — PR#3 unmerged) + M41 17/17 + M42 16/16 + M43 11/11 + M44 17/17 (sandbox-labeled)"
   },
   "ops": {
    "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,9 +43,9 @@
   "never_touch_other_branches": true
  },
  "milestones_done": [
-  "M1..M43"
+  "M1..M44"
  ],
- "contracts": "{'version': 'v1.0', 'doc': 'docs/INTEGRATION_CONTRACTS.md', 'confirmation': 'requested on PR #4, pending Agents 2/3/4', 'adoption': 'Agents 2/3/4: PENDING explicit confirmation (no replies as of 2026-11-05 10:10 UTC; no agent PR references /api/v1/coordination yet); v1.0 proposed, additive, unchanged \u2014 docs/CONTRACT_ADOPTION.md'} | M29: amendment workflow live (AMD-001 pending owner accept)",
+ "contracts": "{'version': 'v1.0', 'doc': 'docs/INTEGRATION_CONTRACTS.md', 'confirmation': 'requested on PR #4, pending Agents 2/3/4', 'adoption': 'Agents 2/3/4: PENDING explicit confirmation (no replies as of 2026-11-05 10:10 UTC; no agent PR references /api/v1/coordination yet); v1.0 proposed, additive, unchanged — docs/CONTRACT_ADOPTION.md'} | M29: amendment workflow live (AMD-001 pending owner accept)",
  "tenant_isolation": "decision doc only (docs/TENANT_ISOLATION_DECISION.md); awaiting owner; not production-ready",
  "rabbitmq": "deprioritized per owner (M13-05); human-assisted delivery supported and honestly reported; live verification environment-blocked (no Docker)",
  "bff": {
@@ -64,7 +64,7 @@
   ],
   "tests": "web 23/23 (6 BFF unit) + live :3000 checks"
  },
- "webhook_security": "HMAC+dedup+allowlist+rotation in force; no signed timestamp exists at GitHub (documented, not invented); remaining replay risk + mitigations in SECURITY_REVIEW.md \u00a7M14",
+ "webhook_security": "HMAC+dedup+allowlist+rotation in force; no signed timestamp exists at GitHub (documented, not invented); remaining replay risk + mitigations in SECURITY_REVIEW.md §M14",
  "e2e": {
   "script": "scripts/e2e_check.py",
   "last_run": "2026-11-05T10:28:12Z",
@@ -80,12 +80,11 @@
  },
  "i18n": "en/ar parity 187/187 at every commit since M11 (M14 '188' was a report miscount; no key lost)",
  "pr_heads_checked": {
-  "1": "84fca76",
-  "2": "744ccd3",
-  "3": "1a46f70",
-  "6": "d523ee0",
-  "7": "3222937",
-  "checked": "2026-11-05T12:25Z"
+  "1": "a56c316",
+  "2": "a765188",
+  "3": "5d2ab6b",
+  "8": "3bc6527 (merged into arena/fa0df787-cicc @2026-11-06T09:33Z; not on main)",
+  "checked": "2026-11-06T09:40Z"
  },
  "adoption": {
   "agent2": "PENDING (primary TI)",
@@ -94,17 +93,18 @@
   "agent4": "PR#2 code-level reads, surface verified compatible",
   "backup_agent4": "PR#7 @6bf5f7f adopts canonical AgentDTO in code (AGENT-REPORTED); execution UNVERIFIED"
  },
- "cross_agent_execution": "VERIFIED via PR#4 reference-dashboard BFF (task api-5a6a79bfa8d5); PR#7 Backup-Agent-4 component execution: UNVERIFIED | M27: Backup Agent 4 PR #7 EXECUTED = AGENT-REPORTED, LOCAL FIXTURE VERIFIED (comment @12:28:14Z, task api-be4338ee4efc); VERIFIED pending; idempotency_key now on task reads | M28: PR#7 @3736e74b VERIFIED by Agent 1 in shared sandbox env (task api-6387d0386482, key bff-e55f8476-\u2026); not production",
+ "cross_agent_execution": "VERIFIED via PR#4 reference-dashboard BFF (task api-5a6a79bfa8d5); PR#7 Backup-Agent-4 component execution: UNVERIFIED | M27: Backup Agent 4 PR #7 EXECUTED = AGENT-REPORTED, LOCAL FIXTURE VERIFIED (comment @12:28:14Z, task api-be4338ee4efc); VERIFIED pending; idempotency_key now on task reads | M28: PR#7 @3736e74b VERIFIED by Agent 1 in shared sandbox env (task api-6387d0386482, key bff-e55f8476-…); not production",
  "bff_write_path": "APPROVED+IMPLEMENTED on PR#4 reference BFF: POST /api/v1/coordination/tasks only, WEB_BFF_ALLOW_COORD_WRITE=1 + WEB_BFF_WRITE_TOKEN, DTO allowlist, server idempotency_key; live VERIFIED 201 + persisted + events @2026-11-05T12:22Z",
- "updated_at": "2026-11-06T06:05Z",
+ "updated_at": "2026-11-06",
  "last_commit": "9e97bc84cbdcd19cfc7c553c6658fdb11ef4d8f6",
  "milestone_notes": {
-  "M27": "complete: idempotency_key on reads, BFF hardening 31/31, PG 14, traceability doc, 197/197 API, 31/31 contract, 24/24 e2e"
+  "M27": "complete: idempotency_key on reads, BFF hardening 31/31, PG 14, traceability doc, 197/197 API, 31/31 contract, 24/24 e2e",
+  "M44": "complete: domain gateway observability GET /domains/metrics (per-kind invokes/successes/failures/success_rate/timeouts/retries/stale_count/skew_count/latency{count,avg_s,max_s,last_s}/circuit{open,opens,closes}/mount_count/status; labels=[kind] bounded, no tenant ids/tokens/payloads; latency+circuit counters process-local, invokes/successes persisted) + M43 regression tests (concurrent failures open once, concurrent recovery closes once, repeated remounts, boundary payloads, restart = process-local documented); test_m44_observability.py 6/6; m44_observability_trial.py 17/17 @09:44:12Z SANDBOX/FIXTURE; API 275/275, PG 42/42"
  },
  "backup_restore": "DONE M36: scripts/backup_restore.py tested vs SQLite+PG; docs/DISASTER_RECOVERY.md",
  "agent_model": {
   "agent1": "coordination+ops (this branch, PR #4)",
-  "agent2": "TI primary \u2014 AVAILABLE; PR #3 head 17e1189 (re-reconciled 2026-11-06 ~09:15Z)",
+  "agent2": "TI primary — AVAILABLE; PR #3 head 17e1189 (re-reconciled 2026-11-06 ~09:15Z)",
   "agent3_replacement": "VI primary; PR #8 head 700e30f, PR #1 84fca76; merge order owner-reserved",
   "agent4": "frontend primary; PR #2 head 9ebee7",
   "inactive": [
@@ -113,5 +113,5 @@
    "Backup Agent 4"
   ]
  },
- "ti_integration": "PR #3 @4f1776f read-only adapter verified (M40 trial); NOT mounted in production (PR unmerged); data EXPERIMENTAL_DEMO_DATA_ONLY"
+ "ti_integration": "PR #3 @5d2ab6b entry point re-verified 09:41Z (api.py 447 lines, imports apps.threat_intelligence.*, EXPERIMENTAL_DEMO_DATA_ONLY intact, imports cleanly from codeload export /tmp/pr3h); NOT mounted (PR unmerged, AMD-003 pending); data EXPERIMENTAL_DEMO_DATA_ONLY"
 }

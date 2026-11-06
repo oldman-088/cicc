@@ -52,6 +52,16 @@ behavior is implemented and tested (below).
 - All task transitions are append-only events (`coord_task_events`) visible via
   `/tasks/{id}/trace`.
 
+## M44 note (2026-11-06T09:50Z)
+
+Gateway observability (M44, `GET /api/v1/coordination/domains/metrics`) and
+diagnostics are verified by tests to exclude tenant ids, tokens, and payload
+values; metric labels are bounded to server-registered domain `kind` only.
+Claimed-vs-authenticated distinction is unchanged (claimed_tenant trace event
+remains UNVERIFIED; no isolation claims). Remaining cross-tenant enforcement,
+audit-actor, and DB-access (RLS) requirements stay owner-reserved — see
+"What requires owner approval" below.
+
 ## What requires owner approval
 
 - Enabling platform auth / tenant resolution (shared infra).

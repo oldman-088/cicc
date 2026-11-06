@@ -60,7 +60,11 @@ _STATS: dict[str, dict] = {}
 def _empty_stat() -> dict:
     return {"invokes": 0, "successes": 0, "consecutive_failures": 0,
             "last_status": None, "last_error": None, "last_invoke_at": None,
-            "last_stale": False}
+            "last_stale": False,
+            # M44 observability counters (process-local, bounded labels = kind only)
+            "timeouts": 0, "retries": 0, "stale_count": 0, "skew_count": 0,
+            "latency_count": 0, "latency_total_s": 0.0, "latency_max_s": 0.0, "last_latency_s": None,
+            "circuit_opens": 0, "circuit_closes": 0}
 
 
 def stale_after_s() -> float:
@@ -120,8 +124,12 @@ def load_persisted_stats(rows: list) -> None:
             merged.update({k: v for k, v in persisted.items() if v is not None})
             if cur is not None:
                 merged["consecutive_failures"] = cur.get("consecutive_failures", 0)
-                # volatile in-memory fields survive the merge
-                for k in ("mount_count", "previous_version", "last_stale"):
+                # volatile in-memory fields survive the merge (process-local
+                # fine-grained counters + mount history; see domain_metrics note)
+                for k in ("mount_count", "previous_version", "last_stale", "timeouts",
+                          "retries", "stale_count", "skew_count", "latency_count",
+                          "latency_total_s", "latency_max_s", "last_latency_s",
+                          "circuit_opens", "circuit_closes"):
                     if cur.get(k) is not None:
                         merged[k] = cur[k]
                 if cur["invokes"] > persisted["invokes"]:
@@ -225,26 +233,43 @@ def is_mounted(kind: str) -> bool:
     return kind in _REGISTRY
 
 
-def record_outcome(kind: str, ok: bool, error: str | None = None, stale: bool = False) -> None:
-    """Record observable invoke evidence (called by the router per attempt
-    outcome; persisted to coord_domain_stats for restart-survivable health)."""
+def record_outcome(kind: str, ok: bool, error: str | None = None, stale: bool = False,
+                   latency_s: float | None = None, attempts: int = 1,
+                   timed_out: bool = False, skew: bool = False) -> None:
+    """Record observable invoke evidence (called by the router once per invoke;
+    persisted counters survive restart via coord_domain_stats, the fine-grained
+    M44 latency/timeout counters are process-local — documented limitation)."""
     st = _STATS.setdefault(kind, _empty_stat())
     st["invokes"] += 1
     st["last_invoke_at"] = _now()
+    st["retries"] += max(0, attempts - 1)
+    if timed_out:
+        st["timeouts"] += 1
+    if latency_s is not None:
+        st["latency_count"] += 1
+        st["latency_total_s"] = round(st.get("latency_total_s", 0.0) + latency_s, 6)
+        st["latency_max_s"] = max(st.get("latency_max_s", 0.0), latency_s)
+        st["last_latency_s"] = latency_s
     if ok:
         st["successes"] += 1
         st["consecutive_failures"] = 0
         st["last_status"] = "ok"
         st["last_error"] = None
         st["last_stale"] = bool(stale)
+        if stale:
+            st["stale_count"] = st.get("stale_count", 0) + 1
+        if skew:
+            st["skew_count"] = st.get("skew_count", 0) + 1
         if _CIRCUIT.get(kind, {}).get("open"):
             _CIRCUIT[kind] = {"open": False, "opened_at": None}  # half-open success -> closed
+            st["circuit_closes"] = st.get("circuit_closes", 0) + 1
     else:
         st["consecutive_failures"] = st.get("consecutive_failures", 0) + 1
         st["last_status"] = "error"
         st["last_error"] = (error or "error")[:200]  # sanitized, truncated
         if st["consecutive_failures"] >= circuit_failures_threshold() and not _CIRCUIT.get(kind, {}).get("open"):
             _CIRCUIT[kind] = {"open": True, "opened_at": time.time()}
+            st["circuit_opens"] = st.get("circuit_opens", 0) + 1
 
 
 def domain_status(kind: str) -> str:
@@ -258,6 +283,32 @@ def domain_status(kind: str) -> str:
     if st["last_status"] == "ok":
         return EXECUTION_VERIFIED
     return DEGRADED if st["successes"] > 0 else FAILED  # FAILED also covers retry-exhausted / consecutive failures
+
+
+def domain_metrics() -> dict:
+    """M44: per-domain gateway metrics. Labels are bounded (kind only — kinds are
+    server-registered); no tenant ids, tokens, payloads, or user-controlled
+    values ever appear. Latency aggregates are process-local."""
+    out = {}
+    for kind in sorted(_STATS):
+        st = _STATS[kind]
+        lc = st.get("latency_count", 0)
+        out[kind] = {
+            "invokes": st["invokes"], "successes": st["successes"],
+            "failures": st["invokes"] - st["successes"],
+            "success_rate": round(st["successes"] / st["invokes"], 4) if st["invokes"] else None,
+            "timeouts": st.get("timeouts", 0), "retries": st.get("retries", 0),
+            "stale_count": st.get("stale_count", 0), "skew_count": st.get("skew_count", 0),
+            "latency": {"count": lc, "avg_s": round(st.get("latency_total_s", 0) / lc, 4) if lc else None,
+                        "max_s": round(st.get("latency_max_s", 0.0), 4), "last_s": st.get("last_latency_s")},
+            "circuit": {**circuit_state(kind), "opens": st.get("circuit_opens", 0),
+                        "closes": st.get("circuit_closes", 0)},
+            "mount_count": st.get("mount_count", 0),
+            "status": domain_status(kind),
+        }
+    return {"domains": out, "labels": ["kind"], "note": "bounded-cardinality labels (kind only); "
+            "no tenant ids / tokens / payloads; latency+retry counters are process-local (restart resets them; "
+            "invokes/successes persist via coord_domain_stats)"}
 
 
 def all_statuses() -> dict[str, dict]:
@@ -333,12 +384,16 @@ def invoke(kind: str, payload: dict, task=None) -> dict:
             return _validate_response(kind, resp)
         except cf.TimeoutError:
             last_exc = DomainError(f"{kind}: handler timed out after {timeout_s}s (attempt {attempt}/{attempts})")
+            last_exc.timed_out = True
+            last_exc.attempts = attempt
         except (DomainNotMounted, DomainError, DomainInvalid) as e:
             last_exc = e
+            last_exc.attempts = attempt
             if isinstance(e, DomainInvalid):
                 break  # schema violation is not retryable
         except Exception as e:  # sanitized: never leak internals
             last_exc = DomainError(f"{kind}: handler failed ({type(e).__name__}) (attempt {attempt}/{attempts})")
+            last_exc.attempts = attempt
         if attempt < attempts:
             time.sleep(min(0.2 * attempt, 1.0))  # short backoff
     raise last_exc  # type: ignore[misc]
