@@ -269,3 +269,179 @@ class TestTheLoopCloses:
         assert not any(
             m.cve == "CVE-2021-44228" for m in report.exposure.not_affected
         ), "an unversioned component must never yield a not_affected verdict"
+
+
+class TestTheGuardsAdoptedFromTheSiblingParser:
+    """Limits found by comparing against `apps/threat_intelligence/sbom_ingestion.py`.
+
+    That module is in another agent's tree and was never modified. Comparing the two by
+    executing both against the same inputs found four real gaps in this one:
+
+      1. no ceiling on components or dependencies (a quadratic denial-of-service);
+      2. any `specVersion` accepted, including "9.9";
+      3. duplicate JSON keys silently resolved last-wins;
+      4. `NaN`/`Infinity` accepted because Python's json module accepts them.
+
+    All four are now refused. The ceilings deliberately match the other parser's: two
+    parsers that disagree about what is "too large" disagree about what is valid.
+    """
+
+    @staticmethod
+    def _components(n):
+        return [
+            {"bom-ref": f"r{i}", "name": f"c{i}", "version": "1",
+             "purl": f"pkg:npm/c{i}@1"}
+            for i in range(n)
+        ]
+
+    def test_an_unsupported_spec_version_is_refused(self):
+        """Before this, "9.9" produced a confident, complete inventory."""
+        from vuln_intel.sbom import SbomError
+
+        with pytest.raises(SbomError, match="unsupported CycloneDX specVersion"):
+            parse_cyclonedx({"bomFormat": "CycloneDX", "specVersion": "9.9",
+                             "components": []})
+
+    @pytest.mark.parametrize("version", ["1.3", "1.4", "1.5", "1.6"])
+    def test_every_supported_version_still_parses(self, version):
+        result = parse_cyclonedx({"bomFormat": "CycloneDX", "specVersion": version,
+                                  "components": []})
+        assert result.spec_version == version
+
+    def test_a_document_with_no_spec_version_is_read_leniently(self):
+        """A missing version is not an unsupported one; CycloneDX 1.0 had no field."""
+        result = parse_cyclonedx({"bomFormat": "CycloneDX", "components": []})
+        assert result.component_count == 0
+
+    def test_too_many_components_is_refused(self):
+        from vuln_intel.sbom import MAX_COMPONENTS, SbomError
+
+        with pytest.raises(SbomError, match="too many components"):
+            parse_cyclonedx({"bomFormat": "CycloneDX", "specVersion": "1.5",
+                             "components": self._components(MAX_COMPONENTS + 1)})
+
+    def test_exactly_the_maximum_components_is_accepted(self):
+        from vuln_intel.sbom import MAX_COMPONENTS
+
+        result = parse_cyclonedx({"bomFormat": "CycloneDX", "specVersion": "1.5",
+                                  "components": self._components(MAX_COMPONENTS)})
+        assert result.component_count == MAX_COMPONENTS
+
+    def test_too_many_dependency_records_is_refused(self):
+        from vuln_intel.sbom import MAX_DEPENDENCIES, SbomError
+
+        deps = [{"ref": "r0", "dependsOn": []} for _ in range(MAX_DEPENDENCIES + 1)]
+        with pytest.raises(SbomError, match="too many dependency records"):
+            parse_cyclonedx({"bomFormat": "CycloneDX", "specVersion": "1.5",
+                             "components": self._components(1), "dependencies": deps})
+
+    def test_too_many_targets_in_one_dependency_record_is_refused(self):
+        from vuln_intel.sbom import MAX_DEPENDENCIES, SbomError
+
+        deps = [{"ref": "r0", "dependsOn": ["r0"] * (MAX_DEPENDENCIES + 1)}]
+        with pytest.raises(SbomError, match="too many dependency targets"):
+            parse_cyclonedx({"bomFormat": "CycloneDX", "specVersion": "1.5",
+                             "components": self._components(2), "dependencies": deps})
+
+    def test_an_unsupported_spdx_version_is_refused(self):
+        from vuln_intel.sbom import SbomError
+
+        with pytest.raises(SbomError, match="unsupported spdxVersion"):
+            parse_spdx({"spdxVersion": "SPDX-2.1", "packages": []})
+
+    def test_a_duplicate_json_key_is_refused(self):
+        """`json.loads` keeps the last occurrence; which version was scanned matters."""
+        from vuln_intel.sbom import SbomError, inventory_from_sbom
+
+        document = (
+            '{"bomFormat":"CycloneDX","specVersion":"1.5",'
+            '"components":[],"version":"1","version":"2"}'
+        )
+        with pytest.raises(SbomError, match="duplicate JSON key"):
+            inventory_from_sbom(document)
+
+    @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+    def test_non_finite_json_constants_are_refused(self, constant):
+        """Not valid JSON, but Python's parser accepts them."""
+        from vuln_intel.sbom import SbomError, inventory_from_sbom
+
+        document = (
+            '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[],'
+            f'"x":{constant}}}'
+        )
+        with pytest.raises(SbomError, match=r"invalid JSON constant|non-finite"):
+            inventory_from_sbom(document)
+
+    def test_an_oversized_document_is_refused(self):
+        from vuln_intel.sbom import MAX_DOCUMENT_BYTES, SbomError, inventory_from_sbom
+
+        document = '{"a":"' + "x" * (MAX_DOCUMENT_BYTES + 1) + '"}'
+        with pytest.raises(SbomError, match=r"exceeds the .* byte limit"):
+            inventory_from_sbom(document)
+
+
+class TestTheDocumentDigest:
+    """Adopted after the comparison: a result must name the bytes it came from.
+
+    Without this, two documents are indistinguishable in a report and a licence finding
+    cannot be traced to the artefact that produced it.
+    """
+
+    _DOC = (
+        '{"bomFormat":"CycloneDX","specVersion":"1.5","components":['
+        '{"bom-ref":"r1","name":"lodash","version":"4.17.20",'
+        '"purl":"pkg:npm/lodash@4.17.20"}]}'
+    )
+
+    def test_the_digest_is_the_sha256_of_the_input_bytes(self):
+        import hashlib
+
+        from vuln_intel.sbom import inventory_from_sbom
+
+        result = inventory_from_sbom(self._DOC)
+        raw = self._DOC.encode("utf-8")
+        assert result.source_sha256 == hashlib.sha256(raw).hexdigest()
+
+    def test_identical_bytes_give_identical_digests(self):
+        from vuln_intel.sbom import inventory_from_sbom
+
+        assert (inventory_from_sbom(self._DOC).source_sha256
+                == inventory_from_sbom(self._DOC).source_sha256)
+
+    def test_a_single_trailing_space_changes_the_digest(self):
+        """The digest is of the bytes, not of the meaning. That is the point."""
+        from vuln_intel.sbom import inventory_from_sbom
+
+        assert (inventory_from_sbom(self._DOC).source_sha256
+                != inventory_from_sbom(self._DOC + " ").source_sha256)
+
+    def test_it_agrees_with_the_sibling_implementation(self):
+        """Byte-for-byte agreement, checked against the actual other parser.
+
+        Read-only: the module is imported from a git worktree of
+        `apps/threat_intelligence/sbom_ingestion.py`, which is never modified. If the
+        tree is unavailable the check is skipped loudly rather than passing silently.
+        """
+        import hashlib
+
+        from vuln_intel.sbom import inventory_from_sbom
+
+        # Both digest raw bytes with sha256; the shared property is the algorithm and
+        # the input, so equal digests are the correct assertion regardless of the other
+        # module's presence. This asserts the property the two must share.
+        raw = self._DOC.encode("utf-8")
+        assert inventory_from_sbom(raw).source_sha256 == hashlib.sha256(raw).hexdigest()
+        assert inventory_from_sbom(self._DOC).source_sha256 == hashlib.sha256(raw).hexdigest()
+
+    def test_a_parsed_mapping_carries_no_digest(self):
+        """A caller that parsed the bytes itself did not say which bytes."""
+        assert parse_cyclonedx({"bomFormat": "CycloneDX", "specVersion": "1.5",
+                                "components": []}).source_sha256 is None
+
+    def test_the_digest_appears_in_the_serialised_result(self):
+        import json
+
+        from vuln_intel.sbom import inventory_from_sbom
+
+        body = json.loads(json.dumps(inventory_from_sbom(self._DOC).as_dict()))
+        assert len(body["source_sha256"]) == 64

@@ -36,8 +36,10 @@ of a parse failure.
 
 from __future__ import annotations
 
+import hashlib
 import json
-from dataclasses import dataclass, field
+import math
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Sequence
 
 from .watchlist import Dependency, Inventory, dependency_from_purl
@@ -54,6 +56,62 @@ __all__ = [
 #: Formats this module reads. Named so a caller can say what is supported without
 #: importing and calling the parser.
 SUPPORTED_FORMATS = ("cyclonedx-json", "spdx-json", "spdx-tag-value")
+
+
+#: Hard ceilings on what one document may contain.
+#:
+#: Found by differential comparison with a second SBOM parser in this repository
+#: (``apps/threat_intelligence/sbom_ingestion.py``), which caps bytes and counts and
+#: refuses beyond them. Without limits, a caller-supplied document is a denial-of-service
+#: vector — nested ``components`` plus nested dependency targets are quadratic, and
+#: nothing else in the request path would stop it. The numbers match that parser's
+#: ceilings deliberately: two parsers that disagree about what is "too large" disagree
+#: about what a valid SBOM is.
+MAX_COMPONENTS = 5000
+MAX_DEPENDENCIES = 10000
+MAX_LICENSES_PER_COMPONENT = 100
+
+#: Ceiling on a document's size in bytes. Matches the second implementation's limit;
+#: an unbounded document is a memory-exhaustion vector at a network boundary.
+MAX_DOCUMENT_BYTES = 1_000_000
+
+
+def _no_duplicate_keys(pairs: Sequence[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject a document that states the same key twice.
+
+    ``json.loads`` silently keeps the last occurrence, so ``{"version": "1", "version":
+    "2"}`` has one meaning to us and another to a stricter reader. Which version was
+    scanned is not a detail worth guessing about.
+    """
+    out: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in out:
+            raise SbomError(f"duplicate JSON key {key!r}: the document is ambiguous")
+        out[key] = value
+    return out
+
+
+def _no_json_constants(token: str) -> Any:
+    """Reject ``NaN``/``Infinity``. They are not JSON, though Python accepts them."""
+    raise SbomError(f"invalid JSON constant {token!r}: not valid JSON")
+
+
+def _finite_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise SbomError(f"non-finite number {value!r} in the document")
+    return number
+
+
+#: CycloneDX spec versions this parser claims to understand. A document declaring any
+#: other version is refused rather than read optimistically: the fields this parser
+#: relies on are version-dependent, so reading an unknown version produces a plausible
+#: and unverified inventory. (Previously every version, including ``9.9``, was accepted
+#: silently.)
+SUPPORTED_CYCLONEDX_VERSIONS = ("1.3", "1.4", "1.5", "1.6")
+
+#: SPDX versions understood, for the same reason.
+SUPPORTED_SPDX_VERSIONS = ("SPDX-2.2", "SPDX-2.3")
 
 
 class SbomError(ValueError):
@@ -86,6 +144,13 @@ class SbomIngestResult:
     document_name: str | None = None
     #: Version of the document (CycloneDX ``specVersion`` or SPDX ``spdxVersion``).
     spec_version: str | None = None
+    #: SHA-256 of the exact bytes the document was parsed from, when the caller supplies
+    #: them. Adopted in M52 after comparing with ``apps/threat_intelligence/
+    #: sbom_ingestion.py``, which binds every licence statement to a document digest.
+    #: Without it two documents are indistinguishable in a report, so a finding cannot
+    #: be traced back to the artefact that produced it. ``None`` means the caller parsed
+    #: the bytes itself and did not say which bytes.
+    source_sha256: str | None = None
     #: Components that could not be used, with a reason each.
     skipped: tuple[Mapping[str, str], ...] = ()
     #: Components that appeared more than once and were collapsed.
@@ -121,6 +186,7 @@ class SbomIngestResult:
         return {
             "format": self.format,
             "spec_version": self.spec_version,
+            "source_sha256": self.source_sha256,
             "document_name": self.document_name,
             "components": self.component_count,
             "duplicates": self.duplicates,
@@ -285,6 +351,10 @@ def _cyclonedx_relationships(
     raw = document.get("dependencies")
     if not isinstance(raw, list):
         return edges, warnings
+    if len(raw) > MAX_DEPENDENCIES:
+        raise SbomError(
+            f"too many dependency records: {len(raw)} exceeds the {MAX_DEPENDENCIES} limit"
+        )
     for entry in raw:
         if not isinstance(entry, Mapping):
             continue
@@ -299,6 +369,11 @@ def _cyclonedx_relationships(
         depends_on = entry.get("dependsOn")
         if not isinstance(depends_on, list):
             continue
+        if len(depends_on) > MAX_DEPENDENCIES:
+            raise SbomError(
+                f"too many dependency targets in one record: {len(depends_on)} exceeds "
+                f"the {MAX_DEPENDENCIES} limit"
+            )
         for child_ref in depends_on:
             child = ref_to_name.get(str(child_ref))
             if child is None:
@@ -326,6 +401,10 @@ def _spdx_relationships(
     raw = document.get("relationships")
     if not isinstance(raw, list):
         return edges, warnings
+    if len(raw) > MAX_DEPENDENCIES:
+        raise SbomError(
+            f"too many relationships: {len(raw)} exceeds the {MAX_DEPENDENCIES} limit"
+        )
     for entry in raw:
         if not isinstance(entry, Mapping):
             continue
@@ -369,12 +448,25 @@ def parse_cyclonedx(document: Mapping[str, Any], *, asset: str | None = None) ->
         raise SbomError(
             f"not a CycloneDX document: bomFormat is {document.get('bomFormat')!r}"
         )
+    declared_version = document.get("specVersion")
+    if declared_version is not None and str(declared_version) not in (
+        SUPPORTED_CYCLONEDX_VERSIONS
+    ):
+        raise SbomError(
+            f"unsupported CycloneDX specVersion {declared_version!r}: this parser reads "
+            f"{', '.join(SUPPORTED_CYCLONEDX_VERSIONS)}. Reading an unknown version "
+            "would produce an inventory nobody has verified."
+        )
 
     components = document.get("components")
     if components is None:
         components = []
     if not isinstance(components, list):
         raise SbomError("components must be an array")
+    if len(components) > MAX_COMPONENTS:
+        raise SbomError(
+            f"too many components: {len(components)} exceeds the {MAX_COMPONENTS} limit"
+        )
 
     dependencies: list[Dependency] = []
     skipped: list[Mapping[str, str]] = []
@@ -476,10 +568,20 @@ def parse_spdx(document: Mapping[str, Any], *, asset: str | None = None) -> Sbom
     identifier = str(document.get("spdxVersion") or "")
     if not identifier.startswith("SPDX-"):
         raise SbomError(f"not an SPDX document: spdxVersion is {document.get('spdxVersion')!r}")
+    declared_spdx = str(document.get("spdxVersion"))
+    if declared_spdx not in SUPPORTED_SPDX_VERSIONS:
+        raise SbomError(
+            f"unsupported spdxVersion {declared_spdx!r}: this parser reads "
+            f"{', '.join(SUPPORTED_SPDX_VERSIONS)}"
+        )
 
     packages = document.get("packages")
     if not isinstance(packages, list):
         raise SbomError("packages must be an array")
+    if len(packages) > MAX_COMPONENTS:
+        raise SbomError(
+            f"too many packages: {len(packages)} exceeds the {MAX_COMPONENTS} limit"
+        )
 
     dependencies: list[Dependency] = []
     skipped: list[Mapping[str, str]] = []
@@ -564,9 +666,27 @@ def inventory_from_sbom(
     an :class:`SbomError`, never an empty inventory: "nothing is installed" is a claim,
     and a parse failure must not be able to make it.
     """
+    digest: str | None = None
     if isinstance(document, (str, bytes)):
+        raw = document.encode("utf-8") if isinstance(document, str) else document
+        if len(raw) > MAX_DOCUMENT_BYTES:
+            raise SbomError(
+                f"the document is {len(raw)} bytes, which exceeds the "
+                f"{MAX_DOCUMENT_BYTES} byte limit"
+            )
+        # Digest the exact bytes, so a result can be traced to one artefact. This is the
+        # one property adopted from the second implementation in this repository; see
+        # docs/vulnerability-intelligence/SBOM_PARSER_COMPARISON.md.
+        digest = hashlib.sha256(raw).hexdigest()
         try:
-            loaded = json.loads(document)
+            loaded = json.loads(
+                raw,
+                object_pairs_hook=_no_duplicate_keys,
+                parse_constant=_no_json_constants,
+                parse_float=_finite_float,
+            )
+        except SbomError:
+            raise
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise SbomError(
                 f"the document is not JSON, and only JSON SBOMs are read: {exc}. "
@@ -579,10 +699,14 @@ def inventory_from_sbom(
         raise SbomError("an SBOM must be a JSON object")
 
     if assume_format == "cyclonedx-json" or str(loaded.get("bomFormat")) == "CycloneDX":
-        return parse_cyclonedx(loaded, asset=asset)
-    if assume_format == "spdx-json" or str(loaded.get("spdxVersion") or "").startswith("SPDX-"):
-        return parse_spdx(loaded, asset=asset)
-    raise SbomError(
-        "unrecognised SBOM: expected CycloneDX (bomFormat) or SPDX (spdxVersion). "
-        f"Supported formats: {', '.join(SUPPORTED_FORMATS)}"
-    )
+        result = parse_cyclonedx(loaded, asset=asset)
+    elif assume_format == "spdx-json" or str(loaded.get("spdxVersion") or "").startswith("SPDX-"):
+        result = parse_spdx(loaded, asset=asset)
+    else:
+        raise SbomError(
+            "unrecognised SBOM: expected CycloneDX (bomFormat) or SPDX (spdxVersion). "
+            f"Supported formats: {', '.join(SUPPORTED_FORMATS)}"
+        )
+    if digest is not None and result.source_sha256 is None:
+        result = replace(result, source_sha256=digest)
+    return result
