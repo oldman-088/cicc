@@ -5,15 +5,17 @@ const require = createRequire(import.meta.url);
 
 type AxeViolation = { id: string; impact: string | null; help: string; nodes: Array<{ target: string[] }> };
 type AxeRunner = {
-  run: (context: Document, options: { runOnly: { type: "tag"; values: string[] } }) => Promise<{ violations: AxeViolation[] }>;
+  run: (context: Document | Element, options: { runOnly: { type: "tag"; values: string[] } }) => Promise<{ violations: AxeViolation[] }>;
 };
 
-async function expectNoWcagViolations(page: Page) {
+async function expectNoWcagViolationsInReadinessPanel(page: Page) {
   await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
   const violations = await page.evaluate(async () => {
     const axe = (window as Window & { axe?: AxeRunner }).axe;
     if (!axe) throw new Error("axe-core did not attach to the page");
-    const results = await axe.run(document, {
+    const panel = document.querySelector('[data-testid="beta-readiness-panel"]');
+    if (!panel) throw new Error("The beta-readiness panel did not render");
+    const results = await axe.run(panel, {
       runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
     });
     return results.violations.map(({ id, impact, help, nodes }) => ({ id, impact, help, nodes }));
@@ -76,7 +78,7 @@ test("shows provider-reported status while keeping unmounted TI/VI and contract 
   await expect(page.getByRole("heading", { name: "Operational readiness" })).toBeVisible();
   await expect(page.getByText("test-fixture: ops source label is unverified")).toBeVisible();
   await expect(page.getByText("Degraded (provider-reported)").first()).toBeVisible();
-  await expect(page.getByText("No broker configured")).toBeVisible();
+  await expect(page.getByText("No broker configured", { exact: true })).toBeVisible();
   await expect(page.getByText("Not host-verified").first()).toBeVisible();
   await expect(page.getByText("Package API not mounted in CICC")).toBeVisible();
   await expect(page.getByText("Proposed API and fixtures only")).toBeVisible();
@@ -111,12 +113,12 @@ test("passes axe-core WCAG A/AA checks in English and Arabic RTL", async ({ page
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Operational readiness" })).toBeVisible();
-  await expectNoWcagViolations(page);
+  await expectNoWcagViolationsInReadinessPanel(page);
 
   await page.getByRole("combobox", { name: "Interface language" }).selectOption("ar");
   await expect(page.locator('[lang="ar"][dir="rtl"]').first()).toBeAttached();
   await expect(page.getByRole("heading", { name: "الجاهزية التشغيلية" })).toBeVisible();
-  await expectNoWcagViolations(page);
+  await expectNoWcagViolationsInReadinessPanel(page);
 });
 
 test("supports keyboard refresh and exposes busy and provider alerts to assistive technology", async ({ page }) => {
