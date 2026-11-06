@@ -423,6 +423,59 @@ class TestProjectStateFile:
         state = self._state()
         assert state["quality_gates"]["tests_passed"] >= 600
 
+    def test_declared_test_count_matches_what_this_suite_collects(self):
+        """`tests_passed` said 1769 while the suite had grown past 1870.
+
+        A floor (`>= 600`) cannot catch that: it stays true forever. The number is
+        compared here to what the collector actually sees, with tolerance only for the
+        tests CI gains and a bare local run lacks (hypothesis / openapi-spec-validator
+        skips), so the file cannot drift into fiction while every test stays green.
+        """
+        import pathlib
+        import subprocess
+        import sys
+
+        declared = self._state()["quality_gates"]["tests_passed"]
+        collected = subprocess.run(
+            [sys.executable, "-m", "pytest", "--collect-only", "-q"],
+            capture_output=True,
+            text=True,
+            cwd=str(pathlib.Path(__file__).resolve().parents[1]),
+            check=False,
+        ).stdout
+        counted = 0
+        for line in collected.splitlines():
+            head, _, tail = line.rpartition(": ")
+            if head and tail.isdigit():
+                counted += int(tail)
+        assert counted > 1000, f"collector produced no usable count:\n{collected[:400]}"
+        assert abs(declared - counted) <= 15, (
+            f"PROJECT_STATE.json declares {declared} tests; the collector sees {counted}. "
+            "Update quality_gates.tests_passed."
+        )
+
+    def test_declared_mypy_count_matches_the_package(self):
+        """The file said 58 files long after the package had 61."""
+        import pathlib
+        import re
+        import subprocess
+        import sys
+
+        declared = int(re.search(r"(\d+) files", self._state()["quality_gates"]["mypy"]).group(1))
+        out = subprocess.run(
+            [sys.executable, "-m", "mypy", "vuln_intel"],
+            capture_output=True,
+            text=True,
+            cwd=str(pathlib.Path(__file__).resolve().parents[1]),
+            check=False,
+        ).stdout
+        found = re.search(r"in (\d+) source files", out)
+        if found is None:  # mypy absent locally; say so rather than pass silently
+            pytest.skip("mypy not installed, so the declared file count was NOT checked")
+        assert int(found.group(1)) == declared, (
+            f"PROJECT_STATE.json declares {declared} mypy files; mypy reports {found.group(1)}"
+        )
+
 class TestStandingAndConflictsReachTheApi:
     """The read contract silently dropped every field added this week.
 
