@@ -10,8 +10,8 @@ assignment, or state mutation is exposed or planned.
 
 | domain_id | Owner | Current status on merged surface |
 |---|---|---|
-| `threat_intel` | Agent 2 (PR #3, head `5d2ab6b` @2026-11-06T09:40Z, unmerged) | NOT_MOUNTED |
-| `vuln_intel` | Agent 3 (PR #8 `3bc6527` merged into PR #1 branch `arena/fa0df787-cicc` 09:33Z; PR #1 head `a56c316`; none on main `ca8f82c`) | NOT_MOUNTED |
+| `threat_intel` | Agent 2 (PR #3, head `f3d3a7f` @2026-11-06T10:05Z, unmerged) | NOT_MOUNTED |
+| `vuln_intel` | Agent 3 (PR #8 `3bc6527` merged into PR #1 branch 09:33Z; PR #1 head `f8e96c7`; none on main `ca8f82c`) | NOT_MOUNTED |
 | `frontend_e2e` | Agent 4 self-verification kind | n/a (not a gateway domain) |
 
 New domains register under their `kind`; IDs are stable once registered.
@@ -115,6 +115,15 @@ then, no tenant claim is made; do not build tenant-filtered UI assumptions.
   metrics or diagnostics (enforced by tests).
 - `status` per kind is the same lifecycle value as the status DTO above —
   metrics are consistent with this contract.
+- M45 additions for beta readiness: status evidence and metrics now include
+  `last_success_at` (process-local) and `mounts_total` (persisted audit-event
+  count, survives restart; `mount_count` stays process-local). Circuit
+  open/close transitions are persisted as sanitized audit events
+  (`coordination.domains`: "domain circuit OPENED/CLOSED kind=…"). On startup
+  the API restores persisted stats for ALL kinds, so after a restart an
+  unmounted domain honestly shows NOT_MOUNTED with its historical counters
+  still visible in `statuses`/metrics. 502 `domain_error` messages no longer
+  include even the exception class name (M45 sanitization hardening).
 - **Process-local limitation:** latency aggregates, timeout/retry counters,
   stale/skew counts, and circuit transition counters live in process memory
   and reset on restart; `invokes`/`successes`/`consecutive_failures` persist

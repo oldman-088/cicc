@@ -78,6 +78,14 @@ def main():
     fx.write(FIXTURE)
     fx.close()
     KIND = "threat_intel"
+    # baseline so the trial is rerunnable on a non-empty DB (assert deltas)
+    _, b0, _ = call(API, "GET", "/api/v1/coordination/domains/metrics", token=R)
+    b = b0.get("domains", {}).get(KIND, {})
+    base = {k: b.get(k, 0) for k in ("invokes", "successes", "timeouts", "retries",
+                                      "stale_count", "skew_count")}
+    base["opens"] = b.get("circuit", {}).get("opens", 0)
+    base["mounts_total"] = b.get("mounts_total", 0)
+
     call(API, "POST", f"/api/v1/coordination/domains/{KIND}/deregister", None, W)
     st, _, _ = call(API, "POST", f"/api/v1/coordination/domains/{KIND}/mount",
                     {"module_path": fx.name, "attr": "handle", "version": "1.0",
@@ -113,23 +121,27 @@ def main():
     st, m, _ = call(API, "GET", "/api/v1/coordination/domains/metrics", token=R)
     d = m.get("domains", {}).get(KIND, {})
     check("metrics labels bounded to kind", m.get("labels") == ["kind"], str(m.get("labels")))
-    check("invokes==7 successes==4 failures==3",
-          d.get("invokes") == 7 and d.get("successes") == 4 and d.get("failures") == 3,
-          json.dumps({k: d.get(k) for k in ("invokes", "successes", "failures")}))
-    check("success_rate==round(4/7,4)", d.get("success_rate") == round(4 / 7, 4),
-          str(d.get("success_rate")))
-    check("stale_count==1 skew_count==1 timeouts==1 retries==3",
-          d.get("stale_count") == 1 and d.get("skew_count") == 1 and d.get("timeouts") == 1
-          and d.get("retries") == 3,
-          json.dumps({k: d.get(k) for k in ("stale_count", "skew_count", "timeouts", "retries")}))
+    check("invoke-mix deltas: +7 invokes +4 successes +3 failures",
+          d.get("invokes") - base["invokes"] == 7 and d.get("successes") - base["successes"] == 4
+          and (d.get("invokes") - d.get("successes")) - (base["invokes"] - base["successes"]) == 3,
+          json.dumps({k: d.get(k) - base[k] for k in ("invokes", "successes")}))
+    di, ds = d.get("invokes") - base["invokes"], d.get("successes") - base["successes"]
+    check("success_rate consistent with counters", d.get("success_rate") == round(d["successes"] / d["invokes"], 4),
+          f"rate={d.get('success_rate')} expected={round(d['successes']/d['invokes'],4)} ({ds}/{di} this run)")
+    check("stale/skew/timeout/retry deltas +1/+1/+1/+3",
+          d.get("stale_count") - base["stale_count"] == 1 and d.get("skew_count") - base["skew_count"] == 1
+          and d.get("timeouts") - base["timeouts"] == 1 and d.get("retries") - base["retries"] == 3,
+          json.dumps({k: d.get(k) - base[k] for k in ("stale_count", "skew_count", "timeouts", "retries")}))
     lat = d.get("latency", {})
-    check("latency count==7 avg/max/last present",
-          lat.get("count") == 7 and lat.get("avg_s") is not None and lat.get("max_s") is not None
+    check("latency aggregates present (count>=7, avg/max/last set)",
+          lat.get("count", 0) >= 7 and lat.get("avg_s") is not None and lat.get("max_s") is not None
           and lat.get("last_s") is not None, json.dumps(lat))
-    check("circuit transitions counted (opens==0 here, state consistent)",
-          d.get("circuit", {}).get("opens") == 0 and "open" in d.get("circuit", {}),
+    check("circuit transitions counted (no new opens in the mix, state consistent)",
+          d.get("circuit", {}).get("opens") - base["opens"] == 0 and "open" in d.get("circuit", {}),
           json.dumps(d.get("circuit", {})))
-    check("mount_count==2 in metrics", d.get("mount_count") == 2, str(d.get("mount_count")))
+    check("mount history: mounts_total delta==2 (persisted), mount_count==2 (process-local)",
+          d.get("mounts_total") - base["mounts_total"] == 2 and d.get("mount_count") == 2,
+          f"mounts_total={d.get('mounts_total')} mount_count={d.get('mount_count')}")
     check("metrics consistent with domain status contract (status field present)",
           d.get("status") in ("EXECUTION_VERIFIED", "DEGRADED", "FAILED", "MOUNTED", "AVAILABLE"),
           str(d.get("status")))
@@ -152,9 +164,9 @@ def main():
                      {"payload": {"mode": "ok"}, "idempotency_key": f"{run}-c3"}, W)
     _, m, _ = call(API, "GET", "/api/v1/coordination/domains/metrics", token=R)
     d = m["domains"][KIND]
-    check("circuit opens==1, 4th invoke fast-rejected 503 sanitized",
-          d["circuit"]["opens"] == 1 and d["circuit"]["open"] is True and st == 503
-          and "hunter2" not in json.dumps(co), f"st={st} opens={d['circuit']['opens']}")
+    check("circuit opens +1 after 3 consecutive failures, 4th invoke fast-rejected 503 sanitized",
+          d["circuit"]["opens"] - base["opens"] == 1 and d["circuit"]["open"] is True and st == 503
+          and "hunter2" not in json.dumps(co), f"st={st} opens_delta={d['circuit']['opens'] - base['opens']}")
 
     # alert state + recovery history visible and sanitized
     _, ah, _ = call(API, "GET", "/api/v1/ops/alerts/history?rule=domain_status", token=R)

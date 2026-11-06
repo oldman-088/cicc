@@ -290,10 +290,12 @@ def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None =
         return {"tasks": registry.list_tasks(s, state, agent, kind, limit, dead_letter)}
 
 
-def _load_persisted_stats(s) -> None:
-    """M38: restore domain evidence from coord_domain_stats (restart persistence)."""
+def _load_persisted_stats(s, include_unmounted: bool = False) -> None:
+    """M38: restore domain evidence from coord_domain_stats (restart persistence).
+    M45: include_unmounted=True is used at startup + metrics reads so persisted
+    counters of not-currently-mounted kinds stay visible (beta operations)."""
     rows = s.execute(select(models.CoordinationDomainStat)).scalars().all()
-    domains.load_persisted_stats(list(rows))
+    domains.load_persisted_stats(list(rows), include_unmounted=include_unmounted)
 
 
 def _persist_domain_stats(s) -> None:
@@ -339,8 +341,18 @@ def domain_metrics(_gate: None = Depends(read_token_dependency)):
     """M44: per-domain gateway metrics (read-only). Bounded-cardinality labels
     (kind only); never tenant ids, tokens, payloads, or user-controlled values."""
     with ops.SessionLocal() as s:
-        _load_persisted_stats(s)
-    return domains.domain_metrics()
+        _load_persisted_stats(s, include_unmounted=True)  # M45: show persisted history of unmounted kinds
+        m = domains.domain_metrics()
+        # M45: persisted mount history across restarts (audit events), kind-only labels
+        rows = s.execute(select(models.Event).where(
+            models.Event.source == "coordination.domains",
+            models.Event.message.like("domain mounted kind=%"))).scalars().all()
+        for kind, d in m["domains"].items():
+            d["mounts_total"] = sum(1 for r in rows
+                                    if r.message.startswith(f"domain mounted kind={kind} "))
+        m["note"] += "; mounts_total is persisted audit-event count (survives restart), "
+        "mount_count is process-local"
+    return m
 
 
 @router.get("/domains/{kind}/status")
@@ -407,6 +419,17 @@ def deregister_domain(kind: str, _gate: None = Depends(read_token_dependency),
     return {"kind": kind, "deregistered": True, "status": domains.NOT_MOUNTED}
 
 
+def _record_circuit_transition(s, kind: str, pre_open: bool) -> None:
+    """M45: persist circuit open/close transitions as audit events (survive
+    restart; sanitized — kind + transition only). Process-local circuit STATE
+    still resets fail-safe on restart (documented)."""
+    post_open = bool(domains._CIRCUIT.get(kind, {}).get("open"))  # raw flag: cooldown-adjusted state would miss half-open closes
+    if post_open != pre_open:
+        ops.record_event("warning" if post_open else "info", "coordination.domains",
+                         f"domain circuit {'OPENED' if post_open else 'CLOSED'} kind={kind} "
+                         f"threshold={domains.circuit_failures_threshold()}", s=s)
+
+
 @router.post("/domains/{kind}/invoke", status_code=201)
 def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_dependency),
                   authorization: str | None = Header(default=None)):
@@ -446,6 +469,8 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             raise HTTPException(status_code=409, detail=f"domain_not_mounted: {kind}")
         import time as _t
         _t0 = _t.time()
+        # M45: raw internal flag (circuit_state is cooldown-adjusted; half-open still counts as open)
+        _pre_circuit_open = bool(domains._CIRCUIT.get(kind, {}).get("open"))  # M45: detect transition for persisted audit
         try:
             out = domains.invoke(kind, payload, task=t)  # M37/M43/M44: timeout+retries, same key, circuit breaker
             _lat = _t.time() - _t0
@@ -457,6 +482,7 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             domains.record_outcome(kind, False, str(e), latency_s=_t.time() - _t0,
                                    attempts=getattr(e, "attempts", 1),
                                    timed_out=bool(getattr(e, "timed_out", False)))
+            _record_circuit_transition(s, kind, _pre_circuit_open)  # M45: persisted circuit audit
             registry.record_event(s, task_id, "domain_error", str(e))
             st_now = domains.domain_status(kind)
             ops.record_domain_alert(kind, st_now, str(e), s=s)
@@ -466,6 +492,7 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
         except domains.DomainInvalid as e:
             domains.record_outcome(kind, False, str(e), latency_s=_t.time() - _t0,
                                    attempts=getattr(e, "attempts", 1))
+            _record_circuit_transition(s, kind, _pre_circuit_open)  # M45
             registry.record_event(s, task_id, "domain_invalid", str(e))
             ops.record_domain_alert(kind, domains.domain_status(kind), str(e), s=s)
             _persist_domain_stats(s)
@@ -475,6 +502,7 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
         stale = freshness["stale"]
         domains.record_outcome(kind, True, stale=stale, latency_s=_lat,
                                skew=freshness["clock_skew_s"] > 0)  # M44 metrics
+        _record_circuit_transition(s, kind, _pre_circuit_open)  # M45: half-open success closes -> persisted audit
         ops.record_event("info", "coordination.domains",
                          f"domain invoke ok kind={kind} task={task_id} stale={stale} by=api-write-token", s=s)
         ops.record_domain_alert(kind, "EXECUTION_VERIFIED", "recovered", s=s)

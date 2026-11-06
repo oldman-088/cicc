@@ -38,6 +38,12 @@ _STARTED_TS = _STARTED.timestamp()
 async def lifespan(app: FastAPI):
     ops.init_db()
     ops.record_event("info", "api", "CICC operations service started")
+    # M45: restore persisted domain evidence at startup so health/status/metrics
+    # are correct immediately after a restart (circuit state itself stays
+    # process-local fail-safe — documented in DOMAIN_STATUS_CONTRACT.md)
+    from app.coordination.router import _load_persisted_stats as _coord_load
+    with ops.SessionLocal() as _s:
+        _coord_load(_s, include_unmounted=True)  # M45: persisted history of all kinds visible after restart
     logger.info("operations service started")
     yield
     ops.record_event("info", "api", "CICC operations service stopping — disposing DB engine (safe shutdown)")

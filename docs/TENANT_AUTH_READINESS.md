@@ -62,6 +62,16 @@ remains UNVERIFIED; no isolation claims). Remaining cross-tenant enforcement,
 audit-actor, and DB-access (RLS) requirements stay owner-reserved — see
 "What requires owner approval" below.
 
+## M45 note (2026-11-06T10:35Z)
+
+Beta-readiness work changed nothing about tenant semantics: claimed tenant
+ids remain UNVERIFIED claims (trace event only), no tenant-isolation claims are
+made, and the M45 MVP trial verifies that tenant ids never appear in metrics,
+diagnostics, alerts, or audit-derived views. Auth gating regression-tested
+(401 no/wrong token; read token cannot invoke/mount; browser domain invoke
+403 at the BFF). Cross-tenant enforcement, audit-actor, and DB-access (RLS)
+requirements remain owner-reserved below.
+
 ## What requires owner approval
 
 - Enabling platform auth / tenant resolution (shared infra).

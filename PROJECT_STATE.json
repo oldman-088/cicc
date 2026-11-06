@@ -19,7 +19,7 @@
     "DAG",
     "sweep"
    ],
-   "tests": "API 275/275; PG 42/42; web 35/35; contract 31/31; e2e 24/24; trials 23/23 + 32/32 + M40 19/20 (TI ABSENT — PR#3 unmerged) + M41 17/17 + M42 16/16 + M43 11/11 + M44 17/17 (sandbox-labeled)"
+   "tests": "API 282/282; PG 42/42; web 35/35; contract 31/31; e2e 24/24; trials 23/23 + 32/32 + M40 19/20 (TI ABSENT — PR#3 unmerged) + M41 17/17 + M42 16/16 + M43 11/11 + M44 17/17 + M45 26/26 (sandbox-labeled)"
   },
   "ops": {
    "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,7 +43,7 @@
   "never_touch_other_branches": true
  },
  "milestones_done": [
-  "M1..M44"
+  "M1..M45"
  ],
  "contracts": "{'version': 'v1.0', 'doc': 'docs/INTEGRATION_CONTRACTS.md', 'confirmation': 'requested on PR #4, pending Agents 2/3/4', 'adoption': 'Agents 2/3/4: PENDING explicit confirmation (no replies as of 2026-11-05 10:10 UTC; no agent PR references /api/v1/coordination yet); v1.0 proposed, additive, unchanged — docs/CONTRACT_ADOPTION.md'} | M29: amendment workflow live (AMD-001 pending owner accept)",
  "tenant_isolation": "decision doc only (docs/TENANT_ISOLATION_DECISION.md); awaiting owner; not production-ready",
@@ -80,11 +80,11 @@
  },
  "i18n": "en/ar parity 187/187 at every commit since M11 (M14 '188' was a report miscount; no key lost)",
  "pr_heads_checked": {
-  "1": "a56c316",
-  "2": "a765188",
-  "3": "5d2ab6b",
+  "1": "f8e96c7",
+  "2": "b6cf817",
+  "3": "f3d3a7f",
   "8": "3bc6527 (merged into arena/fa0df787-cicc @2026-11-06T09:33Z; not on main)",
-  "checked": "2026-11-06T09:40Z"
+  "checked": "2026-11-06T10:05Z"
  },
  "adoption": {
   "agent2": "PENDING (primary TI)",
@@ -99,7 +99,8 @@
  "last_commit": "9e97bc84cbdcd19cfc7c553c6658fdb11ef4d8f6",
  "milestone_notes": {
   "M27": "complete: idempotency_key on reads, BFF hardening 31/31, PG 14, traceability doc, 197/197 API, 31/31 contract, 24/24 e2e",
-  "M44": "complete: domain gateway observability GET /domains/metrics (per-kind invokes/successes/failures/success_rate/timeouts/retries/stale_count/skew_count/latency{count,avg_s,max_s,last_s}/circuit{open,opens,closes}/mount_count/status; labels=[kind] bounded, no tenant ids/tokens/payloads; latency+circuit counters process-local, invokes/successes persisted) + M43 regression tests (concurrent failures open once, concurrent recovery closes once, repeated remounts, boundary payloads, restart = process-local documented); test_m44_observability.py 6/6; m44_observability_trial.py 17/17 @09:44:12Z SANDBOX/FIXTURE; API 275/275, PG 42/42"
+  "M44": "complete: domain gateway observability GET /domains/metrics (per-kind invokes/successes/failures/success_rate/timeouts/retries/stale_count/skew_count/latency{count,avg_s,max_s,last_s}/circuit{open,opens,closes}/mount_count/status; labels=[kind] bounded, no tenant ids/tokens/payloads; latency+circuit counters process-local, invokes/successes persisted) + M43 regression tests (concurrent failures open once, concurrent recovery closes once, repeated remounts, boundary payloads, restart = process-local documented); test_m44_observability.py 6/6; m44_observability_trial.py 17/17 @09:44:12Z SANDBOX/FIXTURE; API 275/275, PG 42/42",
+  "M45": "complete: beta-readiness persistence (startup restore of persisted stats for all kinds; circuit transitions persisted as audit events; mounts_total persisted; last_success_at process-local; 502 sanitization hardened) + cross-domain MVP trial m45_mvp_beta_trial.py --manage-api 26/26 @10:33:17Z (11 acceptance items incl. real PR-head TI f3d3a7f + VI f8e96c7 via gateway, SIGKILL restart recovery); test_m45_beta_readiness.py 7/7; AMD-003 plan doc M45_AMD003_IMPLEMENTATION_PLAN.md (PENDING, reversible); API 282/282, PG 42/42"
  },
  "backup_restore": "DONE M36: scripts/backup_restore.py tested vs SQLite+PG; docs/DISASTER_RECOVERY.md",
  "agent_model": {
@@ -113,5 +114,5 @@
    "Backup Agent 4"
   ]
  },
- "ti_integration": "PR #3 @5d2ab6b entry point re-verified 09:41Z (api.py 447 lines, imports apps.threat_intelligence.*, EXPERIMENTAL_DEMO_DATA_ONLY intact, imports cleanly from codeload export /tmp/pr3h); NOT mounted (PR unmerged, AMD-003 pending); data EXPERIMENTAL_DEMO_DATA_ONLY"
+ "ti_integration": "PR #3 @f3d3a7f entry point re-verified 10:05Z (imports cleanly from codeload export /tmp/pr3m45, EXPERIMENTAL_DEMO_DATA_ONLY intact); mounted+invoked via gateway in m45 trial as SANDBOX/UNMERGED-BRANCH only; NOT mounted in any merged app (PR unmerged, AMD-003 pending)"
 }

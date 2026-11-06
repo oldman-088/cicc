@@ -60,7 +60,7 @@ _STATS: dict[str, dict] = {}
 def _empty_stat() -> dict:
     return {"invokes": 0, "successes": 0, "consecutive_failures": 0,
             "last_status": None, "last_error": None, "last_invoke_at": None,
-            "last_stale": False,
+            "last_stale": False, "last_success_at": None,  # M45: process-local
             # M44 observability counters (process-local, bounded labels = kind only)
             "timeouts": 0, "retries": 0, "stale_count": 0, "skew_count": 0,
             "latency_count": 0, "latency_total_s": 0.0, "latency_max_s": 0.0, "last_latency_s": None,
@@ -105,13 +105,18 @@ def is_result_stale(provenance: dict, now=None) -> bool:
     return analyze_freshness(provenance, now)["stale"]
 
 
-def load_persisted_stats(rows: list) -> None:
+def load_persisted_stats(rows: list, include_unmounted: bool = False) -> None:
     """M38: restore evidence from coord_domain_stats rows (restart persistence).
-    Only fills kinds that are currently mounted; in-memory values win on conflict
-    only when they are strictly fresher (higher invokes)."""
+    By default only fills kinds that are currently mounted; in-memory values win
+    on conflict only when they are strictly fresher (higher invokes).
+    M45: include_unmounted=True (startup + metrics reads) also restores rows for
+    kinds that are not mounted right now — after a restart handlers are gone
+    (status stays honestly NOT_MOUNTED via domain_status) but persisted counters
+    must remain visible in statuses/metrics for beta operations. The persist
+    path keeps the default so a deregister really clears in-memory stats."""
     for row in rows:
         kind = getattr(row, "kind", None)
-        if kind is None or kind not in _REGISTRY:
+        if kind is None or (not include_unmounted and kind not in _REGISTRY):
             continue
         cur = _STATS.get(kind)
         persisted = {"invokes": row.invokes or 0, "successes": row.successes or 0,
@@ -126,7 +131,8 @@ def load_persisted_stats(rows: list) -> None:
                 merged["consecutive_failures"] = cur.get("consecutive_failures", 0)
                 # volatile in-memory fields survive the merge (process-local
                 # fine-grained counters + mount history; see domain_metrics note)
-                for k in ("mount_count", "previous_version", "last_stale", "timeouts",
+                for k in ("mount_count", "previous_version", "last_stale", "last_success_at",
+                          "timeouts",
                           "retries", "stale_count", "skew_count", "latency_count",
                           "latency_total_s", "latency_max_s", "last_latency_s",
                           "circuit_opens", "circuit_closes"):
@@ -254,6 +260,7 @@ def record_outcome(kind: str, ok: bool, error: str | None = None, stale: bool = 
         st["successes"] += 1
         st["consecutive_failures"] = 0
         st["last_status"] = "ok"
+        st["last_success_at"] = _now()  # M45: last successful invocation (process-local)
         st["last_error"] = None
         st["last_stale"] = bool(stale)
         if stale:
@@ -304,6 +311,7 @@ def domain_metrics() -> dict:
             "circuit": {**circuit_state(kind), "opens": st.get("circuit_opens", 0),
                         "closes": st.get("circuit_closes", 0)},
             "mount_count": st.get("mount_count", 0),
+            "last_success_at": st.get("last_success_at"),
             "status": domain_status(kind),
         }
     return {"domains": out, "labels": ["kind"], "note": "bounded-cardinality labels (kind only); "
@@ -328,6 +336,7 @@ def all_statuses() -> dict[str, dict]:
             "mount_count": st.get("mount_count", 0),
             "previous_version": st.get("previous_version"),
             "last_invoke_at": st.get("last_invoke_at"),
+            "last_success_at": st.get("last_success_at"),  # M45: process-local
             "last_error": st.get("last_error"),  # sanitized already
         }
     return out
@@ -392,7 +401,8 @@ def invoke(kind: str, payload: dict, task=None) -> dict:
             if isinstance(e, DomainInvalid):
                 break  # schema violation is not retryable
         except Exception as e:  # sanitized: never leak internals
-            last_exc = DomainError(f"{kind}: handler failed ({type(e).__name__}) (attempt {attempt}/{attempts})")
+            # M45: type name removed — never leak internals, not even exception class names
+            last_exc = DomainError(f"{kind}: handler failed (attempt {attempt}/{attempts})")
             last_exc.attempts = attempt
         if attempt < attempts:
             time.sleep(min(0.2 * attempt, 1.0))  # short backoff
