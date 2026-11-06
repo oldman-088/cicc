@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Section from "./Section";
 import { useLocale } from "../lib/i18n";
 import { formatTime } from "../lib/format";
-import type { ComponentInfo, CoordinationAgent, CoordinationHealth, CoordinationMetrics, CoordinationTask, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
+import type { ComponentInfo, CoordinationAgent, CoordinationHealth, CoordinationMetrics, CoordinationTask, DomainGatewaySnapshot, GitHubEventItem, GitHubRepoStatus } from "../lib/types";
 
 const STATE_COLORS: Record<string, string> = {
   NEW: "border-slate-500/50 text-slate-300",
@@ -18,6 +18,16 @@ const STATE_COLORS: Record<string, string> = {
   BLOCKED: "border-red-500/60 text-red-300",
 };
 
+const DOMAIN_STATUS_COLORS: Record<string, string> = {
+  NOT_MOUNTED: "border-slate-600 text-slate-300",
+  MOUNTED: "border-cyan-700 text-cyan-300",
+  AVAILABLE: "border-sky-700 text-sky-300",
+  EXECUTION_VERIFIED: "border-emerald-700 text-emerald-300",
+  DEGRADED: "border-amber-700 text-amber-300",
+  FAILED: "border-red-700 text-red-300",
+  UNKNOWN: "border-slate-600 text-slate-300",
+};
+
 export default function CoordinationView({
   tasks,
   events,
@@ -25,6 +35,7 @@ export default function CoordinationView({
   gh,
   metrics,
   broker,
+  domainGateway,
 }: {
   tasks: CoordinationTask[];
   events: GitHubEventItem[];
@@ -32,8 +43,15 @@ export default function CoordinationView({
   gh: GitHubRepoStatus | null;
   metrics: CoordinationMetrics | null;
   broker: ComponentInfo | null;
+  domainGateway: DomainGatewaySnapshot | null;
 }) {
   const { t, locale } = useLocale();
+  const domainName = (kind: string) =>
+    kind === "threat_intel"
+      ? t("domainKindThreat")
+      : kind === "vuln_intel"
+        ? t("domainKindVulnerability")
+        : kind;
   // M29: actionable coordination health via BFF read path (on-demand, not continuous)
   const [health, setHealth] = useState<CoordinationHealth | null>(null);
   useEffect(() => {
@@ -89,6 +107,65 @@ export default function CoordinationView({
           )}
         </Section>
       )}
+      <Section title={t("domainGatewayTitle")}>
+        {domainGateway === null ? (
+          <p role="status" className="text-sm text-slate-400">
+            {t("domainGatewayUnavailable")}
+          </p>
+        ) : domainGateway.rows.length === 0 ? (
+          <p className="text-sm text-slate-400">{t("domainGatewayNoRows")}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse" aria-label={t("domainGatewayTitle")}>
+              <thead>
+                <tr className="border-b border-slate-800">
+                  <th scope="col" className="th">{t("domainKind")}</th>
+                  <th scope="col" className="th">{t("domainMounted")}</th>
+                  <th scope="col" className="th">{t("domainStatus")}</th>
+                  <th scope="col" className="th">{t("domainInvokes")}</th>
+                  <th scope="col" className="th">{t("domainSuccesses")}</th>
+                  <th scope="col" className="th">{t("domainProbeInFlight")}</th>
+                  <th scope="col" className="th">{t("domainLeaseRemaining")}</th>
+                  <th scope="col" className="th">{t("domainLeaseExpired")}</th>
+                  <th scope="col" className="th">{t("domainLastInvoke")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {domainGateway.rows.map((row) => (
+                  <tr key={row.kind} className="border-b border-slate-800/60">
+                    <th scope="row" className="td text-left font-medium text-slate-200">
+                      {domainName(row.kind)}
+                    </th>
+                    <td className="td text-slate-300">
+                      {row.mounted ? t("domainYes") : t("domainNo")}
+                    </td>
+                    <td className="td">
+                      <span className={`rounded-full border px-2 py-0.5 text-xs ${DOMAIN_STATUS_COLORS[row.status] ?? DOMAIN_STATUS_COLORS.UNKNOWN}`}>
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="td text-slate-300">{row.invokes ?? "—"}</td>
+                    <td className="td text-slate-300">{row.successes ?? "—"}</td>
+                    <td className="td text-slate-300">
+                      {row.probeInFlight === null
+                        ? "—"
+                        : row.probeInFlight
+                          ? t("domainYes")
+                          : t("domainNo")}
+                    </td>
+                    <td className="td text-slate-300">{row.probeLeaseExpiresInS ?? "—"}</td>
+                    <td className="td text-slate-300">{row.probeLeaseExpirations ?? "—"}</td>
+                    <td className="td whitespace-nowrap text-xs text-slate-400">
+                      {row.lastInvokeAt ? formatTime(row.lastInvokeAt, locale) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-slate-500">{t("domainGatewayScope")}</p>
+      </Section>
       <Section title={t("coordTitle")}>
         {tasks.length === 0 ? (
           <p className="text-sm text-slate-400">{t("noCoordTasks")}</p>

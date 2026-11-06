@@ -190,5 +190,22 @@
   "healthOverall": "overall",
   "healthReasons": "reasons",
   "healthLastOps": "last operations",
-  "healthNotContinuous": "on-demand only — no scheduler running"
+  "healthNotContinuous": "on-demand only — no scheduler running",
+  "domainGatewayTitle": "Domain gateway evidence (read-only)",
+  "domainGatewayUnavailable": "Domain gateway status is unavailable; no integration state is inferred.",
+  "domainGatewayNoRows": "No domain gateway records were returned.",
+  "domainGatewayScope": "Read-only gateway lifecycle and probe counters. This does not verify tenant isolation or production acceptance.",
+  "domainKind": "Domain",
+  "domainKindThreat": "Threat intelligence",
+  "domainKindVulnerability": "Vulnerability intelligence",
+  "domainMounted": "Mounted",
+  "domainStatus": "Lifecycle status",
+  "domainInvokes": "Invocations",
+  "domainSuccesses": "Successful",
+  "domainProbeInFlight": "Probe in flight",
+  "domainLeaseRemaining": "Probe lease remaining (s)",
+  "domainLeaseExpired": "Expired probe leases",
+  "domainLastInvoke": "Last invocation",
+  "domainYes": "Yes",
+  "domainNo": "No"
 }

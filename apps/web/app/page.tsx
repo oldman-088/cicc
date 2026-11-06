@@ -17,6 +17,7 @@ import TrendChart from "../components/TrendChart";
 import WorkersView from "../components/WorkersView";
 import CoordinationView from "../components/CoordinationView";
 import { deriveAlerts } from "../lib/alerts.mjs";
+import { normalizeDomainGateway } from "../lib/domain-gateway.mjs";
 import { formatTime } from "../lib/format";
 import { useLocale } from "../lib/i18n";
 import { overallStatus } from "../lib/status.mjs";
@@ -38,6 +39,7 @@ import type {
   CoordinationAgent,
   GitHubRepoStatus,
   CoordinationMetrics,
+  DomainGatewaySnapshot,
 } from "../lib/types";
 
 const REFRESH_MS = 15000;
@@ -70,6 +72,7 @@ export default function DashboardPage() {
   const [coordAgents, setCoordAgents] = useState<CoordinationAgent[]>([]);
   const [ghStatus, setGhStatus] = useState<GitHubRepoStatus | null>(null);
   const [coordMetrics, setCoordMetrics] = useState<CoordinationMetrics | null>(null);
+  const [domainGateway, setDomainGateway] = useState<DomainGatewaySnapshot | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +81,7 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [h, o, d, hi, a, ts, al, w, sy, tk, tf, ct, ce, ca, gh, cm] = await Promise.all([
+      const [h, o, d, hi, a, ts, al, w, sy, tk, tf, ct, ce, ca, gh, cm, dg, dm] = await Promise.all([
         fetch("/api/health", { cache: "no-store" }),
         fetch("/api/v1/ops/overview", { cache: "no-store" }),
         fetch("/api/v1/ops/dependencies", { cache: "no-store" }),
@@ -95,6 +98,8 @@ export default function DashboardPage() {
         fetch("/api/v1/coordination/agents", { cache: "no-store" }),
         fetch("/api/v1/coordination/github/status", { cache: "no-store" }),
         fetch("/api/v1/coordination/metrics", { cache: "no-store" }),
+        fetch("/api/v1/coordination/domains", { cache: "no-store" }),
+        fetch("/api/v1/coordination/domains/metrics", { cache: "no-store" }),
       ]);
       setHealth(h.ok ? await h.json() : null);
       if (!o.ok) throw new Error(`overview_http_${o.status}`);
@@ -113,10 +118,16 @@ export default function DashboardPage() {
       setCoordAgents(ca.ok ? (await ca.json()).agents : []);
       setGhStatus(gh.ok ? await gh.json() : null);
       setCoordMetrics(cm.ok ? await cm.json() : null);
+      const [domainStatusData, domainMetricsData] = await Promise.all([
+        dg.ok ? dg.json().catch(() => null) : Promise.resolve(null),
+        dm.ok ? dm.json().catch(() => null) : Promise.resolve(null),
+      ]);
+      setDomainGateway(normalizeDomainGateway(domainStatusData, domainMetricsData));
       setLastRefresh(new Date().toISOString());
     } catch {
       setHealth(null);
       setOverview(null);
+      setDomainGateway(null);
       setError("network");
     } finally {
       setLoading(false);
@@ -281,7 +292,7 @@ export default function DashboardPage() {
           {view === "alerts" && <AlertsView alerts={alerts} onAction={load} />}
 
           {view === "coordination" && (
-            <CoordinationView tasks={coordTasks} events={coordEvents} agents={coordAgents} gh={ghStatus} metrics={coordMetrics} broker={broker} />
+            <CoordinationView tasks={coordTasks} events={coordEvents} agents={coordAgents} gh={ghStatus} metrics={coordMetrics} broker={broker} domainGateway={domainGateway} />
           )}
 
           {view === "workers" && (

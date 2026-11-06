@@ -190,5 +190,22 @@
   "healthOverall": "الإجمالي",
   "healthReasons": "الأسباب",
   "healthLastOps": "آخر العمليات",
-  "healthNotContinuous": "عند الطلب فقط — لا يوجد مجدول"
+  "healthNotContinuous": "عند الطلب فقط — لا يوجد مجدول",
+  "domainGatewayTitle": "أدلة بوابة النطاقات (للقراءة فقط)",
+  "domainGatewayUnavailable": "حالة بوابة النطاقات غير متاحة؛ لم يتم استنتاج حالة تكامل.",
+  "domainGatewayNoRows": "لم تُرجع بوابة النطاقات أي سجلات.",
+  "domainGatewayScope": "دورة حياة البوابة وعدادات الفحص للقراءة فقط. هذا لا يثبت عزل المستأجرين أو قبول الإنتاج.",
+  "domainKind": "النطاق",
+  "domainKindThreat": "استخبارات التهديدات",
+  "domainKindVulnerability": "استخبارات الثغرات",
+  "domainMounted": "مُركّب",
+  "domainStatus": "حالة دورة الحياة",
+  "domainInvokes": "الاستدعاءات",
+  "domainSuccesses": "الناجحة",
+  "domainProbeInFlight": "فحص جارٍ",
+  "domainLeaseRemaining": "الوقت المتبقي لعقدة الفحص (ث)",
+  "domainLeaseExpired": "عقد الفحص المنتهية",
+  "domainLastInvoke": "آخر استدعاء",
+  "domainYes": "نعم",
+  "domainNo": "لا"
 }

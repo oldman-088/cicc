@@ -255,3 +255,28 @@ export interface CoordinationMetrics {
   agents_registered: number;
   agents_online: number;
 }
+
+export type DomainGatewayStatus =
+  | "NOT_MOUNTED"
+  | "MOUNTED"
+  | "AVAILABLE"
+  | "EXECUTION_VERIFIED"
+  | "DEGRADED"
+  | "FAILED"
+  | "UNKNOWN";
+
+export interface DomainGatewayRow {
+  kind: string;
+  mounted: boolean;
+  status: DomainGatewayStatus;
+  invokes: number | null;
+  successes: number | null;
+  probeInFlight: boolean | null;
+  probeLeaseExpiresInS: number | null;
+  probeLeaseExpirations: number | null;
+  lastInvokeAt: string | null;
+}
+
+export interface DomainGatewaySnapshot {
+  rows: DomainGatewayRow[];
+}
