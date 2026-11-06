@@ -327,10 +327,35 @@ class TechniqueRollup:
     def techniques(self) -> tuple[str, ...]:
         return tuple(self.by_technique)
 
+    def parent_view(self) -> dict[str, tuple[str, ...]]:
+        """Roll sub-techniques up into their parent, on request only (M4).
+
+        `T1059.001` and `T1059.002` both fold into `T1059`. This is *opt-in* because
+        the default view keys on the full identifier: a consumer that joined on the
+        four-character prefix without being told would silently inflate the parent,
+        and two different aggregations of one artifact inside one object is how two
+        consumers start disagreeing. The rule (M4) is that the full id is the key;
+        this method exists so parent rollup is an explicit request rather than an
+        accident of string handling.
+
+        A parent whose *own* id is also present keeps its own CVEs plus the folded
+        ones, deduplicated: tallying `T1059.001` twice would be the same bug one
+        level up.
+        """
+        parents: dict[str, set[str]] = {}
+        for technique_id, cves in self.by_technique.items():
+            parent = technique_id.split(".", 1)[0]
+            parents.setdefault(parent, set()).update(cves)
+        return {parent: tuple(sorted(cves)) for parent, cves in sorted(parents.items())}
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "consulted": self.consulted,
             "total_cves": self.total_cves,
+            # Stated in the payload so a consumer cannot mistake the key for a prefix
+            # rollup: `techniques` is keyed on the full identifier, sub-techniques
+            # included. See `parent_view()` if that is what you actually want.
+            "technique_key": "full_id",
             "techniques": [
                 {
                     "technique_id": tid,

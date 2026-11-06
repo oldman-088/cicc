@@ -339,6 +339,7 @@
   },
   "threat_intel": {
     "consulted": false,
+    "technique_key": "full_id",
     "techniques": [],
     "techniques_by_mapping_type": {},
     "total_cves": 5
