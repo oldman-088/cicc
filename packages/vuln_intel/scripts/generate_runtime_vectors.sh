@@ -24,6 +24,16 @@
 
 set -euo pipefail
 
+# When this script fails we usually cannot read the log: the job that runs it has its
+# logs and artifacts unreachable from the authoring environment. A bare exit code is
+# therefore nearly useless - 127 means "something was not found" but not what, and I
+# have already spent a round chasing a 127 that was a Python NameError rather than a
+# missing binary.
+#
+# So report the failing line as an annotation, which is readable through the API.
+trap 'status=$?; printf "::error title=runtime vectors failed::exited %s running: %s\n" \
+  "$status" "${BASH_COMMAND}" >&2' ERR
+
 MAVEN_ARTIFACT_VERSION="3.9.9"
 MAVEN_CENTRAL="https://repo1.maven.org/maven2"
 
