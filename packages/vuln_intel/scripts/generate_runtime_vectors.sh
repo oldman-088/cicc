@@ -85,7 +85,11 @@ read -r -d '' CORPUS <<'CORPUS_EOF' || true
 2.0.1-xyz
 2.0.1-1
 2.0.1.1
-1.0-alpha-1
+2.0-1
+1alpha
+1-alpha-1
+1.0-beta-1
+1.0-SNAPSHOT
 1.0-alpha-2
 1.0-alpha1
 1.0-beta
