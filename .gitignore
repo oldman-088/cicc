@@ -1,0 +1,22 @@
+# dependencies / build output
+node_modules/
+.next/
+out/
+dist/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# runtime data / local env
+.env
+*.db
+data/
+
+# misc
+*.log
+.DS_Store
+*.tsbuildinfo
