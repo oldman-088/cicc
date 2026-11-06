@@ -36,7 +36,7 @@ def pg_engine(tmp_path_factory):
 @pytest.fixture
 def env(pg_engine):
     tenant = 'fixture-' + uuid4().hex
-    app.state.relationship_store = PostgresRelationshipStore(pg_engine)
+    app.state.relationship_store = PostgresRelationshipStore(pg_engine, enforce_rls=False)
     app.state.relationship_audit = lambda event: None
     def identity(tenant_id=tenant, permissions=('threat:read', 'threat:write')):
         app.dependency_overrides[get_principal] = lambda: Principal(subject='fixture-actor', tenant_id=tenant_id, permissions=frozenset(permissions))
@@ -58,7 +58,7 @@ def test_persistence_restart_and_tenant_isolation(env, pg_engine):
     # New store and new connection pool emulate an application process restart.
     new_engine = create_engine(pg_engine.url)
     try:
-        app.state.relationship_store = PostgresRelationshipStore(new_engine)
+        app.state.relationship_store = PostgresRelationshipStore(new_engine, enforce_rls=False)
         assert request('GET', BASE + '/relationships/' + first['relationship_id']) == (200, first)
         assert create(payload(), 'persist') == (200, first)
         identity(tenant + '-other')
@@ -138,7 +138,7 @@ import os
 from uuid import UUID, uuid4
 from sqlalchemy import create_engine
 from apps.threat_intelligence.relationship_storage import PostgresRelationshipStore, AuditContext
-store = PostgresRelationshipStore(create_engine(os.environ['CICC_LOCAL_TEST_URL']))
+store = PostgresRelationshipStore(create_engine(os.environ['CICC_LOCAL_TEST_URL']), enforce_rls=False)
 r = store.get(AuditContext(os.environ['CICC_LOCAL_TENANT'], 'restart-fixture', uuid4()), UUID(os.environ['CICC_LOCAL_RECORD']))
 assert r is not None and str(r.relationship_id) == os.environ['CICC_LOCAL_RECORD']
 '''
@@ -177,7 +177,7 @@ def test_concurrent_duplicate_distinct_keys(env):
 
 
 def test_graph_limit_fails_without_partial_result(env, pg_engine):
-    app.state.relationship_store = PostgresRelationshipStore(pg_engine, max_traversal_edges=1)
+    app.state.relationship_store = PostgresRelationshipStore(pg_engine, max_traversal_edges=1, enforce_rls=False)
     assert create(payload('a','b'), '1')[0] == 201
     assert create(payload('a','c'), '2')[0] == 201
     code, body = request('POST', BASE + '/relationship-analysis/traverse', {'entity_type':'Actor','entity_id':'a'})
@@ -195,7 +195,7 @@ def test_database_server_restart_preserves_records(tmp_path_factory):
     tenant = 'restart-' + uuid4().hex
     try:
         metadata.create_all(engine)
-        app.state.relationship_store = PostgresRelationshipStore(engine)
+        app.state.relationship_store = PostgresRelationshipStore(engine, enforce_rls=False)
         app.state.relationship_audit = lambda event: None
         app.dependency_overrides[get_principal] = lambda: Principal(subject='restart-fixture', tenant_id=tenant, permissions=frozenset({'threat:read','threat:write'}))
         rid = create(payload(), 'restart')[1]['relationship_id']
@@ -205,7 +205,7 @@ def test_database_server_restart_preserves_records(tmp_path_factory):
         server = pgserver.get_server(pgdata, cleanup_mode='stop')
         assert server.get_pid() != old_pid
         engine = create_engine(server.get_uri().replace('postgresql://', 'postgresql+psycopg://', 1))
-        app.state.relationship_store = PostgresRelationshipStore(engine)
+        app.state.relationship_store = PostgresRelationshipStore(engine, enforce_rls=False)
         assert request('GET', BASE + '/relationships/' + rid)[0] == 200
         assert create(payload(), 'restart')[0] == 200
     finally:

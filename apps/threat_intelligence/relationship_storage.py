@@ -5,6 +5,7 @@ engine lifecycle, schema deployment and authenticated principal resolution.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -68,13 +69,33 @@ class PostgresRelationshipStore:
     A failed audit insert rolls the transaction back. Credentials and free-form
     intelligence payloads are deliberately excluded from audit events.
     """
-    def __init__(self, engine: Engine, *, max_traversal_edges: int = 10000):
+    def __init__(self, engine: Engine, *, max_traversal_edges: int = 10000, enforce_rls: bool = True):
         if engine.dialect.name != 'postgresql':
             raise ValueError('PostgreSQL is required')
         if max_traversal_edges < 1:
             raise ValueError('max_traversal_edges must be positive')
         self.db = engine
         self.max_traversal_edges = max_traversal_edges
+        self.enforce_rls = enforce_rls
+
+    @contextmanager
+    def _transaction(self, ctx: AuditContext, *, snapshot: bool = False):
+        with self.db.begin() as conn:
+            if snapshot:
+                conn.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+            if self.enforce_rls:
+                # Fail closed on bypass roles and missing/disabled/FORCE RLS tables.
+                # This does not verify policy text or the role membership graph.
+                safe_role = conn.execute(text("SELECT NOT rolsuper AND NOT rolbypassrls FROM pg_roles WHERE rolname = current_user")).scalar_one()
+                protected = conn.execute(text("""SELECT count(*) FROM pg_class
+                    WHERE oid IN (to_regclass('ti_relationship_entity'), to_regclass('ti_relationship_record'),
+                                  to_regclass('ti_relationship_idempotency'), to_regclass('ti_relationship_audit'))
+                      AND relrowsecurity AND relforcerowsecurity""")).scalar_one()
+                if not safe_role or protected != 4:
+                    raise RuntimeError("RLS database role or policies are not safely configured")
+                # SET LOCAL is bound to the transaction and does not survive pool reuse.
+                conn.execute(text("SELECT set_config('cicc.tenant_id', :tenant, true)"), {"tenant": ctx.tenant_id})
+            yield conn
 
     @staticmethod
     def _audit(conn, ctx, operation, outcome, resource_id=None):
@@ -83,7 +104,7 @@ class PostgresRelationshipStore:
             correlation_id=ctx.correlation_id, occurred_at=datetime.now(timezone.utc)))
 
     def create(self, ctx: AuditContext, key: str, fingerprint: str, record: RelationshipRecord):
-        with self.db.begin() as conn:
+        with self._transaction(ctx) as conn:
             # Serialize per-tenant creation across processes, including missing keys.
             conn.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:tenant, 0))'), {'tenant': ctx.tenant_id})
             previous = conn.execute(select(idempotency.c.fingerprint, idempotency.c.relationship_id).where(
@@ -116,15 +137,14 @@ class PostgresRelationshipStore:
             return record, 'created'
 
     def get(self, ctx: AuditContext, record_id: UUID):
-        with self.db.begin() as conn:
+        with self._transaction(ctx) as conn:
             payload = conn.execute(select(relationship.c.record).where(relationship.c.tenant_id == ctx.tenant_id,
                 relationship.c.relationship_id == record_id)).scalar_one_or_none()
             self._audit(conn, ctx, 'relationship.read', 'success' if payload else 'not_found', record_id)
             return RelationshipRecord.model_validate(payload) if payload else None
 
     def list(self, ctx: AuditContext, entity_id, entity_type, relationship_type, limit, offset):
-        with self.db.begin() as conn:
-            conn.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
+        with self._transaction(ctx, snapshot=True) as conn:
             clauses = [relationship.c.tenant_id == ctx.tenant_id]
             if entity_id is not None:
                 clauses.append(or_(and_(relationship.c.source_type == entity_type, relationship.c.source_id == entity_id),
@@ -138,9 +158,8 @@ class PostgresRelationshipStore:
 
     def traverse(self, ctx: AuditContext, entity_id: str, entity_type: str, max_depth: int,
                  relationship_types: Optional[list[RelationshipType]], limit: int, offset: int):
-        with self.db.begin() as conn:
-            # All graph queries in a traversal must see one consistent snapshot.
-            conn.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
+        with self._transaction(ctx, snapshot=True) as conn:
+            # All graph queries in a traversal see one consistent snapshot.
             exists = conn.execute(select(entity.c.entity_id).where(entity.c.tenant_id == ctx.tenant_id,
                 entity.c.entity_type == entity_type, entity.c.entity_id == entity_id)).first()
             if not exists:
