@@ -25,7 +25,7 @@ Creation validates bounded nonempty references/provenance, enums and up to 100 e
 
 ## Controlled PostgreSQL alternative
 
-`TrustedWritePostgresRelationshipStore` supports DB-identity-derived create, get, list and traversal, with atomic DB-generated audit and correlation under restrictive operation-specific grants. Pagination, source filtering and traversal are tenant-scoped; BFS is capped at 1,000 edges. See `TRUSTED_RELATIONSHIP_WRITES.md` for trust assumptions, snapshot/offset semantics, rollback and limitations. This is not mounted in the real host.
+`TrustedWritePostgresRelationshipStore` supports DB-identity-derived create, get, list and traversal, with atomic DB-generated audit and correlation under restrictive operation-specific grants. Pagination, source filtering and traversal are tenant-scoped; BFS is capped at 1,000 edges and returned record JSON text is bounded at 4 MiB per response; a breach returns audited 422 without partial records. See `TRUSTED_RELATIONSHIP_WRITES.md` for trust assumptions, snapshot/offset semantics, rollback and limitations. This is not mounted in the real host.
 
 ## PostgreSQL and migration proposal
 `apps/threat_intelligence/relationship_storage.py` defines PostgreSQL SQLAlchemy Core tables, tenant-aware entity/relationship/idempotency constraints, adjacency/type indexes and transactional audit. A per-tenant PostgreSQL transaction advisory lock serializes creation across workers; database uniqueness and foreign keys enforce identity and idempotency. Graph reads use indexed frontier queries. This is a reviewed-domain proposal, not an approved shared schema. No schema is created at app startup.

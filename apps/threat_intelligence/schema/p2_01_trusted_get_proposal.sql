@@ -19,9 +19,12 @@ BEGIN
     SELECT record INTO v_record FROM public.ti_relationship_record
       WHERE tenant_id = v_tenant AND relationship_id = p_relationship_id;
     v_outcome := CASE WHEN FOUND THEN 'success' ELSE 'not_found' END;
+    IF v_record IS NOT NULL AND octet_length(v_record::text) > 4194304 THEN
+        v_record := NULL; v_outcome := 'response_too_large';
+    END IF;
     INSERT INTO public.ti_relationship_audit(event_id,tenant_id,actor,operation,resource_id,outcome,correlation_id,occurred_at)
       VALUES (gen_random_uuid(),v_tenant,v_actor,'relationship.read',p_relationship_id,v_outcome,v_correlation,clock_timestamp());
-    RETURN jsonb_build_object('record',v_record,'correlation_id',v_correlation,'tenant',v_tenant,'actor',v_actor);
+    RETURN jsonb_build_object('record',v_record,'correlation_id',v_correlation,'tenant',v_tenant,'actor',v_actor,'outcome',v_outcome);
 END;
 $$;
 REVOKE ALL ON FUNCTION ti_security.trusted_get_relationship(uuid) FROM PUBLIC;

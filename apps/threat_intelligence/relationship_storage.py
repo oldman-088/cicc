@@ -64,6 +64,11 @@ class TraversalLimitExceeded(Exception):
         self.correlation_id = correlation_id
         super().__init__("Traversal exceeds configured graph limit")
 
+class ResponseLimitExceeded(Exception):
+    def __init__(self, correlation_id):
+        self.correlation_id = correlation_id
+        super().__init__('Response exceeds configured size limit')
+
 class PostgresRelationshipStore:
     """Tenant-scoped transactional repository; only use on PostgreSQL.
 
@@ -264,8 +269,14 @@ class TrustedWritePostgresRelationshipStore(PostgresRelationshipStore):
             result = conn.execute(text('SELECT ti_security.trusted_get_relationship(:rid)'), {'rid': record_id}).scalar_one()
             if result['tenant'] != ctx.tenant_id or result['actor'] != ctx.actor:
                 raise RuntimeError('Database identity changed during the operation')
+            correlation = UUID(result['correlation_id'])
+            too_large = result['outcome'] == 'response_too_large'
+            if result['outcome'] not in ('success', 'not_found', 'response_too_large'):
+                raise RuntimeError('Unexpected database read outcome')
             parsed = RelationshipRecord.model_validate(result['record']) if result['record'] else None
-            return parsed, UUID(result['correlation_id'])
+        if too_large:
+            raise ResponseLimitExceeded(correlation)
+        return parsed, correlation
 
     def _verified_query(self, ctx, sql, params, parse):
         with self._transaction(ctx, snapshot=True) as conn:
@@ -278,15 +289,24 @@ class TrustedWritePostgresRelationshipStore(PostgresRelationshipStore):
             return parse(result)
 
     def list(self, ctx, entity_id, entity_type, relationship_type, limit, offset):
-        return self._verified_query(ctx, 'SELECT ti_security.trusted_list_relationships(:eid, :etype, :rtype, :lim, :off)',
-            {'eid':entity_id, 'etype':entity_type, 'rtype':relationship_type.value if relationship_type else None, 'lim':limit, 'off':offset},
-            lambda result: ([RelationshipRecord.model_validate(row) for row in result['items']], result['total'], UUID(result['correlation_id'])))
+        def parse(result):
+            correlation = UUID(result['correlation_id'])
+            if result['outcome'] == 'response_too_large':
+                return None, None, correlation
+            if result['outcome'] != 'success':
+                raise RuntimeError('Unexpected database list outcome')
+            return [RelationshipRecord.model_validate(row) for row in result['items']], result['total'], correlation
+        records, total, correlation = self._verified_query(ctx, 'SELECT ti_security.trusted_list_relationships(:eid, :etype, :rtype, :lim, :off)',
+            {'eid':entity_id, 'etype':entity_type, 'rtype':relationship_type.value if relationship_type else None, 'lim':limit, 'off':offset}, parse)
+        if records is None:
+            raise ResponseLimitExceeded(correlation)
+        return records, total, correlation
 
     def traverse(self, ctx, entity_id, entity_type, max_depth, relationship_types, limit, offset):
         def parse(result):
             correlation = UUID(result['correlation_id'])
-            if result['outcome'] == 'limit_exceeded':
-                return 'limit_exceeded', correlation
+            if result['outcome'] in ('limit_exceeded', 'response_too_large'):
+                return result['outcome'], correlation
             if result['outcome'] == 'not_found':
                 return None, correlation
             if result['outcome'] != 'success':
@@ -297,4 +317,6 @@ class TrustedWritePostgresRelationshipStore(PostgresRelationshipStore):
             {'eid':entity_id, 'etype':entity_type, 'depth':max_depth, 'types':[x.value for x in relationship_types] if relationship_types is not None else None, 'lim':limit, 'off':offset}, parse)
         if parsed == 'limit_exceeded':
             raise TraversalLimitExceeded(correlation)
+        if parsed == 'response_too_large':
+            raise ResponseLimitExceeded(correlation)
         return parsed, correlation

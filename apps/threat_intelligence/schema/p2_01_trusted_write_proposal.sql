@@ -34,6 +34,7 @@ BEGIN
     IF p_key IS NULL OR p_key !~ '^[A-Za-z0-9._:-]{1,128}$'
         OR p_record IS NULL OR jsonb_typeof(p_record) <> 'object'
         OR pg_column_size(p_record) > 1048576
+        OR octet_length(p_record::text) > 1048576
         OR (p_record - ARRAY['relationship_id','source_entity','target_entity','relationship_type','confidence','evidence','provenance','temporal_context','confirmed','conflicting_intelligence','created_at','updated_at','experimental_label']) <> '{}'::jsonb
         OR jsonb_typeof(p_record->'source_entity') IS DISTINCT FROM 'object'
         OR jsonb_typeof(p_record->'target_entity') IS DISTINCT FROM 'object'

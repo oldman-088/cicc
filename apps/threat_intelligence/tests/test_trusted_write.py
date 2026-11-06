@@ -413,3 +413,38 @@ def test_role_bound_pool_reuses_backend_without_tenant_guc_leak(env):
         assert request('GET',BASE+'/relationships/'+victim)[0]==404
     finally:
         pool.dispose()
+
+
+def test_oversized_page_and_graph_are_audited_without_partial_data(env):
+    admin, _, _, _ = env
+    token=uuid4().hex; root='size-'+token
+    records=[create(payload(root, 'size-target-'+str(i)+token),uuid4().hex)[1] for i in range(5)]
+    # Isolated privileged corruption simulates oversized records; runtime users
+    # cannot modify the underlying table or audit the result as success.
+    with admin.begin() as conn:
+        conn.execute(text("UPDATE public.ti_relationship_record SET record=jsonb_set(record,'{provenance}',to_jsonb(repeat('x',900000))) WHERE relationship_id=ANY(:ids)"), {'ids':[UUID(x['relationship_id']) for x in records]})
+    for method,path,body,query in [
+        ('GET',BASE+'/relationships',None,{'entity_id':root,'entity_type':'Actor'}),
+        ('POST',BASE+'/relationship-analysis/traverse',{'entity_id':root,'entity_type':'Actor'},None),
+    ]:
+        code, result, headers=request(method,path,body,query=query,include_headers=True)
+        assert code==422 and 'items' not in result
+        with admin.connect() as conn:
+            audit=conn.execute(select(audit_event).where(audit_event.c.correlation_id==UUID(headers[b'x-correlation-id'].decode()))).mappings().one()
+        assert audit['outcome']=='response_too_large' and audit['tenant_id']=='tenant-A'
+
+
+def test_oversized_single_record_and_direct_sql_input_are_denied(env):
+    admin, a, _, _ = env
+    token=uuid4().hex; data=create(payload('large-'+token,'large-target-'+token),token)[1]
+    forged=dict(data, provenance='x'*1100000)
+    with pytest.raises(DBAPIError):
+        with a.begin() as conn:
+            conn.execute(text('SELECT ti_security.trusted_create_relationship(:key, CAST(:record AS jsonb))'), {'key':uuid4().hex,'record':json.dumps(forged)})
+    with admin.begin() as conn:
+        conn.execute(text("UPDATE public.ti_relationship_record SET record=jsonb_set(record,'{provenance}',to_jsonb(repeat('x',4500000))) WHERE relationship_id=:rid"), {'rid':UUID(data['relationship_id'])})
+    code, result, headers=request('GET',BASE+'/relationships/'+data['relationship_id'],include_headers=True)
+    assert code==422 and 'source_entity' not in result
+    with admin.connect() as conn:
+        audit=conn.execute(select(audit_event).where(audit_event.c.correlation_id==UUID(headers[b'x-correlation-id'].decode()))).mappings().one()
+    assert audit['outcome']=='response_too_large' and audit['operation']=='relationship.read'

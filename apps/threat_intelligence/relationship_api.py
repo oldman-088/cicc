@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
-from .relationship_storage import AuditContext, PostgresRelationshipStore, TraversalLimitExceeded, TrustedReadsUnavailable
+from .relationship_storage import AuditContext, PostgresRelationshipStore, TraversalLimitExceeded, TrustedReadsUnavailable, ResponseLimitExceeded
 
 from .relationship_analysis import (
     EntityReference, RelationshipAnalysisEngine, RelationshipConfidence,
@@ -255,6 +255,8 @@ def list_relationships(
             records, total = result
     except TrustedReadsUnavailable:
         raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
+    except ResponseLimitExceeded as exc:
+        raise HTTPException(status_code=422, detail='Response exceeds configured size limit', headers={'X-Correlation-ID': str(exc.correlation_id)}) from None
     return RelationshipPage(items=records, total=total, offset=offset, limit=limit, has_more=offset+limit<total)
 
 @router.get('/relationships/{relationship_id}', response_model=RelationshipRecord)
@@ -269,6 +271,8 @@ def get_relationship(
         record = store.get(ctx, relationship_id)
     except TrustedReadsUnavailable:
         raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
+    except ResponseLimitExceeded as exc:
+        raise HTTPException(status_code=422, detail='Response exceeds configured size limit', headers={'X-Correlation-ID': str(exc.correlation_id)}) from None
     if isinstance(record, tuple):
         record, correlation = record
         ctx = AuditContext(tenant_id=ctx.tenant_id, actor=ctx.actor, correlation_id=correlation)
@@ -291,6 +295,8 @@ def traverse_relationships(
         raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
     except TraversalLimitExceeded as exc:
         raise HTTPException(status_code=422, detail='Traversal exceeds configured graph limit', headers={'X-Correlation-ID': str(exc.correlation_id or ctx.correlation_id)}) from None
+    except ResponseLimitExceeded as exc:
+        raise HTTPException(status_code=422, detail='Response exceeds configured size limit', headers={'X-Correlation-ID': str(exc.correlation_id)}) from None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], UUID):
         result, correlation = result
         ctx = AuditContext(tenant_id=ctx.tenant_id, actor=ctx.actor, correlation_id=correlation)

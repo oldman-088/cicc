@@ -8,6 +8,7 @@ DECLARE
   v_correlation uuid := gen_random_uuid();
   v_items jsonb;
   v_total bigint;
+  v_outcome text := 'success';
 BEGIN
   IF v_tenant IS NULL OR v_actor IS NULL THEN RAISE EXCEPTION 'login has no trusted identity' USING ERRCODE='42501'; END IF;
   IF (p_entity_id IS NULL) <> (p_entity_type IS NULL) OR p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 500
@@ -22,11 +23,14 @@ BEGIN
        AND (p_entity_id IS NULL OR (r.source_type=p_entity_type AND r.source_id=p_entity_id)
                                 OR (r.target_type=p_entity_type AND r.target_id=p_entity_id))
   ), page AS (SELECT * FROM filtered ORDER BY sequence LIMIT p_limit OFFSET p_offset)
-  SELECT (SELECT count(*) FROM filtered), coalesce((SELECT jsonb_agg(record ORDER BY sequence) FROM page),'[]'::jsonb)
+  SELECT (SELECT count(*) FROM filtered),
+    CASE WHEN coalesce((SELECT sum(octet_length(record::text)) FROM page),0) > 4194304 THEN NULL
+         ELSE coalesce((SELECT jsonb_agg(record ORDER BY sequence) FROM page),'[]'::jsonb) END
     INTO v_total,v_items;
+  IF v_items IS NULL THEN v_outcome := 'response_too_large'; v_items := '[]'::jsonb; v_total := 0; END IF;
   INSERT INTO public.ti_relationship_audit(event_id,tenant_id,actor,operation,outcome,correlation_id,occurred_at)
-    VALUES(gen_random_uuid(),v_tenant,v_actor,'relationship.list','success',v_correlation,clock_timestamp());
-  RETURN jsonb_build_object('tenant',v_tenant,'actor',v_actor,'correlation_id',v_correlation,'items',v_items,'total',v_total);
+    VALUES(gen_random_uuid(),v_tenant,v_actor,'relationship.list',v_outcome,v_correlation,clock_timestamp());
+  RETURN jsonb_build_object('tenant',v_tenant,'actor',v_actor,'correlation_id',v_correlation,'outcome',v_outcome,'items',v_items,'total',v_total);
 END;
 $$;
 REVOKE ALL ON FUNCTION ti_security.trusted_list_relationships(text,text,text,integer,integer) FROM PUBLIC;
@@ -47,6 +51,7 @@ DECLARE
   v_target text;
   v_total integer := 0;
   v_scanned integer;
+  v_bytes bigint := 0;
   v_level integer;
   v_outcome text := 'success';
   r record;
@@ -78,6 +83,8 @@ BEGIN
           v_seen := array_append(v_seen,r.relationship_id); v_total := v_total+1;
           IF v_total > 1000 THEN v_outcome := 'limit_exceeded'; EXIT; END IF;
           IF v_total > p_offset AND v_total <= p_offset+p_limit THEN
+            v_bytes := v_bytes + octet_length(r.record::text);
+            IF v_bytes > 4194304 THEN v_outcome := 'response_too_large'; EXIT; END IF;
             v_items := v_items || jsonb_build_array(jsonb_build_object('depth',v_level,'record',r.record));
           END IF;
         END IF;
@@ -86,7 +93,7 @@ BEGIN
         IF v_source=ANY(v_frontier) AND NOT v_target=ANY(v_visited) AND NOT v_target=ANY(v_next) THEN v_next := array_append(v_next,v_target); END IF;
         IF v_target=ANY(v_frontier) AND NOT v_source=ANY(v_visited) AND NOT v_source=ANY(v_next) THEN v_next := array_append(v_next,v_source); END IF;
       END LOOP;
-      EXIT WHEN v_outcome='limit_exceeded';
+      EXIT WHEN v_outcome <> 'success';
       v_visited := v_visited || v_next; v_frontier := v_next;
     END LOOP;
   END IF;
