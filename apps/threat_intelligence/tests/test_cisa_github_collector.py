@@ -115,3 +115,17 @@ def test_invalid_feed_traceback_does_not_expose_input():
         assert 'SECRET-FIXTURE-CONTENT' not in ''.join(traceback.format_exception(error))
     else:
         pytest.fail('invalid CVE accepted')
+
+
+def test_bounded_retry_after_respects_server_request():
+    transport, _ = fixture_transport(sample()); sleeps = []; calls = []
+    def limited(url, timeout):
+        calls.append(url)
+        if len(calls) == 1: raise HTTPError(url,429,'rate limit',{'Retry-After':'2'},None)
+        return transport(url,timeout)
+    fetch_catalog(transport=limited,sleep=sleeps.append,min_interval=0,retries=1)
+    assert sleeps == [2]
+    def long_delay(url, timeout):
+        raise HTTPError(url,429,'rate limit',{'Retry-After':'90'},None)
+    with pytest.raises(CollectionError,match='delay'):
+        fetch_catalog(transport=long_delay,sleep=lambda _:pytest.fail('should defer to scheduler'),min_interval=0,retries=1)

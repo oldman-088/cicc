@@ -247,7 +247,12 @@ def list_relationships(
     ctx = context(principal, response)
     emit(audit, principal, 'relationship.list.attempt')
     try:
-        records, total = store.list(ctx, entity_id, entity_type, relationship_type, limit, offset)
+        result = store.list(ctx, entity_id, entity_type, relationship_type, limit, offset)
+        if len(result) == 3:
+            records, total, correlation = result
+            response.headers['X-Correlation-ID'] = str(correlation)
+        else:
+            records, total = result
     except TrustedReadsUnavailable:
         raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
     return RelationshipPage(items=records, total=total, offset=offset, limit=limit, has_more=offset+limit<total)
@@ -284,8 +289,12 @@ def traverse_relationships(
         result = store.traverse(ctx, data.entity_id, data.entity_type, data.max_depth, data.relationship_types, data.limit, data.offset)
     except TrustedReadsUnavailable:
         raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
-    except TraversalLimitExceeded:
-        raise HTTPException(status_code=422, detail='Traversal exceeds configured graph limit', headers={'X-Correlation-ID': str(ctx.correlation_id)}) from None
+    except TraversalLimitExceeded as exc:
+        raise HTTPException(status_code=422, detail='Traversal exceeds configured graph limit', headers={'X-Correlation-ID': str(exc.correlation_id or ctx.correlation_id)}) from None
+    if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], UUID):
+        result, correlation = result
+        ctx = AuditContext(tenant_id=ctx.tenant_id, actor=ctx.actor, correlation_id=correlation)
+        response.headers['X-Correlation-ID'] = str(correlation)
     if result is None:
         raise HTTPException(status_code=404, detail='Entity not found', headers={'X-Correlation-ID': str(ctx.correlation_id)})
     edges, total, visited = result

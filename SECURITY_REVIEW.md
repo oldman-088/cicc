@@ -1,4 +1,4 @@
-> **Current verification (2026-11-06):** Isolated run: 173 passed, 7 skipped (6 real-host tests + 1 live-source opt-in). A separate CISA GitHub mirror network-read test passed. Controlled PostgreSQL create/get audit is tested under restricted local roles, but audited list/traversal, actual host identity/integration and production immutability remain unverified. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `TRUSTED_RELATIONSHIP_WRITES.md`; historical claims below are unverified.
+> **Current verification (2026-11-06):** Isolated run: 189 passed, 8 skipped (6 real-host tests + 2 live-source opt-in). Two separate CISA GitHub mirror tests passed, including disposable PostgreSQL persistence. Controlled create/get/list/traverse and DB audit were tested under restricted local roles; actual host identity/integration and production immutability remain unverified. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `TRUSTED_RELATIONSHIP_WRITES.md`; historical claims below are unverified.
 
 # Security Review Documentation - Threat Intelligence Domain
 

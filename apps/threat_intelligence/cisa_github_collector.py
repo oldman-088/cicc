@@ -136,15 +136,24 @@ def fetch_catalog(*, timeout: float = 10, retries: int = 2, min_interval: float 
             if last is not None and now - last < min_interval:
                 sleep(min_interval - (now - last))
             last = monotonic()
+            delay = min(0.25 * (2 ** attempt), 2.0)
             try:
                 return transport(url, timeout)
             except HTTPError as exc:
                 if exc.code not in (429, 500, 502, 503, 504) or attempt == retries:
                     raise CollectionError('GitHub request failed') from None
+                retry_after = exc.headers.get('Retry-After') if exc.headers else None
+                if retry_after and re.fullmatch(r'[0-9]{1,3}', retry_after):
+                    if int(retry_after) > 5:
+                        raise CollectionError('GitHub retry delay exceeds worker limit') from None
+                    delay = max(delay, int(retry_after))
+                elif retry_after:
+                    # HTTP-date values are not interpreted; do not retry early.
+                    raise CollectionError('GitHub retry delay requires rescheduling') from None
             except (URLError, TimeoutError, OSError):
                 if attempt == retries:
                     raise CollectionError('GitHub request failed') from None
-            sleep(min(0.25 * (2 ** attempt), 2.0))
+            sleep(delay)
         raise CollectionError('GitHub request failed')
 
     metadata = _json(request(METADATA_URL))

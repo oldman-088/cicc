@@ -60,7 +60,9 @@ class AuditContext:
     correlation_id: UUID
 
 class TraversalLimitExceeded(Exception):
-    pass
+    def __init__(self, correlation_id=None):
+        self.correlation_id = correlation_id
+        super().__init__("Traversal exceeds configured graph limit")
 
 class PostgresRelationshipStore:
     """Tenant-scoped transactional repository; only use on PostgreSQL.
@@ -232,9 +234,7 @@ class TrustedReadsUnavailable(Exception):
 
 
 class TrustedWritePostgresRelationshipStore(PostgresRelationshipStore):
-    """Experimental controlled create/get adapter with DB-derived audit identity.
-
-    Explicitly refuses list and traversal until audited entry points are available.
+    """Experimental controlled relationship adapter with DB-derived audit identity.
     The host must provision per-actor authenticated login roles, reviewed function
     ownership and restricted table privileges; nothing is provisioned here.
     """
@@ -267,8 +267,34 @@ class TrustedWritePostgresRelationshipStore(PostgresRelationshipStore):
             parsed = RelationshipRecord.model_validate(result['record']) if result['record'] else None
             return parsed, UUID(result['correlation_id'])
 
-    def list(self, *args, **kwargs):
-        raise TrustedReadsUnavailable()
+    def _verified_query(self, ctx, sql, params, parse):
+        with self._transaction(ctx, snapshot=True) as conn:
+            actor = conn.execute(text('SELECT ti_security.authenticated_actor()')).scalar_one_or_none()
+            if not actor or actor != ctx.actor:
+                raise RuntimeError('Database login is not bound to the authenticated actor')
+            result = conn.execute(text(sql), params).scalar_one()
+            if result['tenant'] != ctx.tenant_id or result['actor'] != ctx.actor:
+                raise RuntimeError('Database identity changed during the operation')
+            return parse(result)
 
-    def traverse(self, *args, **kwargs):
-        raise TrustedReadsUnavailable()
+    def list(self, ctx, entity_id, entity_type, relationship_type, limit, offset):
+        return self._verified_query(ctx, 'SELECT ti_security.trusted_list_relationships(:eid, :etype, :rtype, :lim, :off)',
+            {'eid':entity_id, 'etype':entity_type, 'rtype':relationship_type.value if relationship_type else None, 'lim':limit, 'off':offset},
+            lambda result: ([RelationshipRecord.model_validate(row) for row in result['items']], result['total'], UUID(result['correlation_id'])))
+
+    def traverse(self, ctx, entity_id, entity_type, max_depth, relationship_types, limit, offset):
+        def parse(result):
+            correlation = UUID(result['correlation_id'])
+            if result['outcome'] == 'limit_exceeded':
+                return 'limit_exceeded', correlation
+            if result['outcome'] == 'not_found':
+                return None, correlation
+            if result['outcome'] != 'success':
+                raise RuntimeError('Unexpected database traversal outcome')
+            edges = [(row['depth'], RelationshipRecord.model_validate(row['record'])) for row in result['items']]
+            return (edges, result['total'], result['visited']), correlation
+        parsed, correlation = self._verified_query(ctx, 'SELECT ti_security.trusted_traverse_relationships(:eid, :etype, :depth, CAST(:types AS text[]), :lim, :off)',
+            {'eid':entity_id, 'etype':entity_type, 'depth':max_depth, 'types':[x.value for x in relationship_types] if relationship_types is not None else None, 'lim':limit, 'off':offset}, parse)
+        if parsed == 'limit_exceeded':
+            raise TraversalLimitExceeded(correlation)
+        return parsed, correlation
