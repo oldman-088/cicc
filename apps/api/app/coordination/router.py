@@ -290,11 +290,94 @@ def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None =
         return {"tasks": registry.list_tasks(s, state, agent, kind, limit, dead_letter)}
 
 
+def _persist_domain_stats(s) -> None:
+    """M37: mirror in-memory domain evidence into coord_domain_stats so health
+    survives restarts. Sanitized fields only."""
+    for kind, st in domains.all_statuses().items():
+        row = s.execute(select(models.CoordinationDomainStat).where(
+            models.CoordinationDomainStat.kind == kind)).scalar_one_or_none()
+        if row is None:
+            row = models.CoordinationDomainStat(kind=kind)
+            s.add(row)
+        row.version = st["version"]
+        row.source_ref = st["source_ref"]
+        row.mounted_at = st["mounted_at"]
+        row.validated = 1 if domains.is_mounted(kind) and st["status"] != domains.MOUNTED else 0
+        row.invokes = st["invokes"]
+        row.successes = st["successes"]
+        row.last_invoke_at = st["last_invoke_at"]
+        row.last_status = "ok" if st["status"] == domains.EXECUTION_VERIFIED else (
+            None if st["invokes"] == 0 else "error")
+        row.last_error = st["last_error"]
+
+
 @router.get("/domains")
 def list_domains(_gate: None = Depends(read_token_dependency)):
-    """M35: mounted domain handlers (honest: empty until a domain mounts)."""
-    return {"domains": domains.mounted_domains(),
-            "note": "empty list = no domain API mounted in this deployment"}
+    """M35/M37: mounted domain handlers with evidence-based status (honest:
+    empty list = no domain API mounted in this deployment)."""
+    with ops.SessionLocal() as s:
+        _persist_domain_stats(s)
+        s.commit()
+    return {"domains": domains.mounted_domains(), "statuses": domains.all_statuses(),
+            "states": list(domains.STATES),
+            "note": "empty list = no domain API mounted in this deployment; status is evidence-based (NOT_MOUNTED/MOUNTED/AVAILABLE/EXECUTION_VERIFIED/DEGRADED/FAILED/UNKNOWN)"}
+
+
+@router.get("/domains/{kind}/status")
+def domain_status(kind: str, _gate: None = Depends(read_token_dependency)):
+    """M37: evidence-based lifecycle status for one domain + observable stats."""
+    with ops.SessionLocal() as s:
+        _persist_domain_stats(s)
+        s.commit()
+    st = domains.all_statuses().get(kind)
+    if st is None:
+        return {"kind": kind, "status": domains.NOT_MOUNTED,
+                "evidence": {"invokes": 0, "successes": 0, "note": "no handler registered"}}
+    return {"kind": kind, "status": st["status"], "evidence": st}
+
+
+class MountIn(BaseModel):
+    module_path: str = Field(min_length=1, max_length=512)
+    attr: str = Field(min_length=1, max_length=128)
+    version: str = Field(min_length=1, max_length=64)
+    source_ref: str = Field(min_length=1, max_length=256)
+
+
+@router.post("/domains/{kind}/mount", status_code=201)
+def mount_domain(kind: str, body: MountIn,
+                 _gate: None = Depends(read_token_dependency),
+                 authorization: str | None = Header(default=None)):
+    """M37: mount a domain handler READ-ONLY from a server-side module path
+    (write-token only). Never modifies the domain package; a missing module is
+    an honest 409 domain_not_mounted, not a fake mount."""
+    require_write_token(authorization)
+    try:
+        entry = domains.load_handler_from_module(kind, body.module_path, body.attr,
+                                                 version=body.version, source_ref=body.source_ref)
+    except domains.DomainNotMounted as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except domains.DomainInvalid as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"domain_mount_failed ({type(e).__name__})")
+    with ops.SessionLocal() as s:
+        _persist_domain_stats(s)
+        s.commit()
+    return {"kind": kind, "mounted": True, "status": domains.domain_status(kind), **entry}
+
+
+@router.post("/domains/{kind}/deregister")
+def deregister_domain(kind: str, _gate: None = Depends(read_token_dependency),
+                      authorization: str | None = Header(default=None)):
+    """M37: handler lifecycle — deregister (write-token only)."""
+    require_write_token(authorization)
+    removed = domains.unregister_domain(kind)
+    with ops.SessionLocal() as s:
+        _persist_domain_stats(s)
+        s.commit()
+    if not removed:
+        raise HTTPException(status_code=409, detail=f"domain_not_mounted: {kind}")
+    return {"kind": kind, "deregistered": True, "status": domains.NOT_MOUNTED}
 
 
 @router.post("/domains/{kind}/invoke", status_code=201)
@@ -332,32 +415,64 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             s.commit()
             raise HTTPException(status_code=409, detail=f"domain_not_mounted: {kind}")
         try:
-            out = domains.invoke(kind, payload, task=t)
+            out = domains.invoke(kind, payload, task=t)  # M37: per-attempt timeout + retries, same idempotency key
         except domains.DomainError as e:
+            domains.record_outcome(kind, False, str(e))
             registry.record_event(s, task_id, "domain_error", str(e))
+            _persist_domain_stats(s)
             s.commit()
             raise HTTPException(status_code=502, detail=str(e))
         except domains.DomainInvalid as e:
+            domains.record_outcome(kind, False, str(e))
             registry.record_event(s, task_id, "domain_invalid", str(e))
+            _persist_domain_stats(s)
             s.commit()
             raise HTTPException(status_code=422, detail=str(e))
-        # persist the real domain result with provenance
+        domains.record_outcome(kind, True)
+        # persist the real domain result with provenance (incl. confidence/freshness if the domain provides them)
         t.result = json.dumps({"result": out["result"], "provenance": out["provenance"]})
         registry.record_event(s, task_id, "domain_result",
                               f"source={out['provenance'].get('source')} produced_at={out['provenance'].get('produced_at')}")
-        registry.transition(s, t, "QUEUED", "domain gateway queued")
-        registry.transition(s, t, "COMPLETED", "domain result persisted")
+        # M37 fix: walk the legal state chain (QUEUED->ASSIGNED->DELIVERING->
+        # ACKNOWLEDGED->RUNNING->COMPLETED); the M35 code jumped QUEUED->COMPLETED,
+        # which the state machine rejects (silent no-op left state=QUEUED while
+        # the response claimed COMPLETED)
+        for st in ("QUEUED", "ASSIGNED", "DELIVERING", "ACKNOWLEDGED", "RUNNING", "COMPLETED"):
+            assert registry.transition(s, t, st, "domain gateway"), f"illegal transition to {st}"
+        _persist_domain_stats(s)
         s.commit()
-        return {"task_id": task_id, "kind": kind, "state": "COMPLETED",
+        return {"task_id": task_id, "kind": kind, "state": registry.normalize_state(t.state),
                 "result": out["result"], "provenance": out["provenance"],
                 "idempotency_key": t.idempotency_key}
 
 
 @router.get("/health")
 def coordination_health(_gate: None = Depends(read_token_dependency)):
-    """M28: actionable health with explicit statuses + reasons (read-only)."""
+    """M28/M37: actionable health with explicit statuses + reasons (read-only).
+    Adds a `domains` component with evidence-based per-domain lifecycle status
+    (never healthy merely because a package exists)."""
     with ops.SessionLocal() as s:
-        return registry.health(s)
+        h = registry.health(s)
+        _persist_domain_stats(s)
+        s.commit()
+    st = domains.all_statuses()
+    if st:
+        worst = domains.EXECUTION_VERIFIED
+        order = [domains.FAILED, domains.DEGRADED, domains.UNKNOWN, domains.MOUNTED,
+                 domains.AVAILABLE, domains.EXECUTION_VERIFIED, domains.NOT_MOUNTED]
+        present = [st[k]["status"] for k in st]
+        worst = min(present, key=lambda x: order.index(x)) if present else domains.NOT_MOUNTED
+        comp_status = "healthy" if worst in (domains.EXECUTION_VERIFIED, domains.AVAILABLE, domains.NOT_MOUNTED) else "degraded"
+        h["components"].append({
+            "key": "domains", "status": comp_status,
+            "detail": f"{len(st)} mounted, worst={worst}; evidence-based states only",
+            "domains": st})
+    else:
+        h["components"].append({
+            "key": "domains", "status": "healthy",
+            "detail": "no domain handlers mounted (NOT_MOUNTED for all kinds)",
+            "domains": {}})
+    return h
 
 
 @router.get("/tasks/{task_id}/trace")

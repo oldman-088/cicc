@@ -407,3 +407,21 @@ class CoordinationDelivery(Base):
     error = Column(Text, nullable=True)
     at = Column(DateTime(timezone=True), default=utcnow)
     confirmed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class CoordinationDomainStat(Base):
+    """M37: persisted, evidence-based domain lifecycle stats (survives restart).
+    last_error is sanitized (type name / short message only — never internals)."""
+
+    __tablename__ = "coord_domain_stats"
+
+    kind = Column(String(64), primary_key=True)
+    version = Column(String(64), nullable=True)
+    source_ref = Column(String(256), nullable=True)
+    mounted_at = Column(String(32), nullable=True)
+    validated = Column(Integer, default=0)
+    invokes = Column(Integer, default=0)
+    successes = Column(Integer, default=0)
+    last_invoke_at = Column(String(32), nullable=True)
+    last_status = Column(String(16), nullable=True)  # ok | error
+    last_error = Column(String(256), nullable=True)  # sanitized, truncated
