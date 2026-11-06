@@ -65,3 +65,39 @@ def resolution_availability(*, schema_version: str) -> dict:
     if schema_version!='cicc.vi.resolution-availability/1': raise ValueError('unsupported resolution availability version')
     return ResolutionAvailabilityCandidate(schema_version=schema_version,status='not_implemented',persistent_history_available=False,
         note='No persistent resolution status or trusted audit is implemented.').model_dump(mode='json')
+
+# Candidate-only frontend representation of supplied source evidence; no new route.
+from .vi_evidence_ingestion import SourceEvidence
+
+class EvidenceObservationCandidate(Candidate):
+    evidence: SourceEvidence
+    collection_age_seconds: float
+    collection_age_status: Literal['future','stale','within_window']
+    source_modified_status: Literal['unknown','future','supplied']
+    score_date_age_days: int | None
+    score_date_status: Literal['unknown','future','supplied']
+
+class DuplicateContentCandidate(Candidate):
+    origin: Literal['EXPERIMENTAL_DEMO_DATA_ONLY','CALLER_SUPPLIED_UNVERIFIED']
+    source: Literal['NVD','OSV','GHSA','EPSS']
+    source_record_id: str
+    source_sha256: str
+    observation_count: int
+
+class SourceConflictCandidate(Candidate):
+    origin: Literal['EXPERIMENTAL_DEMO_DATA_ONLY','CALLER_SUPPLIED_UNVERIFIED']
+    source: Literal['NVD','EPSS']
+    source_record_id: str
+    revision: str
+    metric: str
+    issuer: str
+    differing_fields: dict[str,list[str]]
+
+class SourceEvidenceBatchCandidate(Candidate):
+    schema_version: Literal['cicc.vi.source-evidence-batch/1']
+    as_of: str
+    max_collection_age_seconds: float
+    observations: list[EvidenceObservationCandidate]
+    duplicate_content: list[DuplicateContentCandidate]
+    same_revision_conflicts: list[SourceConflictCandidate]
+    interpretation: str

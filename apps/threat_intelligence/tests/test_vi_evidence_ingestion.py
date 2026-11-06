@@ -69,3 +69,73 @@ def test_missing_provenance_and_forged_numeric_timestamp_are_rejected():
     with pytest.raises(ValueError): SourceEvidence.model_validate(malformed)
     forged=result.model_copy(update={'cve_ids':['CVE-invalid']})
     with pytest.raises(ValueError): quality_observation(forged)
+
+
+def test_exact_raw_verification_rejects_tampering_and_preserves_source_identity():
+    from apps.threat_intelligence.vi_evidence_ingestion import verify_evidence_bytes
+    doc={'id':'OSV-fixture','aliases':[CVE]};e=load('OSV',doc)
+    assert verify_evidence_bytes(e,raw(doc)) is None
+    with pytest.raises(EvidenceError): verify_evidence_bytes(e,raw(doc|{'id':'other'}))
+    forged=e.model_copy(update={'cve_ids':['CVE-2099-9999']})
+    with pytest.raises(EvidenceError): verify_evidence_bytes(forged,raw(doc))
+
+
+def test_batch_duplicate_content_age_and_comparable_conflicts_without_winner():
+    from apps.threat_intelligence.vi_evidence_ingestion import evidence_batch_report
+    a=load('EPSS',{'cve':CVE,'epss':'0.1','date':'2026-01-02'})
+    b=load('EPSS',{'cve':CVE,'epss':'0.100','date':'2026-01-02'})
+    c=load('EPSS',{'cve':CVE,'epss':'0.2','date':'2026-01-02'})
+    result=evidence_batch_report([c,a,b,a],as_of=NOW+timedelta(days=2),max_collection_age=timedelta(days=1))
+    assert result==evidence_batch_report([a,b,a,c],as_of=NOW+timedelta(days=2),max_collection_age=timedelta(days=1))
+    assert result['duplicate_content'][0]['observation_count']==2
+    assert len(result['same_revision_conflicts'])==1 and result['same_revision_conflicts'][0]['differing_fields']['score']==['0.1','0.2']
+    assert all(x['collection_age_status']=='stale' for x in result['observations'])
+    assert all(x['source_modified_status']=='unknown' for x in result['observations'])
+    assert 'no source winner' in result['interpretation']
+
+
+def test_same_revision_cvss_conflict_requires_explicit_matching_issuer():
+    from apps.threat_intelligence.vi_evidence_ingestion import evidence_batch_report
+    def nvd(score,source=None):
+        row={'cvssData':{'baseScore':score}}
+        if source is not None: row['source']=source
+        return load('NVD',{'id':CVE,'lastModified':'2026-01-02T00:00:00Z','metrics':{'cvssMetricV31':[row]}})
+    kw=dict(as_of=NOW,max_collection_age=timedelta(days=1))
+    assert not evidence_batch_report([nvd(1),nvd(9)],**kw)['same_revision_conflicts']
+    assert not evidence_batch_report([nvd(1,'source-a'),nvd(9,'source-b')],**kw)['same_revision_conflicts']
+    assert evidence_batch_report([nvd(1,'source-a'),nvd(9,'source-a')],**kw)['same_revision_conflicts']
+
+
+def test_numeric_cvss_formatting_does_not_create_false_disagreement():
+    from apps.threat_intelligence.vi_evidence_ingestion import evidence_batch_report
+    def nvd(score):
+        text='{"id":"'+CVE+'","lastModified":"2026-01-02T00:00:00Z","metrics":{"cvssMetricV31":[{"source":"fixture","cvssData":{"baseScore":'+score+'}}]}}'
+        return parse_source_evidence(text.encode(),source='NVD',collected_at=NOW,provenance='fixture',origin=LABEL)
+    result=evidence_batch_report([nvd('9.1'),nvd('9.10')],as_of=NOW,max_collection_age=timedelta(days=1))
+    assert result['same_revision_conflicts']==[]
+    assert {item['evidence']['cvss_observations'][0]['base_score'] for item in result['observations']}=={'9.1','9.10'}
+
+
+def test_batch_revalidates_mutated_nested_evidence():
+    from apps.threat_intelligence.vi_evidence_ingestion import evidence_batch_report
+    e=load('NVD',{'id':CVE,'lastModified':'2026-01-02T00:00:00Z','metrics':{'cvssMetricV31':[{'source':'fixture','cvssData':{'baseScore':9.1}}]}})
+    e.cvss_observations[0]['base_score']='NaN'
+    with pytest.raises(EvidenceError): evidence_batch_report([e],as_of=NOW,max_collection_age=timedelta(days=1))
+
+
+def test_score_dates_and_future_collection_are_separate_from_source_freshness():
+    from apps.threat_intelligence.vi_evidence_ingestion import evidence_batch_report
+    e=load('EPSS',{'cve':CVE,'epss':'0.1','date':'2026-01-04'})
+    row=evidence_batch_report([e],as_of=NOW-timedelta(days=1),max_collection_age=timedelta(days=1))['observations'][0]
+    assert row['score_date_age_days']==-2 and row['score_date_status']=='future'
+    assert row['collection_age_status']=='future' and row['source_modified_status']=='unknown'
+
+
+def test_fixture_and_unverified_origins_are_never_conflated():
+    from apps.threat_intelligence.vi_evidence_ingestion import evidence_batch_report
+    demo=load('EPSS',{'cve':CVE,'epss':'0.1','date':'2026-01-02'})
+    different=load('EPSS',{'cve':CVE,'epss':'0.2','date':'2026-01-02'}).model_copy(update={'origin':'CALLER_SUPPLIED_UNVERIFIED'})
+    same=demo.model_copy(update={'origin':'CALLER_SUPPLIED_UNVERIFIED'})
+    report=evidence_batch_report([demo,different,same],as_of=NOW,max_collection_age=timedelta(days=1))
+    assert report['duplicate_content']==[]
+    assert len(report['same_revision_conflicts'])==1 and report['same_revision_conflicts'][0]['origin']=='CALLER_SUPPLIED_UNVERIFIED'

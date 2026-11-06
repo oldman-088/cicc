@@ -10,7 +10,7 @@ import json
 import re
 from typing import Literal
 from uuid import NAMESPACE_URL, uuid5
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from .vulnerability_quality import Observation, Claim
 
 MAX_BYTES=1_000_000
@@ -56,6 +56,29 @@ class SourceEvidence(BaseModel):
     def aware(cls, value):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None): raise ValueError('aware timestamp required')
         return value.astimezone(timezone.utc) if value else None
+
+    @model_validator(mode='after')
+    def consistent_fields(self):
+        if any(not x or len(x)>1024 for x in self.other_identifiers) or len(set(self.other_identifiers))!=len(self.other_identifiers):
+            raise ValueError('invalid other identifiers')
+        if self.source in ('NVD','EPSS') and (not CVE.fullmatch(self.source_record_id) or self.cve_ids != [self.source_record_id]):
+            raise ValueError('CVE record identifier mismatch')
+        if self.source!='NVD' and self.cvss_observations: raise ValueError('unexpected CVSS observations')
+        for metric in self.cvss_observations:
+            if (set(metric)-{'kind','source','vector','base_score'} or metric.get('kind') not in ('cvssMetricV2','cvssMetricV30','cvssMetricV31','cvssMetricV40')
+                or not ('base_score' in metric or 'vector' in metric)
+                or any(not val.strip() or len(val)>1024 for val in metric.values())):
+                raise ValueError('invalid CVSS observation')
+            if 'base_score' in metric:
+                try: score=Decimal(metric['base_score'])
+                except InvalidOperation: raise ValueError('invalid CVSS score') from None
+                if not score.is_finite() or not 0<=score<=10: raise ValueError('invalid CVSS score')
+        if self.source=='EPSS':
+            if self.epss_score is None or len(self.epss_score)>32 or not re.fullmatch(r'(?:0(?:\.[0-9]+)?|1(?:\.0+)?)',self.epss_score) or self.epss_score_date is None:
+                raise ValueError('invalid EPSS evidence')
+        elif self.epss_score is not None or self.epss_score_date is not None:
+            raise ValueError('unexpected EPSS evidence')
+        return self
 
 
 def _json(raw):
@@ -163,3 +186,69 @@ def quality_observation(evidence: SourceEvidence) -> Observation:
         source=evidence.source,source_record_id=evidence.source_record_id,cve_ids=evidence.cve_ids,claims=[],
         source_modified_at=evidence.source_modified_at,collected_at=evidence.collected_at,
         provenance=evidence.provenance+'#sha256:'+evidence.source_sha256,origin=evidence.origin)
+
+
+def verify_evidence_bytes(evidence: SourceEvidence, raw: bytes) -> None:
+    """Check supplied raw bytes and normalized fields agree; not publisher authentication."""
+    if not isinstance(evidence,SourceEvidence): raise EvidenceError('source evidence required')
+    try:
+        checked=SourceEvidence.model_validate(evidence.model_dump())
+        reparsed=parse_source_evidence(raw,source=checked.source,collected_at=checked.collected_at,
+                                       provenance=checked.provenance,origin=checked.origin)
+        if checked!=reparsed: raise EvidenceError('source evidence does not match supplied bytes')
+    except EvidenceError: raise
+    except (ValueError,TypeError): raise EvidenceError('invalid source evidence') from None
+
+
+def evidence_batch_report(evidence: list[SourceEvidence], *, as_of: datetime, max_collection_age) -> dict:
+    """Summarize caller-scoped evidence, never choose a winner or make decisions.
+
+    Duplicate content is grouped by provider/record/digest; observations remain
+    intact. Same-revision disagreement is reported only for comparable explicitly
+    supplied CVSS fields or EPSS scores, not inferred from a digest mismatch.
+    """
+    from datetime import timedelta
+    if not isinstance(evidence,list) or len(evidence)>5000 or any(not isinstance(x,SourceEvidence) for x in evidence):
+        raise EvidenceError('invalid evidence batch')
+    if not isinstance(as_of,datetime) or as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise EvidenceError('aware as_of required')
+    if not isinstance(max_collection_age,timedelta) or max_collection_age.total_seconds()<=0:
+        raise EvidenceError('positive age horizon required')
+    try: items=[SourceEvidence.model_validate(x.model_dump()) for x in evidence]
+    except ValueError: raise EvidenceError('invalid source evidence') from None
+    if sum(len(x.model_dump_json().encode('utf-8')) for x in items)>4_194_304:
+        raise EvidenceError('evidence batch size exceeded')
+    as_of=as_of.astimezone(timezone.utc); horizon=max_collection_age.total_seconds(); observations=[]; groups={}; comparisons={}
+    for item in items:
+        age=(as_of-item.collected_at).total_seconds()
+        data=item.model_dump(mode='json')
+        score_age=(as_of.date()-item.epss_score_date).days if item.epss_score_date is not None else None
+        observations.append({'evidence':data,'collection_age_seconds':age,
+            'collection_age_status':'future' if age<0 else ('stale' if age>horizon else 'within_window'),
+            'source_modified_status':'unknown' if item.source_modified_at is None else ('future' if item.source_modified_at>as_of else 'supplied'),
+            'score_date_age_days':score_age,'score_date_status':'unknown' if score_age is None else ('future' if score_age<0 else 'supplied')})
+        groups.setdefault((item.origin,item.source,item.source_record_id,item.source_sha256),[]).append(item)
+        # Comparing values requires the same source, record and explicit revision.
+        if item.source=='NVD' and item.source_modified_at is not None:
+            for metric in item.cvss_observations:
+                if 'source' not in metric: continue # do not assume same metric issuer
+                key=(item.origin,item.source,item.source_record_id,item.source_modified_at.isoformat(),metric.get('kind'),metric['source'])
+                fields=comparisons.setdefault(key,{})
+                for field in ('vector','base_score'):
+                    if field in metric:
+                        value=str(Decimal(metric[field]).normalize()) if field=='base_score' else metric[field]
+                        fields.setdefault(field,set()).add(value)
+        if item.source=='EPSS' and item.epss_score is not None and item.epss_score_date is not None:
+            key=(item.origin,item.source,item.source_record_id,item.epss_score_date.isoformat(),'epss','provider-declared')
+            comparisons.setdefault(key,{}).setdefault('score',set()).add(str(Decimal(item.epss_score).normalize()))
+    observations.sort(key=lambda x:json.dumps(x,sort_keys=True,separators=(',',':'),ensure_ascii=False))
+    duplicates=[{'origin':key[0],'source':key[1],'source_record_id':key[2],'source_sha256':key[3],'observation_count':len(group)}
+                for key,group in sorted(groups.items()) if len(group)>1]
+    conflicts=[]
+    for key,fields in sorted(comparisons.items()):
+        differing={k:sorted(v) for k,v in sorted(fields.items()) if len(v)>1}
+        if differing: conflicts.append({'origin':key[0],'source':key[1],'source_record_id':key[2],'revision':key[3],
+                                         'metric':key[4],'issuer':key[5],'differing_fields':differing})
+    return {'schema_version':'cicc.vi.source-evidence-batch/1','as_of':as_of.isoformat(),
+            'max_collection_age_seconds':horizon,'observations':observations,'duplicate_content':duplicates,
+            'same_revision_conflicts':conflicts,'interpretation':'Evidence comparison only; no source winner, applicability, exposure, confidence or priority.'}

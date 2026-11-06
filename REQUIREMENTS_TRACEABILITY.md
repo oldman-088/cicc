@@ -1,3 +1,5 @@
+> **M53 replacement Agent 3 VI verification:** isolated PostgreSQL 304 passed / 10 skipped (8 actual host, 2 live opt-ins); offline 202 passed / 112 skipped; dedicated engine guard 102 passed / 0 skipped / 1 live deselected; separate CISA GitHub mirror 2 passed. Actual host 0 executed / 8 skipped. Candidate quality/conflict adapter is unmounted and delegates all auth, pool, audit and trace to an unapproved host. See `M53_VI_ALIGNMENT.md`, `HOST_DEPENDENCIES_M53.md`, `VI_SOURCE_AND_DUPLICATION_M52.md`. Earlier assertions and test counts are historical.
+
 # Requirements traceability — 2026-11-06
 
 | README v1.0 requirement | Evidence | Status / limitations |
