@@ -199,3 +199,62 @@ class TestListPaginationDoesNotLoseRows:
             if cursor is None:
                 break
         assert len(seen) == 3, f"severity filter lost rows across pages: {seen}"
+
+
+class TestExportSemanticsDocumentMatchesTheCode:
+    """`EXPORT_SEMANTICS.md` states a mapping table. Tables drift; these pin it.
+
+    The document exists because the four adapters had four test suites and nothing
+    compared them, so a document asserting the relationship is only worth having if it
+    is checked against the functions that implement it.
+    """
+
+    @staticmethod
+    def _doc() -> str:
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return (root / "docs" / "vulnerability-intelligence" / "EXPORT_SEMANTICS.md").read_text()
+
+    def test_the_documented_vex_state_mapping_is_the_implemented_one(self):
+        from vuln_intel.affected import Verdict
+        from vuln_intel.interop.vex import vex_state_for
+
+        doc = self._doc()
+        assert vex_state_for(Verdict.AFFECTED, kev=True) == "exploitable"
+        assert vex_state_for(Verdict.AFFECTED, kev=None) == "affected"
+        assert vex_state_for(Verdict.NOT_AFFECTED) == "not_affected"
+        # The rule that matters most, in the code and in the document:
+        assert vex_state_for(Verdict.UNKNOWN) == "under_investigation"
+        for state in ("exploitable", "affected", "not_affected", "under_investigation"):
+            assert f"`{state}`" in doc, f"the document does not mention {state}"
+
+    def test_the_documented_sarif_levels_are_the_implemented_ones(self):
+        from vuln_intel.interop.sarif import to_sarif
+
+        doc = self._doc()
+        source = __import__("inspect").getsource(to_sarif)
+        for level in ("error", "warning", "note", "none"):
+            assert f'"{level}"' in source, f"SARIF no longer emits {level}"
+            assert f"`{level}`" in doc, f"the document does not mention {level}"
+
+    def test_the_documented_limits_are_the_implemented_limits(self):
+        """A table of limits that is not read from the constants is a table of guesses."""
+        from vuln_intel.integration import asgi
+        from vuln_intel.interop import ctis
+
+        doc = self._doc()
+        assert str(asgi._EXPORT_MAX_RECORDS).replace("5000", "5,000") in doc
+        for name, value in (
+            ("_MAX_SCORES", ctis._MAX_SCORES),
+            ("_MAX_TECHNIQUES", ctis._MAX_TECHNIQUES),
+            ("_MAX_REFERENCES", ctis._MAX_REFERENCES),
+        ):
+            assert value > 0, name
+        # The document cites 32/20/50; those are the CTIS bounds it describes.
+        assert "`[:32]`" in doc and "`[:20]`" in doc and "`[:50]`" in doc
+
+    def test_it_states_that_nothing_was_live_verified(self):
+        """The one claim that must never quietly disappear from this file."""
+        doc = self._doc()
+        assert "No" in doc and "live provider" in doc
