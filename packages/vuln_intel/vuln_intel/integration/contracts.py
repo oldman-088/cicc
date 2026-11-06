@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
 __all__ = [
@@ -61,6 +61,25 @@ def _flatten(body: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
     return flat
 
 
+def _normalise_instant(instant: str) -> str:
+    """Render an instant in UTC, so two stores cannot describe the same moment twice.
+
+    Found by a parity test in M51: the in-memory store kept the caller's timezone
+    (``2026-01-01T14:00:00+02:00``) while the persistent stores round-tripped through
+    UTC (``2026-01-01T12:00:00+00:00``). Same moment, two descriptions — which is
+    exactly the kind of difference this whole milestone exists to stop reporting
+    as a conflict. An unparseable value is passed through unchanged rather than
+    silently dropped.
+    """
+    try:
+        moment = datetime.fromisoformat(instant.replace("Z", "+00:00"))
+    except ValueError:
+        return instant
+    if moment.tzinfo is None:
+        return instant
+    return moment.astimezone(timezone.utc).isoformat()
+
+
 def conflict_detail(
     *,
     existing_details: Mapping[str, Any],
@@ -83,7 +102,7 @@ def conflict_detail(
         )
     )
     return ConflictDetail(
-        instant=instant,
+        instant=_normalise_instant(instant),
         existing_source=existing_source,
         incoming_source=incoming_source,
         differing_fields=differing,

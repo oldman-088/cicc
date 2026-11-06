@@ -139,6 +139,17 @@ def main(argv: list[str] | None = None) -> int:
         print(text)
 
     totals = body["totals"]
+
+    # A null on one side is its own finding, not a footnote: it means a reader of that
+    # side gets no answer where the other side has one. Reported separately so it is
+    # actionable without scanning per-record verdicts.
+    if totals["null_fields"]:
+        print(
+            f"{totals['null_fields']} field(s) recorded by one side and null on the "
+            "other (see null_fields)",
+            file=sys.stderr,
+        )
+
     if totals["compared"] == 0:
         print(
             "nothing compared: both sides were empty or every row was unusable",

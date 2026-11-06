@@ -400,34 +400,84 @@ class TestAgainstRealPackageOutput:
             "cve_id", "published", "last_modified", "descriptions"
         }
 
-    def test_the_comparison_finds_that_the_package_drops_nvd_timestamps(self):
-        """A real finding, surfaced the first time this ran against real output.
+    def test_a_fixture_without_a_published_date_produces_null_not_a_guess(self):
+        """Corrected in M51: this is a *fixture* artefact, not an ingestion defect.
 
-        The host stores NVD's ``published``/``lastModified`` verbatim. The package
-        maps ``published`` from ``record.published``, which the fixture record above
-        does not set, and renders it as an explicit ``None`` — so a reader querying
-        the package for "when was this published" gets nothing, while the host has the
-        answer. The utility is right to call that semantic; the test asserted
-        "identical" first and was wrong.
+        M48 recorded this as "the package drops NVD timestamps, so a reader asking
+        when a CVE was published gets nothing". That was wrong, and the way it was
+        wrong is worth keeping: the fixture ``NormalizedVulnerability`` was built
+        without ``published=``, so ``to_source_details`` faithfully rendered the
+        explicit null it was given. The real connector sets it — see
+        ``test_the_real_nvd_parser_round_trips_all_four_shared_fields`` below.
+
+        The behaviour still matters: a null on one side is reported as semantic, and
+        the note says which side is missing the value rather than blaming the other.
         """
         report = compare_records(
             host_rows=[host_row()], package_rows=[self._real_package_row()]
         )
         record = report.records[0]
-        assert record.status == RECORD_CONFLICTING
         detail = {f.name: f for f in record.fields}
         assert detail["published"].verdict == SEMANTIC
         assert "package records no value" in (detail["published"].note or "")
 
-    def test_a_package_row_that_carries_the_timestamps_is_only_a_format_difference(self):
-        """When the package does carry them, the difference is spelling alone."""
-        row = self._real_package_row()
-        row["details"]["published"] = "2021-12-10T10:15:09.143+00:00"
-        row["details"]["last_modified"] = "2021-12-10T10:15:09.143+00:00"
-        report = compare_records(host_rows=[host_row()], package_rows=[row])
-        detail = {f.name: f for f in report.records[0].fields}
-        assert detail["published"].verdict == TIMESTAMP_FORMAT
-        assert detail["last_modified"].verdict == TIMESTAMP_FORMAT
+    def test_the_real_nvd_parser_round_trips_all_four_shared_fields(self):
+        """The finding M48 got wrong, pinned properly.
+
+        Built from an NVD response shape through the real ``_parse_entry``, not from a
+        hand-assembled record. All four shared fields survive into the store payload,
+        and the only remaining difference is timestamp spelling.
+        """
+        from datetime import datetime, timezone
+
+        from vuln_intel.connectors.nvd import NvdConnector
+        from vuln_intel.schema import Origin
+
+        connector = NvdConnector.__new__(NvdConnector)
+        connector.origin = Origin.FIXTURE
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        entry = {
+            "cve": {
+                "id": "CVE-2021-44228",
+                "published": "2021-12-10T10:15:09.143",
+                "lastModified": "2021-12-10T10:15:09.143",
+                "vulnStatus": "Analyzed",
+                # NVD's API says `lang`/`value`; the package normalises to the
+                # host's `language`/`text` on the way out. Using the normalised
+                # names here would test nothing, because the parser would not see
+                # a description at all -- which is what happened the first time.
+                "descriptions": [{"lang": "en", "value": "RCE in Log4j2"}],
+            }
+        }
+        record = connector._parse_entry(
+            entry, now, "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+        )
+        from vuln_intel.integration.mapping import to_store_payload
+
+        payload = to_store_payload(record, tenant_id="t", collected_at=now)
+        details = payload["details"]
+
+        # All four shared fields are present and non-null.
+        for name in ("cve_id", "published", "last_modified", "descriptions"):
+            assert details.get(name) not in (None, []), f"{name} lost in mapping"
+
+        report = compare_records(
+            host_rows=[host_row(descriptions=[{"language": "en", "text": "RCE in Log4j2"}])],
+            package_rows=[
+                {
+                    "cve": payload["cve"],
+                    "origin": payload["origin"],
+                    "collected_at": payload["collected_at"],
+                    "details": details,
+                }
+            ],
+        )
+        verdicts = {f.name: f.verdict for f in report.records[0].fields}
+        assert verdicts["cve_id"] == IDENTICAL
+        assert verdicts["descriptions"] == IDENTICAL
+        # Spelling only: NVD writes no offset, this package writes +00:00.
+        assert verdicts["published"] == TIMESTAMP_FORMAT
+        assert verdicts["last_modified"] == TIMESTAMP_FORMAT
         assert report.conflicting == 0
 
 
@@ -609,3 +659,71 @@ class TestTheReadOnlyCommandLine:
         conn.close()
         result = self._run(empty, empty)
         assert result.returncode == 2
+
+
+class TestTheNullFieldInventory:
+    """`published: None` is reported as its own finding, not buried in a verdict.
+
+    M48 flagged this as "the package drops NVD timestamps". M51 traced it: the real
+    connector does write them, and what I had seen was a fixture that never set the
+    field. The inventory stays, because a genuine null is still worth naming — it just
+    is not the systemic defect the first report described.
+    """
+
+    @staticmethod
+    def _host():
+        return host_row(published="2021-12-10T10:15:09.143")
+
+    @staticmethod
+    def _package_with_nulls():
+        row = package_row()
+        row["details"]["published"] = None
+        row["details"]["last_modified"] = None
+        return row
+
+    def test_a_null_on_the_package_side_is_listed(self):
+        report = compare_records(
+            host_rows=[self._host()], package_rows=[self._package_with_nulls()]
+        )
+        missing = {n["field"]: n for n in report.null_fields}
+        assert set(missing) == {"published", "last_modified"}
+        assert missing["published"]["missing_side"] == "package"
+        assert missing["published"]["host_value"] == "2021-12-10T10:15:09.143"
+        assert missing["published"]["package_value"] is None
+
+    def test_a_null_on_the_host_side_is_listed_too(self):
+        row = host_row()
+        row["details"]["published"] = None
+        report = compare_records(host_rows=[row], package_rows=[package_row()])
+        missing = {n["field"]: n for n in report.null_fields}
+        assert missing["published"]["missing_side"] == "host"
+        assert missing["published"]["package_value"] is not None
+
+    def test_a_genuine_disagreement_is_not_listed_as_a_null(self):
+        """Both sides have a value but they differ: that is a conflict, not a gap."""
+        report = compare_records(
+            host_rows=[host_row(published="2021-01-01T00:00:00Z")],
+            package_rows=[package_row(published="2022-01-01T00:00:00Z")],
+        )
+        assert report.null_fields == []
+        assert report.conflicting == 1
+
+    def test_a_representation_difference_is_not_listed(self):
+        report = compare_records(
+            host_rows=[host_row(published="2021-12-10T10:15:09Z")],
+            package_rows=[package_row(published="2021-12-10T10:15:09+00:00")],
+        )
+        assert report.null_fields == []
+
+    def test_the_count_appears_in_the_totals(self):
+        report = compare_records(
+            host_rows=[self._host()], package_rows=[self._package_with_nulls()]
+        )
+        assert report.as_dict()["totals"]["null_fields"] == 2
+
+    def test_the_inventory_survives_json(self):
+        report = compare_records(
+            host_rows=[self._host()], package_rows=[self._package_with_nulls()]
+        )
+        parsed = json.loads(json.dumps(report.as_dict()))
+        assert len(parsed["null_fields"]) == 2

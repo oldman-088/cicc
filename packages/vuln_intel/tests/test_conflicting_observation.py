@@ -65,7 +65,13 @@ def _upsert(store, *, details, when=_T0, cve="CVE-2021-44228", tenant="tenant-a"
         entity={"id": "entity-1"},
         details=details,
         enrichment={"origin": "fixture"},
-        provenance=provenance or {"source": "NVD", "observed_at": when.isoformat()},
+        # `is None`, not `or`: an explicitly empty provenance block is a case under
+        # test (a store must not invent a source), and `or` would silently replace it.
+        provenance=(
+            {"source": "NVD", "observed_at": when.isoformat()}
+            if provenance is None
+            else provenance
+        ),
         collected_at=when,
         dry_run=False,
     )
@@ -391,3 +397,123 @@ class TestEveryAdapterAgreesOnTheConflict:
             found = store.find(tenant_id="tenant-a", cve="CVE-2021-44228")
             states.append((found["details"], len(_provenance(store, "CVE-2021-44228"))))
         assert states[0] == states[1] == states[2]
+
+
+class TestTheEdgesThatProduceBadEvidence:
+    """Four cases where a conflict detail can quietly become wrong.
+
+    Each of these was checked by hand during M51 before being written as a test, and
+    one of them found a real parity defect (timestamp normalisation). They are grouped
+    because they share a failure mode: the detail looks populated but describes
+    something other than what happened.
+    """
+
+    def test_missing_provenance_yields_none_not_an_invented_source(self, store):
+        """A store must not name a source it was never told about.
+
+        ``existing_source`` is read from stored provenance. When there is none, the
+        honest answer is ``None``; filling in "NVD" or "unknown" would attribute a
+        record to a source that may never have written it.
+        """
+        _upsert(store, details={"severity": "critical"}, provenance={})
+        result = _upsert(store, details={"severity": "low"}, provenance={})
+        assert result.outcome == UpsertOutcome.CONFLICTED
+        assert result.conflict.existing_source is None
+        assert result.conflict.incoming_source is None
+        # The refusal is still fully described in every other respect.
+        assert result.conflict.differing_fields == ("severity",)
+        assert result.conflict.existing_digest != result.conflict.incoming_digest
+
+    def test_a_partial_provenance_block_keeps_what_it_has(self, store):
+        """`source` present but `observed_at` absent must not lose the source."""
+        _upsert(store, details={"severity": "critical"},
+                provenance={"source": "NVD"})
+        result = _upsert(store, details={"severity": "low"},
+                         provenance={"source": "OSV"})
+        assert result.conflict.existing_source == "NVD"
+        assert result.conflict.incoming_source == "OSV"
+
+    def test_multiple_differing_fields_are_all_named_and_sorted(self, store):
+        _upsert(store, details={"severity": "critical", "cvss": 10.0, "kev": True})
+        result = _upsert(store, details={"severity": "low", "cvss": 5.0, "kev": False})
+        assert result.conflict.differing_fields == ("cvss", "kev", "severity")
+        # Sorted, so two runs produce byte-identical reports.
+        assert list(result.conflict.differing_fields) == sorted(
+            result.conflict.differing_fields
+        )
+
+    def test_a_field_added_on_one_side_counts_as_a_difference(self, store):
+        """A key present in one body and absent from the other is not "no change"."""
+        _upsert(store, details={"severity": "critical"})
+        result = _upsert(store, details={"severity": "critical", "kev": True})
+        assert "kev" in result.conflict.differing_fields
+
+    def test_the_same_instant_in_another_timezone_is_still_a_conflict(self, store):
+        """12:00Z and 14:00+02:00 are one instant; the bodies still disagree."""
+        from datetime import timedelta
+
+        plus_two = _T0.astimezone(timezone(timedelta(hours=2)))
+        _upsert(store, details={"severity": "critical"}, when=_T0)
+        result = _upsert(store, details={"severity": "low"}, when=plus_two)
+        assert result.outcome == UpsertOutcome.CONFLICTED
+
+    def test_the_reported_instant_is_normalised_to_utc(self, store):
+        """A parity test caught this: memory kept +02:00, the others reported UTC.
+
+        Two stores describing one moment two ways is the same class of defect this
+        milestone is about, so the detail normalises rather than trusting the caller.
+        """
+        from datetime import timedelta
+
+        plus_two = _T0.astimezone(timezone(timedelta(hours=2)))
+        _upsert(store, details={"severity": "critical"}, when=_T0)
+        result = _upsert(store, details={"severity": "low"}, when=plus_two)
+        assert result.conflict.instant.endswith("+00:00")
+        assert result.conflict.instant == _T0.isoformat()
+
+    def test_digests_are_stable_across_key_ordering(self, store):
+        """Two dicts with the same content must hash the same regardless of order."""
+        _upsert(store, details={"severity": "critical", "cvss": 10.0})
+        first = _upsert(store, details={"cvss": 10.0, "severity": "low"})
+        again = _upsert(store, details={"severity": "low", "cvss": 10.0})
+        assert first.conflict.incoming_digest == again.conflict.incoming_digest
+        assert first.conflict.existing_digest == again.conflict.existing_digest
+
+    def test_the_digest_does_not_depend_on_the_store_that_computed_it(self, tmp_path):
+        import sqlite3
+
+        from vuln_intel.integration.dbapi_store import (
+            SQLITE_SCHEMA,
+            DBAPIVulnerabilityStore,
+        )
+
+        digests = []
+        stores = [
+            InMemoryVulnerabilityStore(allow_fixture=True),
+            SQLiteVulnerabilityStore(path=tmp_path / "dig.db", allow_fixture=True),
+        ]
+        path = str(tmp_path / "dig-dbapi.db")
+        conn = sqlite3.connect(path)
+        conn.executescript(SQLITE_SCHEMA)
+        conn.commit()
+        conn.close()
+        stores.append(
+            DBAPIVulnerabilityStore(
+                connect=lambda: sqlite3.connect(path),
+                paramstyle="qmark",
+                allow_fixture=True,
+            )
+        )
+        for store in stores:
+            _upsert(store, details={"severity": "critical", "cvss": 10.0})
+            result = _upsert(store, details={"severity": "low", "cvss": 5.0})
+            digests.append(
+                (result.conflict.existing_digest, result.conflict.incoming_digest)
+            )
+        assert len(set(digests)) == 1
+
+    def test_an_empty_body_is_a_difference_not_a_no_op(self, store):
+        _upsert(store, details={"severity": "critical"})
+        result = _upsert(store, details={})
+        assert result.outcome == UpsertOutcome.CONFLICTED
+        assert "severity" in result.conflict.differing_fields

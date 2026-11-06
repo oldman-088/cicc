@@ -169,6 +169,37 @@ class ComparisonReport:
     def compared(self) -> int:
         return len(self.records)
 
+    @property
+    def null_fields(self) -> list[dict[str, Any]]:
+        """Every compared field where one side records no value, with both sides shown.
+
+        Called out separately because "the package has no published date for this CVE"
+        is a different question from "the two sides disagree about it", and an operator
+        asked to fix the first should not have to scan per-field verdicts to find it.
+        """
+        out: list[dict[str, Any]] = []
+        for record in self.records:
+            # `verdict`, not `field`: the module imports `field` from dataclasses and
+            # a loop variable of the same name silently shadows it.
+            for verdict in record.fields:
+                if verdict.verdict != SEMANTIC:
+                    continue
+                if verdict.host_value is not None and verdict.package_value is not None:
+                    continue
+                out.append(
+                    {
+                        "cve": record.cve,
+                        "field": verdict.name,
+                        "missing_side": (
+                            "host" if verdict.host_value is None else "package"
+                        ),
+                        "host_value": _jsonable(verdict.host_value),
+                        "package_value": _jsonable(verdict.package_value),
+                        "note": verdict.note,
+                    }
+                )
+        return out
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "compared_fields": list(self.compared_fields),
@@ -181,8 +212,12 @@ class ComparisonReport:
                 "host_only": self.host_only,
                 "package_only": self.package_only,
                 "unusable": len(self.unusable),
+                "null_fields": len(self.null_fields),
             },
             "records": [r.as_dict() for r in self.records],
+            # Explicit, so a `published: None` discrepancy is a named output rather
+            # than something a reader has to discover inside a field verdict.
+            "null_fields": self.null_fields,
             "unusable": list(self.unusable),
         }
 

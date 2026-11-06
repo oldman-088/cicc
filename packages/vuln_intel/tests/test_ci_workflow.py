@@ -38,7 +38,8 @@ class TestStructure:
         assert "on" in workflow or True in workflow, "workflow has no trigger"
         assert workflow.get("jobs"), "workflow defines no jobs"
 
-    @pytest.mark.parametrize("job_name", ["test", "oracle", "comparator-oracle-status",
+    @pytest.mark.parametrize("job_name", ["test", "postgres", "oracle",
+                                          "comparator-oracle-status",
                                           "maven-rubygems-runtime"])
     def test_every_expected_job_exists(self, workflow, job_name):
         assert job_name in workflow["jobs"], f"job {job_name!r} disappeared"
@@ -461,17 +462,147 @@ class TestTheEngineTestsActuallyRunInCI:
         )
 
     def test_that_job_fails_when_a_postgres_test_skips(self, workflow):
+        """Execute the job's own guard script, rather than pattern-matching its text.
+
+        An earlier version of this test asserted that the workflow text contained
+        both `sys.exit` and `skipped`. It passed while the job merely *printed* the
+        skip count, because the words were present in a `print` too. This extracts
+        the real heredoc from the workflow and runs it against synthetic JUnit XML,
+        so the assertion is about behaviour.
+        """
         _, job = self._postgres_job(workflow)
-        text = " ".join(str(step.get("run", "")) for step in job["steps"])
-        assert "skipped" in text, (
-            "the PostgreSQL job does not inspect the skip count, so a run where "
-            "every engine test skipped would still be green"
-        )
-        # It must exit non-zero on a skip, not merely print the number.
-        assert "sys.exit" in text and "skipped" in text
+        script = self._extract_guard(job)
+        assert script, "no Python guard script found in the postgres job"
+
+        import subprocess
+        import sys
+        import tempfile
+        import xml.etree.ElementTree as ET
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path_guard = pathlib.Path(tmp) / "guard.py"
+            path_guard.write_text(script, encoding="utf-8")
+
+            def run(tests, skipped, failures=0):
+                report = pathlib.Path(tmp) / f"r{tests}-{skipped}-{failures}.xml"
+                suite = ET.Element(
+                    "testsuite", tests=str(tests), skipped=str(skipped),
+                    failures=str(failures), errors="0",
+                )
+                ET.ElementTree(suite).write(report)
+                return subprocess.run(  # noqa: S603 - fixed argv, no shell
+                    [sys.executable, str(path_guard), str(report)],
+                    capture_output=True, text=True, check=False,
+                )
+
+            assert run(19, 0).returncode == 0, (
+                "the guard must pass when every engine test executed:\n"
+                f"{run(19, 0).stderr}"
+            )
+            assert run(19, 3).returncode != 0, (
+                "the guard did not fail on 3 skipped engine tests, so a run where the "
+                "engine was never touched would still be green"
+            )
+            assert run(19, 0, failures=1).returncode != 0
+
+    @staticmethod
+    def _extract_guard(job) -> str:
+        """The Python heredoc inside the job, rewritten to take the report as argv.
+
+        The workflow hardcodes /tmp/pg.xml; running it under test needs a path the
+        test controls, so only that path is substituted.
+        """
+        import re
+
+        for step in job["steps"]:
+            run = str(step.get("run", ""))
+            match = re.search(
+                r"python - <<'PY'\n(.*?)\n\s*PY", run, re.DOTALL
+            )
+            if not match:
+                continue
+            body = match.group(1)
+            if "junit" in run and ("skipped" in body or "tests" in body):
+                return body.replace(
+                    'ET.parse("/tmp/pg.xml")', "ET.parse(sys.argv[1])"
+                ).replace("import sys", "import sys", 1)
+        return ""
 
     def test_the_skip_check_reads_a_junit_report_not_stdout(self, workflow):
         """Parsing console output is how a '1 skipped' line gets missed."""
         _, job = self._postgres_job(workflow)
         text = " ".join(str(step.get("run", "")) for step in job["steps"])
         assert "--junit-xml" in text
+
+    def test_it_runs_on_pull_requests_and_package_changes(self, workflow):
+        """A job that only runs on some events is a job that silently stops running.
+
+        The original PostgreSQL gap was not only a missing driver: nothing tied the
+        engine tests to a trigger, so an event-scope mistake would have hidden them
+        just as effectively. Triggers are declared once for the whole workflow, so
+        this asserts the scope that the postgres job inherits.
+        """
+        triggers = workflow.get("on", workflow.get(True))
+        assert triggers, "workflow has no trigger block"
+        pull_request = triggers.get("pull_request")
+        assert pull_request is not None, "the workflow does not run on pull requests"
+        paths = pull_request.get("paths") or []
+        assert any(p.startswith("packages/vuln_intel") for p in paths), (
+            f"pull requests that touch the package do not trigger CI: paths={paths}"
+        )
+        assert any(".github/workflows" in p for p in paths), (
+            "changes to the workflow itself do not trigger CI, so a broken guard "
+            "could never be caught by the guard"
+        )
+
+    def test_it_also_runs_on_pushes_to_the_package(self, workflow):
+        triggers = workflow.get("on", workflow.get(True))
+        push = triggers.get("push")
+        assert push is not None
+        paths = push.get("paths") or []
+        assert any(p.startswith("packages/vuln_intel") for p in paths)
+
+    def test_the_skip_guard_fails_rather_than_warns(self):
+        """Exercised for real: the guard logic is run against synthetic JUnit XML.
+
+        Asserting that the workflow *contains* `sys.exit` proves the text is there,
+        not that a skip is fatal. This runs the same comparison against a report with
+        skips and against one without.
+        """
+        import subprocess
+        import sys
+        import tempfile
+        import xml.etree.ElementTree as ET
+
+        guard = '''
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+suite = root if root.tag == "testsuite" else root[0]
+tests = int(suite.get("tests")); skipped = int(suite.get("skipped"))
+failures = int(suite.get("failures")) + int(suite.get("errors"))
+if failures: sys.exit("failed")
+if skipped: sys.exit(f"{skipped} skipped: the engine was NOT exercised")
+if tests < 10: sys.exit("too few")
+print("all executed")
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            guard_path = pathlib.Path(tmp) / "guard.py"
+            guard_path.write_text(guard, encoding="utf-8")
+
+            def run(tests, skipped, failures=0):
+                path = pathlib.Path(tmp) / f"r{tests}-{skipped}.xml"
+                suite = ET.Element("testsuite", tests=str(tests), skipped=str(skipped),
+                                   failures=str(failures), errors="0")
+                ET.ElementTree(suite).write(path)
+                return subprocess.run(  # noqa: S603 - fixed argv, no shell
+                    [sys.executable, str(guard_path), str(path)],
+                    capture_output=True, text=True, check=False,
+                )
+
+            assert run(19, 0).returncode == 0, "a fully-executed run must pass"
+            skipped_run = run(19, 1)
+            assert skipped_run.returncode != 0, "a skipped engine test must fail the job"
+            assert "NOT exercised" in skipped_run.stderr
+            assert run(19, 0, failures=1).returncode != 0
+            assert run(3, 0).returncode != 0, "too few tests must fail the job"
