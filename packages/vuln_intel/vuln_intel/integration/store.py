@@ -9,9 +9,11 @@ Two stores are provided:
 * :class:`RefusingStore` — used when no approval exists.  It refuses every write
   with an explicit reason, which is preferable to a silent no-op.
 
-A real SQLAlchemy adapter is **not** shipped: it would need an approved
-migration and must live in the host.  ``SQLALCHEMY_ADAPTER_RECIPE`` documents the
-exact mapping for whoever writes it (see docs/INTEGRATION.md).
+A real SQLAlchemy adapter is **not** shipped: it would need an approved migration
+and must live in the host.  What *is* shipped is the SQL itself — see
+:mod:`vuln_intel.integration.sqlite_store`, whose ``SCHEMA`` constant is the table
+shape, the uniqueness rule, the tenancy constraint and the ordering rank.  That is
+the part a host migration has to reproduce; the ORM call around it is not.
 """
 
 from __future__ import annotations

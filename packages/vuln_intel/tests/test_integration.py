@@ -110,10 +110,55 @@ def test_kev_unknown_is_preserved_as_null() -> None:
 def test_provenance_block_is_complete_and_aware() -> None:
     payload = to_store_payload(live_record(), tenant_id="tenant-a")
     provenance = payload["provenance"]
-    assert provenance["event_type"] == "source_record_ingested"
+    assert provenance["event_type"] == "source_record_created"
     assert provenance["details"]["source"] == "nvd"
     assert provenance["details"]["origin"] == "live"
     assert provenance["occurred_at"].tzinfo is not None
+
+
+def test_provenance_event_type_is_one_the_package_itself_uses() -> None:
+    """The bug this pins: `to_provenance` emitted a value nothing else had.
+
+    It said ``source_record_ingested`` while :func:`event_types` — which both bundled
+    stores call to *override* the field — only ever emits ``source_record_created`` /
+    ``source_record_updated``. The override hid the mismatch from every store test, so
+    a host that inserted the provenance block verbatim would have written an event type
+    absent from its own vocabulary and from ours. A payload that names an event type
+    must name one this package can produce.
+    """
+    from vuln_intel.integration.mapping import event_types
+
+    created, _ = event_types(created=True)
+    updated, _ = event_types(created=False)
+    emitted = to_store_payload(live_record(), tenant_id="tenant-a")["provenance"]["event_type"]
+    assert emitted in {created, updated}
+
+
+def test_both_stores_emit_the_same_event_type_for_the_same_outcome() -> None:
+    """The in-memory and SQL stores must not disagree about vocabulary."""
+    import tempfile
+    from pathlib import Path
+
+    from vuln_intel.integration.sqlite_store import SQLiteVulnerabilityStore
+
+    payload = to_store_payload(live_record(), tenant_id="tenant-a")
+    memory = InMemoryVulnerabilityStore(allow_fixture=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        disk = SQLiteVulnerabilityStore(path=Path(tmp) / "t.db", allow_fixture=True)
+        for store in (memory, disk):
+            store.upsert(
+                tenant_id="tenant-a",
+                cve="CVE-2026-0001",
+                entity=payload["entity"],
+                details=payload["details"],
+                enrichment=payload["enrichment"],
+                provenance=payload["provenance"],
+                collected_at=FIXED_NOW,
+                dry_run=False,
+            )
+        assert memory.provenance_events[0]["event_type"] == disk.provenance_for(
+            tenant_id="tenant-a", cve="CVE-2026-0001"
+        )[0]["event_type"]
 
 
 def test_provenance_requires_timezone_aware_timestamps() -> None:

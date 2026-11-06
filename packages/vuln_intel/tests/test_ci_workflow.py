@@ -182,3 +182,59 @@ class TestThePreflightMirrorsCi:
         steps = workflow["jobs"]["test"]["steps"]
         runs = " ".join(str(step.get("run", "")) for step in steps)
         assert "ruff check vuln_intel tests" in runs
+
+
+class TestIntegrationDocDoesNotLie:
+    """`docs/vulnerability-intelligence/INTEGRATION.md` told the host to do two things
+    that did not exist: insert ``event_type: source_record_ingested`` (a value nothing
+    else in the repository produces) and write a "~30-line FastAPI binding" by hand
+    (superseded by the shipped ASGI app). It also named a ``SQLALCHEMY_ADAPTER_RECIPE``
+    constant that was never defined anywhere.
+
+    Documentation drift is not detectable by a failing test unless someone writes one,
+    which is the point: a host team reading the doc would have integrated against a
+    fiction, in their repository, where our test suite cannot see it.
+    """
+
+    @staticmethod
+    def _doc() -> str:
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return (root / "docs" / "vulnerability-intelligence" / "INTEGRATION.md").read_text()
+
+    def test_the_phantom_recipe_is_not_named_without_saying_it_was_phantom(self):
+        """Naming it in a correction is honest; promising it again is not.
+
+        The constant never existed, so the doc may only mention it next to the word
+        "never" or "phantom" — in prose, not inside a code fence a reader could copy.
+        """
+        doc = self._doc()
+        at = doc.find("SQLALCHEMY_ADAPTER_RECIPE")
+        while at != -1:
+            assert not doc[:at].rstrip().endswith(("import", "from")), "copied as an import"
+            # Wrapped prose puts the correction on a later line, so look at the sentence.
+            window = " ".join(doc[at : at + 260].split())
+            assert "never existed" in window or "phantom" in window, (
+                f"INTEGRATION.md names the phantom constant without marking it: {window!r}"
+            )
+            at = doc.find("SQLALCHEMY_ADAPTER_RECIPE", at + 1)
+
+    def test_every_event_type_it_names_is_one_the_package_emits(self):
+        """The doc may only mention vocabulary the code can actually produce."""
+        import re
+
+        from vuln_intel.integration.mapping import event_types
+
+        known = {event_types(created=True)[0], event_types(created=False)[0]}
+        named = set(re.findall(r"`(source_record_[a-z_]+)`", self._doc()))
+        assert named, "expected the doc to name the provenance vocabulary"
+        assert named <= known, f"INTEGRATION.md names event types we never emit: {named - known}"
+
+    def test_the_mount_recipe_uses_the_shipped_app(self):
+        """It must not tell a host to hand-write a binding we already ship."""
+        from vuln_intel.integration.asgi import build_app
+
+        doc = self._doc()
+        assert "build_app" in doc
+        # The recipe has to be real: the documented call signature must match the code.
+        assert "resolve_tenant" in doc
+        assert callable(build_app)

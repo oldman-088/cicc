@@ -234,12 +234,22 @@ def to_provenance(
 
     ``event_type`` mirrors the host's existing vocabulary
     (``source_record_created`` / ``source_record_updated``).
+
+    Which of the two applies is a fact about the *write*, not about the record — it
+    depends on whether a row already exists — so it cannot be decided here. This
+    function emits the creation value, and :meth:`VulnerabilityStore.upsert`
+    overrides it from :func:`event_types` once the outcome is known.
+
+    It used to emit ``source_record_ingested``, a value that exists in neither the
+    host's vocabulary nor this package's: both bundled stores overwrote it, so no
+    test noticed, and a host that inserted the block verbatim (which the docstring
+    said it could) would have written an event type nothing else understands.
     """
     stamps = [p.fetched_at for p in record.provenance] or [fetched_at or utcnow()]
     latest = max(_require_aware(s) for s in stamps)
     latest_entry = max(record.provenance, key=lambda p: p.fetched_at) if record.provenance else None
     return {
-        "event_type": "source_record_ingested",
+        "event_type": event_types(created=True)[0],
         "occurred_at": latest,
         "details": {
             "source": latest_entry.source if latest_entry else "unknown",
