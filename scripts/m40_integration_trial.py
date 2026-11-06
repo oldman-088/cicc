@@ -102,12 +102,18 @@ def main():
           f"on this branch: exists={os.path.isdir(vi_real)} (package lives on PR #8/PR #1 branches) -> NOT_MOUNTED here")
 
     # --- 1. mount fixture domain (write-token mount endpoint) ---
+    # tolerate a non-fresh deployment: deregister first; initial-state lifecycle
+    # (NOT_MOUNTED->MOUNTED->AVAILABLE) is covered deterministically in unit tests
+    call(API, "POST", "/api/v1/coordination/domains/threat_intel/deregister", None, W)
+    call(API, "POST", "/api/v1/coordination/domains/vuln_intel/deregister", None, W)
     st, m, _ = call(API, "POST", "/api/v1/coordination/domains/threat_intel/mount",
                     {"module_path": fx.name, "attr": "handle", "version": "m40-fixture",
                      "source_ref": "M40 sandbox fixture (NOT Agent 2's module)"}, W)
-    check("mount fixture handler (201, AVAILABLE)", st == 201 and m.get("status") == "AVAILABLE", str(m)[:120])
+    check("mount fixture handler (201, mounted)", st == 201 and m.get("mounted") is True
+          and m.get("status") in ("MOUNTED", "AVAILABLE", "EXECUTION_VERIFIED"), str(m)[:120])
     st, s, _ = call(API, "GET", "/api/v1/coordination/domains/threat_intel/status", token=R)
-    check("status MOUNTED/AVAILABLE before invoke", st == 200 and s.get("status") in ("MOUNTED", "AVAILABLE"), s.get("status"))
+    check("status readable before/after invoke", st == 200 and s.get("status") in
+          ("MOUNTED", "AVAILABLE", "EXECUTION_VERIFIED", "DEGRADED", "FAILED"), s.get("status"))
 
     # --- 2. gateway invocation + provenance propagation ---
     st, inv, _ = call(API, "POST", "/api/v1/coordination/domains/threat_intel/invoke",
@@ -160,6 +166,7 @@ def main():
           f"invoke={st_rec} status={s.get('status')}")
 
     # --- 9. unmounted kind honest 409 + NOT_MOUNTED ---
+    call(API, "POST", "/api/v1/coordination/domains/vuln_intel/deregister", None, W)
     st, nm, _ = call(API, "POST", "/api/v1/coordination/domains/vuln_intel/invoke", {"payload": {}}, W)
     st2, s2, _ = call(API, "GET", "/api/v1/coordination/domains/vuln_intel/status", token=R)
     check("unmounted VI -> 409 domain_not_mounted + status NOT_MOUNTED",

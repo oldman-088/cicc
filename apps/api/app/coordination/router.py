@@ -314,6 +314,7 @@ def _persist_domain_stats(s) -> None:
         row.invokes = st["invokes"]
         row.successes = st["successes"]
         row.consecutive_failures = st.get("consecutive_failures", 0)
+        row.last_stale = 1 if st.get("last_stale") else 0
         row.last_invoke_at = st["last_invoke_at"]
         row.last_status = "ok" if st["status"] == domains.EXECUTION_VERIFIED else (
             None if st["invokes"] == 0 else "error")
@@ -439,9 +440,13 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             _persist_domain_stats(s)
             s.commit()
             raise HTTPException(status_code=422, detail=str(e))
-        domains.record_outcome(kind, True)
+        stale = domains.is_result_stale(out["provenance"])  # M41: evidence-based staleness flag
+        domains.record_outcome(kind, True, stale=stale)
+        if stale:
+            registry.record_event(s, task_id, "domain_stale",
+                                  f"freshness beyond {domains.stale_after_s()}s")
         # persist the real domain result with provenance (incl. confidence/freshness if the domain provides them)
-        t.result = json.dumps({"result": out["result"], "provenance": out["provenance"]})
+        t.result = json.dumps({"result": out["result"], "provenance": out["provenance"], "stale": stale})
         registry.record_event(s, task_id, "domain_result",
                               f"source={out['provenance'].get('source')} produced_at={out['provenance'].get('produced_at')}")
         # M37 fix: walk the legal state chain (QUEUED->ASSIGNED->DELIVERING->
@@ -453,7 +458,7 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
         _persist_domain_stats(s)
         s.commit()
         return {"task_id": task_id, "kind": kind, "state": registry.normalize_state(t.state),
-                "result": out["result"], "provenance": out["provenance"],
+                "result": out["result"], "provenance": out["provenance"], "stale": stale,
                 "idempotency_key": t.idempotency_key}
 
 

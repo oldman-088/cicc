@@ -59,7 +59,28 @@ _STATS: dict[str, dict] = {}
 
 def _empty_stat() -> dict:
     return {"invokes": 0, "successes": 0, "consecutive_failures": 0,
-            "last_status": None, "last_error": None, "last_invoke_at": None}
+            "last_status": None, "last_error": None, "last_invoke_at": None,
+            "last_stale": False}
+
+
+def stale_after_s() -> float:
+    """M41: staleness threshold for domain results (seconds)."""
+    return float(os.getenv("CICC_DOMAIN_STALE_AFTER_S", "3600"))
+
+
+def is_result_stale(provenance: dict, now=None) -> bool:
+    """M41: evidence-based staleness — prefer explicit freshness_s, else age of produced_at."""
+    fresh = provenance.get("freshness_s")
+    if isinstance(fresh, (int, float)) and not isinstance(fresh, bool):
+        return float(fresh) > stale_after_s()
+    try:
+        ts = datetime.fromisoformat(str(provenance.get("produced_at", "")).replace("Z", "+00:00"))
+        now = now or datetime.now(timezone.utc)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return (now - ts).total_seconds() > stale_after_s()
+    except ValueError:
+        return False
 
 
 def load_persisted_stats(rows: list) -> None:
@@ -72,8 +93,10 @@ def load_persisted_stats(rows: list) -> None:
             continue
         cur = _STATS.get(kind)
         persisted = {"invokes": row.invokes or 0, "successes": row.successes or 0,
-                     "consecutive_failures": 0, "last_status": row.last_status,
-                     "last_error": row.last_error, "last_invoke_at": row.last_invoke_at}
+                     "consecutive_failures": getattr(row, "consecutive_failures", 0) or 0,
+                     "last_status": row.last_status, "last_error": row.last_error,
+                     "last_invoke_at": row.last_invoke_at,
+                     "last_stale": bool(getattr(row, "last_stale", 0))}
         if cur is None or persisted["invokes"] >= cur["invokes"]:
             merged = _empty_stat()
             merged.update({k: v for k, v in persisted.items() if v is not None})
@@ -153,7 +176,7 @@ def is_mounted(kind: str) -> bool:
     return kind in _REGISTRY
 
 
-def record_outcome(kind: str, ok: bool, error: str | None = None) -> None:
+def record_outcome(kind: str, ok: bool, error: str | None = None, stale: bool = False) -> None:
     """Record observable invoke evidence (called by the router per attempt
     outcome; persisted to coord_domain_stats for restart-survivable health)."""
     st = _STATS.setdefault(kind, _empty_stat())
@@ -164,6 +187,7 @@ def record_outcome(kind: str, ok: bool, error: str | None = None) -> None:
         st["consecutive_failures"] = 0
         st["last_status"] = "ok"
         st["last_error"] = None
+        st["last_stale"] = bool(stale)
     else:
         st["consecutive_failures"] = st.get("consecutive_failures", 0) + 1
         st["last_status"] = "error"
@@ -194,6 +218,8 @@ def all_statuses() -> dict[str, dict]:
             "mounted_at": _REGISTRY.get(kind, {}).get("mounted_at"),
             "invokes": st.get("invokes", 0), "successes": st.get("successes", 0),
             "consecutive_failures": st.get("consecutive_failures", 0),
+            "last_stale": st.get("last_stale", False),
+            "stale_after_s": stale_after_s(),
             "last_invoke_at": st.get("last_invoke_at"),
             "last_error": st.get("last_error"),  # sanitized already
         }

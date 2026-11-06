@@ -423,6 +423,7 @@ class CoordinationDomainStat(Base):
     invokes = Column(Integer, default=0)
     successes = Column(Integer, default=0)
     consecutive_failures = Column(Integer, default=0)
+    last_stale = Column(Integer, default=0)
     last_invoke_at = Column(String(32), nullable=True)
     last_status = Column(String(16), nullable=True)  # ok | error
     last_error = Column(String(256), nullable=True)  # sanitized, truncated
