@@ -1,0 +1,34 @@
+# M46 host adapter — implementation and integration contract
+
+`apps.threat_intelligence.host_adapter.create_host_application(...)` constructs an isolated FastAPI ASGI subapplication containing the controlled relationship router. It does not change Agent 1's host files, create connections, apply migrations, authenticate requests itself or use caller-provided tenant IDs. Agent 1 PR #4 head `2ef50e77a429fed35b8cc3991301608e9537d313` still uses a legacy simulated adapter and calls body `tenant_id` an unverified claim. **This adapter has not been mounted or exercised in that actual host.**
+
+## Required host-owned callbacks and mounting
+
+```python
+from apps.threat_intelligence.host_adapter import create_host_application
+# These four functions must be implemented by the trusted host; names are illustrative.
+domain = create_host_application(
+    resolve_principal=resolve_verified_host_principal,
+    engine_for_principal=select_provisioned_actor_pool,
+    security_audit=record_host_security_event,
+    link_trace=link_db_correlation_to_verified_gateway_task,
+    trace_timeout_seconds=2.0,
+)
+# Mount at an owner-approved dedicated prefix; no shared route is changed here.
+# host_app.mount('/approved-prefix', domain)
+```
+
+- `resolve_principal(request) -> Principal | None`: authenticate using host-verified credentials/context; resolve tenant, actor and permissions server-side. Return `None` for unauthenticated, or raise HTTP 401/403. The exact `Principal` is from `relationship_api.py`, with `subject`, `tenant_id`, and `permissions`; never construct it from payload/query/header tenant/actor claims. This code cannot verify that the host resolver is trustworthy. Authentication failures become sanitized 401/403; resolver errors become sanitized 503.
+- `engine_for_principal(principal) -> sqlalchemy.engine.Engine`: select an **existing** PostgreSQL pool for that exact provisioned actor/tenant DB login; do not create a new pool per request or share a PostgreSQL server login across identities. DB functions verify the mapped actor and tenant again and fail closed on mismatch. Provision role grants for only the operations authorized for the principal, not a broad login that lets direct SQL bypass host permissions. Pool lifecycle/credentials belong to the host.
+- `security_audit(event) -> None`: a synchronous, durable trusted sink; raise on failure. It receives metadata-only relationship attempts and `host.security.response` events for 401/403/422/5xx after reaching this subapp (verified subject/tenant when available, status and DB-generated correlation when available). It never receives a body, evidence, tokens, request headers or client-provided tenant. A sink failure fails closed with 503; if failure occurs after the DB commit, the operation may still have succeeded. The host must independently audit gateway failures before this subapplication, server/middleware failures after headers, and any direct SQL denials; this callback is not administrator-resistant database WORM audit.
+- `link_trace(db_correlation_uuid) -> None`: bind the DB-generated UUID to the **verified** gateway task using host-owned request context (e.g. a ContextVar); never accept a task ID from an unverified body/header. It must be durable, idempotent and bounded. The adapter sends only the UUID, never request data. Default timeout is 2 seconds; 0–30 seconds exclusive of zero may be configured. Timeout/failure yields sanitized 503 and the DB correlation header if available, but the DB transaction may already be committed. Retry writes with the **same** idempotency key and reconcile audit/trace. A timed-out synchronous callback can continue running; retries and trace linking must tolerate a late completion. This is not an atomic cross-system transaction.
+
+Mounting under a prefix adds that prefix to `/api/v1/threat-intelligence/...`; approve and test actual routing rather than assuming it. Host must forward only authorized requests and maintain its browser create-only task boundary. Agent 1's current 16 KiB request-body cap may be stricter than Agent 2's API limits and must be explicitly reconciled. Host must provide wire/body limits, DB statement timeouts and resource controls. Subapp responses sanitize validation/internal error details; the host must also ensure its proxy and logs never expose payloads or credentials.
+
+## Responses and failure handling
+Create returns 201/200 replay/409 key conflict; get/list/traversal return 200 or tenant-local 404, with 422 on validation or configured graph/JSON-size cap. Missing auth 401, missing permission 403, unavailable auth/storage/audit/trace 503, unexpected DB failure 500. Successful/transactionally audited not-found/conflict/limit results have `X-Correlation-ID` from PostgreSQL. HTTP validation/auth failures and rollback errors may have no DB correlation. Security-event and trace failures after DB commit are explicitly not proof of rollback. List order is sequence-based with offset pagination; traversal uses tenant-local repeatable-read BFS and caps. See `TRUSTED_RELATIONSHIP_WRITES.md`.
+
+## Executable evidence and approval package
+`CICC_TEST_PG_EMBEDDED=1 /home/user/.venv-cicc-pg/bin/python -m pytest -q apps/threat_intelligence/tests/test_host_adapter.py --disable-warnings` mounts this subapp in an **independent test FastAPI host** with synthetic identities and isolated real PostgreSQL; it checks auth, permissions, actor/tenant selection, concurrent requests, forged correlation, DB audit, security event redaction, trace timeout/failure and idempotent recovery. It is not the Agent 1 host. The actual-host suite under `tests/host_integration/` now has seven opt-in tests (including list and actual gateway trace linkage), all skipped absent the approved actual host and isolated harness. `gateway_trace_contains(identity, task_id, correlation_id)` on the test harness must inspect the real persisted host trace, not synthesize it; `list(identity, entity_type, entity_id, limit, offset)` must make the real authenticated gateway request.
+
+One consolidated owner decision is needed for: (1) trusted principal→tenant/actor/permission binding and pool provisioning, (2) approved gateway invocation/mount and authenticated task trace mapping, (3) P2-01/P2-02/P2-03 shared deployment/roles/rollback, (4) independent security-event sink/retention, and (5) BFF/frontend read contract and KEV scheduler ownership. Each blocks a beta that advertises that capability; security, principal, DB and trace decisions block any real multi-tenant host beta. Exact alternatives, consequences and sequence are in `HOST_INTEGRATION_HANDOFF.md`, `TRUSTED_RELATIONSHIP_WRITES.md` and `CISA_KEV_COLLECTOR_CONTRACT.md`. No shared migration or role was applied.

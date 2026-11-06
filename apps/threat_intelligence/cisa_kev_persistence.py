@@ -43,6 +43,7 @@ def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceR
         record = json.dumps(entry.model_dump(mode='json'), sort_keys=True, ensure_ascii=False, separators=(',', ':'))
         rows.append({'origin':collected.origin, 'cve':entry.cveID, 'digest':hashlib.sha256(record.encode('utf-8')).hexdigest(), 'record':record})
     incoming = {r['cve']:r['digest'] for r in rows}
+    catalog_metadata = json.dumps(catalog.model_dump(mode='json', exclude={'vulnerabilities'}), ensure_ascii=False, separators=(',', ':'))
     with engine.begin() as conn:
         conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {'key':'ti_kev_snapshot:'+collected.origin})
         previous = conn.execute(text("SELECT id, blob_sha, content_sha256, released_at FROM ti_kev.snapshot WHERE origin=:origin ORDER BY id DESC LIMIT 1"), {'origin':collected.origin}).mappings().first()
@@ -51,6 +52,7 @@ def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceR
         if previous and previous['blob_sha'] == collected.github_blob_sha:
             if previous['content_sha256'] != collected.content_sha256:
                 raise ValueError('inconsistent blob digest')
+            conn.execute(text('INSERT INTO ti_kev.catalog_metadata(snapshot_id,catalog) VALUES (:id, CAST(:catalog AS jsonb)) ON CONFLICT DO NOTHING'), {'id':previous['id'],'catalog':catalog_metadata})
             conn.execute(text('UPDATE ti_kev.snapshot SET checked_at=GREATEST(checked_at, :checked) WHERE id=:id'), {'checked':collected.collected_at, 'id':previous['id']})
             return PersistenceResult(previous['id'],'unchanged',0,0,0)
         previous_entries = dict(conn.execute(text('SELECT cve_id,content_sha256 FROM ti_kev.snapshot_entry WHERE snapshot_id=:id'), {'id':previous['id']}).all()) if previous else {}
@@ -61,6 +63,7 @@ def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceR
           VALUES (:origin,:url,:blob,:digest,:released,:collected,:collected,:version,:count) RETURNING id'''),
           {'origin':collected.origin,'url':collected.source_url,'blob':collected.github_blob_sha,'digest':collected.content_sha256,
            'released':catalog.dateReleased,'collected':collected.collected_at,'version':catalog.catalogVersion,'count':catalog.count}).scalar_one()
+        conn.execute(text('INSERT INTO ti_kev.catalog_metadata(snapshot_id,catalog) VALUES (:id, CAST(:catalog AS jsonb))'), {'id':snapshot_id,'catalog':catalog_metadata})
         if rows:
             conn.execute(text('''INSERT INTO ti_kev.revision(origin,cve_id,content_sha256,record)
               VALUES (:origin,:cve,:digest,CAST(:record AS jsonb)) ON CONFLICT DO NOTHING'''), rows)

@@ -16,7 +16,9 @@ def db(tmp_path_factory):
     server=pgserver.get_server(tmp_path_factory.mktemp('ti-kev'),cleanup_mode='stop')
     engine=create_engine(server.get_uri().replace('postgresql://','postgresql+psycopg://',1),pool_size=8)
     path=Path(__file__).parents[1]/'schema'/'p2_02_kev_storage_proposal.sql'
-    with engine.connect() as conn: conn.exec_driver_sql(path.read_text())
+    with engine.connect() as conn:
+        conn.exec_driver_sql(path.read_text())
+        conn.exec_driver_sql((path.parent/'p2_03_kev_metadata_proposal.sql').read_text())
     yield engine
     engine.dispose(); server.cleanup()
 
@@ -106,6 +108,9 @@ def test_live_collection_persistence(db):
         row=conn.execute(text('SELECT origin,entry_count FROM ti_kev.snapshot WHERE id=:id'),{'id':result.snapshot_id}).mappings().one()
         count=conn.execute(text('SELECT count(*) FROM ti_kev.snapshot_entry WHERE snapshot_id=:id'),{'id':result.snapshot_id}).scalar_one()
     assert row['origin']=='FETCHED_FROM_GITHUB_CISA_REPO' and row['entry_count']==count>0
+    from apps.threat_intelligence.cisa_kev_snapshot import load_snapshot
+    loaded=load_snapshot(db,origin='FETCHED_FROM_GITHUB_CISA_REPO',snapshot_id=result.snapshot_id)
+    assert loaded.catalog.count==count and loaded.origin=='FETCHED_FROM_GITHUB_CISA_REPO'
 
 
 def test_least_privilege_worker_cannot_rewrite_or_delete_history(db):
@@ -133,7 +138,66 @@ def test_isolated_schema_rollback_and_reapply(db):
     folder=Path(__file__).parents[1]/'schema'
     assert persist_catalog(db,collected(sample())).outcome=='created'
     with db.connect() as conn:
+        conn.exec_driver_sql((folder/'p2_03_kev_metadata_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_02_kev_storage_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_02_kev_storage_proposal.sql').read_text())
+        conn.exec_driver_sql((folder/'p2_03_kev_metadata_proposal.sql').read_text())
     assert counts(db)==(0,0,0)
     assert persist_catalog(db,collected(sample())).outcome=='created'
+
+
+def test_health_distinguishes_never_overdue_and_future(db):
+    from datetime import timedelta, datetime, timezone
+    from apps.threat_intelligence.cisa_kev_health import check_health
+    origin='EXPERIMENTAL_DEMO_DATA_ONLY'; item=collected(sample())
+    assert check_health(db,origin=origin,as_of=item.collected_at,max_check_age=timedelta(hours=1)).status=='never_collected'
+    result=persist_catalog(db,item)
+    state=check_health(db,origin=origin,as_of=item.collected_at+timedelta(hours=1),max_check_age=timedelta(hours=1))
+    assert state.status=='within_check_window' and state.snapshot_id==result.snapshot_id and state.entry_count==1
+    assert check_health(db,origin=origin,as_of=item.collected_at+timedelta(hours=1,seconds=1),max_check_age=timedelta(hours=1)).status=='check_overdue'
+    assert check_health(db,origin=origin,as_of=item.collected_at-timedelta(seconds=1),max_check_age=timedelta(hours=1)).status=='future_check_time'
+    earlier=datetime(2025,1,1,tzinfo=timezone.utc)
+    assert check_health(db,origin=origin,as_of=earlier,max_check_age=timedelta(hours=1)).source_release_in_future is True
+    assert check_health(db,origin='FETCHED_FROM_GITHUB_CISA_REPO',as_of=item.collected_at,max_check_age=timedelta(hours=1)).status=='never_collected'
+    with pytest.raises(ValueError): check_health(db,origin=origin,as_of=datetime(2026,1,1),max_check_age=timedelta(hours=1))
+    with pytest.raises(ValueError): check_health(db,origin=origin,as_of=item.collected_at,max_check_age=timedelta(0))
+    with pytest.raises(ValueError): check_health(db,origin='invalid',as_of=item.collected_at,max_check_age=timedelta(hours=1))
+
+
+def test_snapshot_roundtrip_feeds_offline_correlation(db):
+    from apps.threat_intelligence.cisa_kev_snapshot import load_snapshot
+    from apps.threat_intelligence.kev_correlation import correlate_kev
+    from apps.threat_intelligence.relationship_analysis import EntityReference
+    from test_intelligence_assessment import record
+    from datetime import timedelta
+    data=sample();data['newCatalogField']='preserved top-level field'
+    original=collected(data); saved=persist_catalog(db,original)
+    loaded=load_snapshot(db,origin='EXPERIMENTAL_DEMO_DATA_ONLY',snapshot_id=saved.snapshot_id)
+    assert loaded.catalog.model_extra['newCatalogField']=='preserved top-level field'
+    assert loaded.catalog.vulnerabilities[0].model_extra['futureField']=='preserved'
+    assert loaded.github_blob_sha==original.github_blob_sha and loaded.content_sha256==original.content_sha256
+    rel=record(101);rel.target_entity=EntityReference(entity_type='CVE',entity_id='CVE-2099-0001')
+    result=correlate_kev([rel],loaded,as_of=loaded.collected_at,evidence_max_age=timedelta(days=1),catalog_max_age=timedelta(days=1),cve_entity_types={'CVE'})
+    assert len(result.matches)==1 and result.origin=='EXPERIMENTAL_DEMO_DATA_ONLY'
+    assert result.matches[0].kev_entry.cveID=='CVE-2099-0001'
+
+
+def test_snapshot_missing_metadata_or_wrong_origin_fails_closed(db):
+    from apps.threat_intelligence.cisa_kev_snapshot import load_snapshot, SnapshotUnavailable
+    item=collected(sample()); result=persist_catalog(db,item)
+    with pytest.raises(SnapshotUnavailable): load_snapshot(db,origin='FETCHED_FROM_GITHUB_CISA_REPO',snapshot_id=result.snapshot_id)
+    with db.begin() as conn: conn.execute(text('DELETE FROM ti_kev.catalog_metadata WHERE snapshot_id=:id'),{'id':result.snapshot_id})
+    with pytest.raises(SnapshotUnavailable): load_snapshot(db,origin=item.origin,snapshot_id=result.snapshot_id)
+    # An identical complete, integrity-checked synthetic fixture fetch backfills legacy metadata.
+    assert persist_catalog(db,item).outcome=='unchanged'
+    assert load_snapshot(db,origin=item.origin).catalog.count==1
+
+
+def test_snapshot_detects_corrupted_revision(db):
+    from apps.threat_intelligence.cisa_kev_snapshot import load_snapshot, SnapshotUnavailable
+    item=collected(sample()); persist_catalog(db,item)
+    # Only isolated privileged fault injection; restricted worker cannot UPDATE.
+    with db.begin() as conn:
+        conn.execute(text("UPDATE ti_kev.revision SET record=jsonb_set(record,'{product}',to_jsonb('altered fixture'::text))"))
+    with pytest.raises(SnapshotUnavailable,match='integrity'):
+        load_snapshot(db,origin=item.origin)

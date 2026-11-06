@@ -39,6 +39,7 @@ def test_actual_gateway_create_postgres_and_audit(host):
     data, key = sample(), uuid4().hex
     result = host.create(host.tenant_a, data, key)
     assert result.status == 201 and result.gateway_task_id and result.correlation_id
+    assert host.gateway_trace_contains(host.tenant_a, result.gateway_task_id, result.correlation_id)
     assert result.body['experimental_label'] == 'EXPERIMENTAL_DEMO_DATA_ONLY'
     assert result.body['provenance'] == data['provenance']
     event = host.read_audit(host.tenant_a, result.correlation_id)
@@ -87,3 +88,18 @@ def test_actual_host_pool_reuse_keeps_tenant_isolation(host):
     assert result.same_tenant_access_preserved is True
     assert result.cross_tenant_access_denied is True
     assert result.transaction_rollback_isolated is True
+
+
+def test_actual_gateway_list_is_tenant_scoped_and_audited(host):
+    data, key = sample(), uuid4().hex
+    created = host.create(host.tenant_a, data, key)
+    assert created.status == 201
+    entity = data['source_entity']
+    own = host.list(host.tenant_a, entity['entity_type'], entity['entity_id'], limit=1, offset=0)
+    assert own.status == 200 and own.correlation_id and own.gateway_task_id
+    assert own.body['total'] == 1 and own.body['items'][0]['relationship_id'] == created.body['relationship_id']
+    assert host.gateway_trace_contains(host.tenant_a, own.gateway_task_id, own.correlation_id)
+    event = host.read_audit(host.tenant_a, own.correlation_id)
+    assert event['tenant_id'] == host.tenant_a_id and event['operation'] == 'relationship.list'
+    other = host.list(host.tenant_b, entity['entity_type'], entity['entity_id'], limit=1, offset=0)
+    assert other.status == 200 and other.body['total'] == 0 and not other.body['items']

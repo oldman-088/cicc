@@ -1,0 +1,177 @@
+"""Independent mounted host adapter + real disposable PG; not Agent 1 host.
+
+All test identities/headers/data are EXPERIMENTAL_DEMO_DATA_ONLY fixtures.
+"""
+from concurrent.futures import ThreadPoolExecutor
+from uuid import UUID, uuid4
+
+import pytest
+from fastapi import FastAPI
+from sqlalchemy import select
+from apps.threat_intelligence.host_adapter import create_host_application
+from apps.threat_intelligence.relationship_api import Principal
+from apps.threat_intelligence.relationship_storage import audit_event, idempotency
+from test_relationship_http import request, payload, BASE
+from test_trusted_write import databases  # isolated PG schema/role fixture
+
+
+@pytest.fixture
+def host(databases):
+    admin, a, b = databases
+    links, events = [], []
+    def resolve(req):
+        identities = {'fixture-A': Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:read','threat:write'})),
+                      'fixture-B': Principal(subject='actor-B',tenant_id='tenant-B',permissions=frozenset({'threat:read','threat:write'})),
+                      'fixture-read': Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:read'}))}
+        return identities.get(req.headers.get('Authorization'))
+    def pools(principal): return {'tenant-A':a, 'tenant-B':b}[principal.tenant_id]
+    domain=create_host_application(resolve_principal=resolve,engine_for_principal=pools,security_audit=events.append,link_trace=links.append)
+    app=FastAPI(); app.mount('/approved-host-prefix',domain)
+    return app, admin, links, events
+
+
+def call(host, method, path, body=None, identity='fixture-A', extra=None, query=None):
+    headers={'Authorization':identity, **(extra or {})}
+    return request(method,'/approved-host-prefix'+BASE+path,body,headers,query,application=host,include_headers=True)
+
+
+def test_mounted_adapter_auth_postgres_audit_and_trace(host):
+    app, admin, links, events = host
+    token=uuid4().hex
+    status, data, hdr=call(app,'POST','/relationships',payload('mounted-'+token,'target-'+token),extra={'Idempotency-Key':token})
+    assert status==201 and UUID(hdr[b'x-correlation-id'].decode())==links[-1]
+    with admin.connect() as conn:
+        row=conn.execute(select(audit_event).where(audit_event.c.correlation_id==links[-1])).mappings().one()
+    assert (row['tenant_id'],row['actor'],row['operation'])==('tenant-A','actor-A','relationship.create')
+    assert events[-1]=={'subject':'actor-A','tenant_id':'tenant-A','action':'relationship.create.attempt'}
+    rid=data['relationship_id']
+    assert call(app,'GET','/relationships/'+rid)[0]==200
+    assert call(app,'GET','/relationships/'+rid,identity='fixture-B')[0]==404
+    assert call(app,'GET','/relationships',query={'entity_id':'mounted-'+token,'entity_type':'Actor'})[1]['total']==1
+    assert call(app,'POST','/relationship-analysis/traverse',{'entity_id':'mounted-'+token,'entity_type':'Actor'})[1]['total']==1
+    assert call(app,'GET','/relationships',identity='invalid')[0]==401
+    assert call(app,'POST','/relationships',payload(),identity='fixture-read',extra={'Idempotency-Key':'fixture'})[0]==403
+
+
+def test_forged_input_and_error_redaction(host):
+    app, _, _, _ = host
+    body=payload();body['tenant_id']='tenant-B';body['sensitive_fixture']='SECRET_FIXTURE'
+    code, data, _=call(app,'POST','/relationships',body,extra={'Idempotency-Key':uuid4().hex})
+    assert code==422 and data=={'detail':'Invalid request'} and 'SECRET_FIXTURE' not in str(data)
+    code, data, _=call(app,'GET','/relationships/not-a-uuid')
+    assert code==422 and data=={'detail':'Invalid request'}
+
+
+def test_per_request_pool_selection_concurrent(host):
+    app, _, _, _=host; token=uuid4().hex
+    def write(identity):
+        return call(app,'POST','/relationships',payload('race-'+token,'race-target-'+token),identity=identity,extra={'Idempotency-Key':'key-'+token})
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first,second=list(executor.map(write, ['fixture-A','fixture-B']))
+    assert first[0]==second[0]==201 and first[1]['relationship_id']!=second[1]['relationship_id']
+    assert call(app,'GET','/relationships/'+first[1]['relationship_id'],identity='fixture-B')[0]==404
+    assert call(app,'GET','/relationships/'+second[1]['relationship_id'],identity='fixture-A')[0]==404
+
+
+def test_trace_failure_reports_unavailable_after_commit(databases):
+    admin, a, _=databases
+    def resolve(req): return Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:write'}))
+    def broken(_): raise RuntimeError('SECRET_FIXTURE')
+    app=FastAPI(); app.mount('/approved-host-prefix',create_host_application(resolve_principal=resolve,engine_for_principal=lambda _:a,security_audit=lambda _:None,link_trace=broken))
+    key=uuid4().hex
+    code, body, headers=call(app,'POST','/relationships',payload('trace-'+key,'target-'+key),extra={'Idempotency-Key':key})
+    assert code==503 and 'SECRET_FIXTURE' not in str(body)
+    corr=UUID(headers[b'x-correlation-id'].decode())
+    with admin.connect() as conn:
+        rid=conn.execute(select(idempotency.c.relationship_id).where(idempotency.c.tenant_id=='tenant-A',idempotency.c.key==key)).scalar_one()
+        row=conn.execute(select(audit_event).where(audit_event.c.correlation_id==corr)).mappings().one()
+        assert row['resource_id']==rid and row['outcome']=='created'
+    recovered=FastAPI()
+    recovered.mount('/approved-host-prefix',create_host_application(resolve_principal=resolve,engine_for_principal=lambda _:a,security_audit=lambda _:None,link_trace=lambda _:None))
+    retry, body, _=call(recovered,'POST','/relationships',payload('trace-'+key,'target-'+key),extra={'Idempotency-Key':key})
+    assert retry==200 and UUID(body['relationship_id'])==rid
+
+
+def test_timeout_and_bad_callbacks_fail_closed(databases):
+    import asyncio
+    _, a, _=databases
+    async def slow(_): await asyncio.sleep(1)
+    domain=create_host_application(
+        resolve_principal=lambda _:Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:read'})),
+        engine_for_principal=lambda _:a,security_audit=lambda _:None,link_trace=slow,trace_timeout_seconds=0.01)
+    app=FastAPI(); app.mount('/approved-host-prefix',domain)
+    code, data, headers=call(app,'GET','/relationships')
+    assert code==503 and data=={'detail':'Trace integration unavailable'} and UUID(headers[b'x-correlation-id'].decode())
+    with pytest.raises(TypeError):
+        create_host_application(resolve_principal=lambda _:None,engine_for_principal=lambda _:a,security_audit=lambda _:None,link_trace=None)
+    with pytest.raises(ValueError):
+        create_host_application(resolve_principal=lambda _:None,engine_for_principal=lambda _:a,security_audit=lambda _:None,link_trace=lambda _:None,trace_timeout_seconds=float('nan'))
+
+
+def test_awaitable_security_audit_cannot_silently_skip(host, databases):
+    _, a, _=databases
+    class BadAudit:
+        async def __call__(self, event): pass
+    domain=create_host_application(resolve_principal=lambda _:Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:read'})),
+        engine_for_principal=lambda _:a,security_audit=BadAudit(),link_trace=lambda _:None)
+    app=FastAPI(); app.mount('/approved-host-prefix',domain)
+    assert call(app,'GET','/relationships')[0]==503
+
+
+def test_security_events_for_rejections_are_metadata_only(host):
+    app, _, _, events=host
+    assert call(app,'GET','/relationships',identity='invalid')[0]==401
+    assert events[-1]=={'action':'host.security.response','status':401}
+    assert call(app,'POST','/relationships',payload(),identity='fixture-read',extra={'Idempotency-Key':uuid4().hex})[0]==403
+    assert events[-1]=={'action':'host.security.response','status':403,'subject':'actor-A','tenant_id':'tenant-A'}
+    bad=payload(); bad['tenant_id']='SENSITIVE_FIXTURE_BODY'
+    assert call(app,'POST','/relationships',bad,extra={'Idempotency-Key':uuid4().hex})[0]==422
+    assert events[-1]['action']=='host.security.response' and events[-1]['status']==422
+    assert 'SENSITIVE_FIXTURE_BODY' not in str(events[-1])
+
+
+def test_security_event_failure_never_reports_success(databases):
+    _, a, _=databases
+    def audit(_): raise RuntimeError('SECRET_FIXTURE')
+    domain=create_host_application(resolve_principal=lambda _:None,engine_for_principal=lambda _:a,security_audit=audit,link_trace=lambda _:None)
+    app=FastAPI();app.mount('/approved-host-prefix',domain)
+    status, body, _=call(app,'GET','/relationships')
+    assert status==503 and body=={'detail':'Security audit unavailable'} and 'SECRET_FIXTURE' not in str(body)
+
+
+def test_database_identity_failure_emits_sanitized_security_event(databases):
+    _, a, _=databases; events=[]
+    domain=create_host_application(resolve_principal=lambda _:Principal(subject='wrong-actor',tenant_id='tenant-A',permissions=frozenset({'threat:read'})),
+        engine_for_principal=lambda _:a,security_audit=events.append,link_trace=lambda _:None)
+    app=FastAPI();app.mount('/approved-host-prefix',domain)
+    status, body, _=call(app,'GET','/relationships')
+    assert status==500 and body=={'detail':'Internal server error'}
+    assert events[-1]=={'action':'host.security.response','status':500,'subject':'wrong-actor','tenant_id':'tenant-A'}
+
+
+def test_trace_and_failure_audit_outage_preserves_committed_correlation(databases):
+    admin, a, _=databases
+    def audit(event):
+        if event['action']=='host.security.response': raise RuntimeError('fixture sink down')
+    def trace(_): raise RuntimeError('fixture trace down')
+    domain=create_host_application(resolve_principal=lambda _:Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:write'})),
+        engine_for_principal=lambda _:a,security_audit=audit,link_trace=trace)
+    app=FastAPI();app.mount('/approved-host-prefix',domain)
+    token=uuid4().hex
+    code, body, headers=call(app,'POST','/relationships',payload('trace-audit-'+token,'trace-target-'+token),extra={'Idempotency-Key':token})
+    assert code==503 and body=={'detail':'Security audit unavailable'}
+    corr=UUID(headers[b'x-correlation-id'].decode())
+    with admin.connect() as conn:
+        assert conn.execute(select(audit_event.c.event_id).where(audit_event.c.correlation_id==corr,audit_event.c.outcome=='created')).one()
+
+
+def test_caller_supplied_correlation_cannot_impersonate_trace(host):
+    app, admin, links, _=host
+    key=uuid4().hex; forged=uuid4()
+    status, body, headers=call(app,'POST','/relationships',payload('forged-'+key,'target-'+key),
+        extra={'Idempotency-Key':key, 'X-Correlation-ID':str(forged)})
+    assert status==201
+    actual=UUID(headers[b'x-correlation-id'].decode())
+    assert actual != forged and links[-1]==actual
+    with admin.connect() as conn:
+        assert conn.execute(select(audit_event.c.event_id).where(audit_event.c.correlation_id==actual)).one()

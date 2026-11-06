@@ -1,4 +1,4 @@
-> **Current verification (2026-11-06):** Isolated run: 191 passed, 8 skipped (6 real-host tests + 2 live-source opt-in). Two separate CISA GitHub mirror tests passed, including disposable PostgreSQL persistence. Controlled create/get/list/traverse and DB audit were tested under restricted local roles; actual host identity/integration and production immutability remain unverified. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `TRUSTED_RELATIONSHIP_WRITES.md`; historical claims below are unverified.
+> **Current verification (2026-11-06):** Isolated run: 209 passed, 9 skipped (7 actual-host tests + 2 live-source opt-in). Two separate live CISA GitHub mirror tests passed, including disposable PostgreSQL persistence/reload. The authenticated-host adapter was tested only in an independent mounted host, not Agent 1. Real identity/integration, scheduler and administrator-resistant audit remain unverified. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `M46_HOST_ADAPTER.md`; historical claims below are unverified.
 
 # Development Log - Threat Intelligence Domain
 
