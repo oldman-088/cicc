@@ -92,6 +92,16 @@ class SbomIngestResult:
     duplicates: int = 0
     #: Assets (CycloneDX ``bom-ref`` / SPDX ``SPDXID``) associated with components.
     assets: tuple[str, ...] = ()
+    #: Package → licence identifiers, as the document states them. §5.6 asks for
+    #: licence information; carrying it here means a consumer does not have to
+    #: re-parse the document to answer "what licence is this under".
+    licenses: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    #: Directed edges ``(from, to)`` in the declared dependency graph, keyed by
+    #: package name as normalised in :attr:`inventory`. §5.6 asks for dependency
+    #: relationships; without them an "SBOM" is only a flat list, and "which of my
+    #: direct dependencies pulled this in" — the question that decides whether a
+    #: finding is urgent — cannot be answered.
+    relationships: tuple[tuple[str, str], ...] = ()
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
     @property
@@ -115,6 +125,8 @@ class SbomIngestResult:
             "components": self.component_count,
             "duplicates": self.duplicates,
             "assets": list(self.assets),
+            "licenses": {name: list(ids) for name, ids in sorted(self.licenses.items())},
+            "relationships": [list(edge) for edge in self.relationships],
             "skipped": [dict(entry) for entry in self.skipped],
             "complete": self.complete,
             "warnings": list(self.warnings),
@@ -174,6 +186,8 @@ def _assemble(
     spec_version: str | None,
     assets: Sequence[str] = (),
     warnings: Sequence[str] = (),
+    licenses: Mapping[str, Sequence[str]] | None = None,
+    relationships: Sequence[tuple[str, str]] = (),
 ) -> SbomIngestResult:
     """Deduplicate, preserving order, and count what was collapsed."""
     seen: dict[tuple[str, str, str], Dependency] = {}
@@ -196,8 +210,143 @@ def _assemble(
         skipped=tuple(skipped),
         duplicates=duplicates,
         assets=tuple(sorted(set(assets))),
+        licenses={k: tuple(v) for k, v in (licenses or {}).items()},
+        # Edges are de-duplicated but not sorted: the document's order is the only
+        # hint about which relationship was declared first, and it costs nothing.
+        relationships=tuple(dict.fromkeys(relationships)),
         warnings=tuple(warnings),
     )
+
+
+def _cyclonedx_licenses(entry: Mapping[str, Any]) -> tuple[str, ...]:
+    """Licence identifiers from a CycloneDX component's ``licenses`` array.
+
+    CycloneDX allows either ``{"license": {"id": "Apache-2.0"}}`` or
+    ``{"license": {"name": "Apache License 2.0"}}``, and an expression form
+    ``{"expression": "MIT OR Apache-2.0"}``. All three are read because picking one
+    would silently drop licences from documents that are perfectly valid.
+    """
+    found: list[str] = []
+    raw = entry.get("licenses")
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, Mapping):
+                continue
+            expression = item.get("expression")
+            if isinstance(expression, str) and expression.strip():
+                found.append(expression.strip())
+                continue
+            licence = item.get("license")
+            if isinstance(licence, Mapping):
+                for key in ("id", "name"):
+                    value = licence.get(key)
+                    if isinstance(value, str) and value.strip():
+                        found.append(value.strip())
+                        break
+    return tuple(dict.fromkeys(found))
+
+
+def _spdx_licenses(raw: Mapping[str, Any]) -> tuple[str, ...]:
+    """Licence identifiers from an SPDX package.
+
+    ``licenseDeclared`` is what the package *says* it is; ``licenseConcluded`` is what
+    the producer concluded. Both are kept, declared first, because a consumer needs to
+    know when they disagree — and SPDX uses ``NOASSERTION`` for "not stated", which is
+    dropped rather than reported as a licence called NOASSERTION.
+    """
+    found: list[str] = []
+    for key in ("licenseDeclared", "licenseConcluded"):
+        value = raw.get(key)
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned and cleaned.upper() not in {"NOASSERTION", "NONE"}:
+                found.append(cleaned)
+    return tuple(dict.fromkeys(found))
+
+
+def _graph_key(dependency: Dependency) -> str:
+    """The name an edge is recorded under, matching the inventory's own spelling."""
+    return dependency.canonical_name
+
+
+def _cyclonedx_relationships(
+    document: Mapping[str, Any], ref_to_name: Mapping[str, str]
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Edges from a CycloneDX ``dependencies`` array.
+
+    The array is a list of ``{"ref": X, "dependsOn": [Y, ...]}``. ``ref``/``dependsOn``
+    are ``bom-ref`` values, so they are mapped back to package names through the
+    inventory. A reference that is not in the inventory is reported as a warning
+    rather than dropped: it means the document describes a relationship to something
+    it did not describe, which is worth knowing and must not be invented.
+    """
+    edges: list[tuple[str, str]] = []
+    warnings: list[str] = []
+    raw = document.get("dependencies")
+    if not isinstance(raw, list):
+        return edges, warnings
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        parent_ref = entry.get("ref")
+        parent = ref_to_name.get(str(parent_ref)) if parent_ref is not None else None
+        if parent is None:
+            if parent_ref is not None:
+                warnings.append(
+                    f"dependency graph references {parent_ref!r}, which is not in the inventory"
+                )
+            continue
+        depends_on = entry.get("dependsOn")
+        if not isinstance(depends_on, list):
+            continue
+        for child_ref in depends_on:
+            child = ref_to_name.get(str(child_ref))
+            if child is None:
+                warnings.append(
+                    f"{parent} depends on {child_ref!r}, which is not in the inventory"
+                )
+                continue
+            edges.append((parent, child))
+    return edges, warnings
+
+
+def _spdx_relationships(
+    document: Mapping[str, Any], ref_to_name: Mapping[str, str]
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Edges from an SPDX ``relationships`` array.
+
+    SPDX states ``A DEPENDS_ON B`` and also ``B DEPENDENCY_OF A``; both mean the same
+    edge, so both are read. Anything else (``CONTAINS``, ``DESCRIBES``) is left out:
+    an SPDX document's ``DESCRIBES`` edge points at the artefact being described, not
+    at one of its dependencies, and treating the two as equivalent would put the
+    application itself into the dependency graph of its own libraries.
+    """
+    edges: list[tuple[str, str]] = []
+    warnings: list[str] = []
+    raw = document.get("relationships")
+    if not isinstance(raw, list):
+        return edges, warnings
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        kind = str(entry.get("relationshipType") or "").upper()
+        left_ref, right_ref = entry.get("spdxElementId"), entry.get("relatedSpdxElement")
+        if kind == "DEPENDS_ON":
+            parent, child = left_ref, right_ref
+        elif kind == "DEPENDENCY_OF":
+            parent, child = right_ref, left_ref
+        else:
+            continue
+        parent, child = ref_to_name.get(str(parent)), ref_to_name.get(str(child))
+        if parent is None or child is None:
+            warning_target = left_ref if parent is None else right_ref
+            warnings.append(
+                f"{kind} relationship references {warning_target!r}, "
+                "which is not in the inventory"
+            )
+            continue
+        edges.append((parent, child))
+    return edges, warnings
 
 
 def parse_cyclonedx(document: Mapping[str, Any], *, asset: str | None = None) -> SbomIngestResult:
@@ -231,6 +380,9 @@ def parse_cyclonedx(document: Mapping[str, Any], *, asset: str | None = None) ->
     skipped: list[Mapping[str, str]] = []
     assets: list[str] = []
     warnings: list[str] = []
+    licenses: dict[str, tuple[str, ...]] = {}
+    #: bom-ref -> package name, so the ``dependencies`` array can be resolved.
+    ref_to_name: dict[str, str] = {}
 
     def consume(entries: Sequence[Any], *, depth: int) -> None:
         for raw in entries:
@@ -246,6 +398,12 @@ def parse_cyclonedx(document: Mapping[str, Any], *, asset: str | None = None) ->
                 dependencies.append(dependency)
                 if component_asset:
                     assets.append(str(component_asset))
+                ident = _graph_key(dependency)
+                if component_asset:
+                    ref_to_name[str(component_asset)] = ident
+                found_licences = _cyclonedx_licenses(raw)
+                if found_licences:
+                    licenses[ident] = found_licences
             nested = raw.get("components")
             if isinstance(nested, list) and nested:
                 if depth >= 1:
@@ -263,15 +421,30 @@ def parse_cyclonedx(document: Mapping[str, Any], *, asset: str | None = None) ->
         top = metadata.get("component")
         if isinstance(top, Mapping):
             document_name = str(top.get("name") or "") or None
+            # The metadata component is the artefact being described, not one of its
+            # dependencies. When it is a usable package it joins the inventory (a
+            # BOM describing a single library should still report that library);
+            # when it is not -- typically an application with no purl -- that is
+            # *expected*, not a defect, so it is not listed in `skipped` and does
+            # not make the inventory look partial. Listing it would have made every
+            # well-formed application BOM report complete=False.
             if top.get("version"):
-                dependency, reason = _dependency(top, asset=asset)
-                if dependency is None:
-                    skipped.append(
-                        _Skip(str(top.get("name") or "<metadata>"), str(reason)).as_dict()
-                    )
-                else:
+                dependency = _dependency(top, asset=asset)[0]
+                ident = _graph_key(dependency) if dependency is not None else None
+                if dependency is not None and ident is not None:
                     dependencies.append(dependency)
+                    found_licences = _cyclonedx_licenses(top)
+                    if found_licences:
+                        licenses.setdefault(ident, found_licences)
+                # Register the described artefact's own bom-ref even when it is not a
+                # package: its `dependsOn` list is how the document says which
+                # libraries are *direct* dependencies, which is the difference
+                # between "we use this" and "something we use pulls this in".
+                top_ref = top.get("bom-ref")
+                if top_ref and (ident or document_name):
+                    ref_to_name[str(top_ref)] = ident or str(document_name)
 
+    edges, graph_warnings = _cyclonedx_relationships(document, ref_to_name)
     return _assemble(
         dependencies,
         skipped,
@@ -279,7 +452,9 @@ def parse_cyclonedx(document: Mapping[str, Any], *, asset: str | None = None) ->
         document_name=document_name,
         spec_version=str(document.get("specVersion") or "") or None,
         assets=assets,
-        warnings=warnings,
+        warnings=[*warnings, *graph_warnings],
+        licenses=licenses,
+        relationships=edges,
     )
 
 
@@ -309,6 +484,9 @@ def parse_spdx(document: Mapping[str, Any], *, asset: str | None = None) -> Sbom
     dependencies: list[Dependency] = []
     skipped: list[Mapping[str, str]] = []
     assets: list[str] = []
+    licenses: dict[str, tuple[str, ...]] = {}
+    #: SPDXID -> package name, so ``relationships`` can be resolved.
+    ref_to_name: dict[str, str] = {}
     document_name: str | None = str(document.get("name") or "") or None
 
     for raw in packages:
@@ -319,8 +497,13 @@ def parse_spdx(document: Mapping[str, Any], *, asset: str | None = None) -> Sbom
         purpose = str(raw.get("primaryPackagePurpose") or "").upper()
         spdx_id = raw.get("SPDXID")
         if purpose in {"APPLICATION", "CONTAINER", "OPERATING-SYSTEM"}:
-            # The artefact being described, not one of its dependencies.
+            # The artefact being described, not one of its dependencies. Its SPDXID
+            # is still registered, because `relationships` uses that id to say which
+            # packages are *direct* dependencies of it — resolving those would fail
+            # for every well-formed SPDX document otherwise.
             document_name = document_name or name or None
+            if spdx_id:
+                ref_to_name[str(spdx_id)] = name or str(document_name or spdx_id)
             continue
 
         purl: str | None = None
@@ -348,7 +531,14 @@ def parse_spdx(document: Mapping[str, Any], *, asset: str | None = None) -> Sbom
             dependencies.append(dependency)
             if spdx_id:
                 assets.append(str(spdx_id))
+            ident = _graph_key(dependency)
+            if spdx_id:
+                ref_to_name[str(spdx_id)] = ident
+            found_licences = _spdx_licenses(raw)
+            if found_licences:
+                licenses[ident] = found_licences
 
+    edges, graph_warnings = _spdx_relationships(document, ref_to_name)
     return _assemble(
         dependencies,
         skipped,
@@ -356,6 +546,9 @@ def parse_spdx(document: Mapping[str, Any], *, asset: str | None = None) -> Sbom
         document_name=document_name,
         spec_version=identifier or None,
         assets=assets,
+        warnings=graph_warnings,
+        licenses=licenses,
+        relationships=edges,
     )
 
 
