@@ -2,11 +2,11 @@
 
 | README v1.0 requirement | Evidence | Status / limitations |
 | --- | --- | --- |
-| Section 6 graph relationships, evidence, PostgreSQL and tenant scope | `relationship_analysis.py`, `relationship_api.py`, `relationship_storage.py`, local PostgreSQL and RLS tests | Partial experimental implementation; per-tenant DB-login alternative locally tested but no approved host schema, role/pool model or principal binding |
-| Section 5.2 confidence, reliability, freshness, corroboration and conflicts | `intelligence_assessment.py`, `confidence_assessment.py`, offline tests | Explicit-input experimental weighted score and collection-age classification; no calibrated reliability, actual event-time freshness, independence or conflict resolution |
-| Section 7 real source integrations | `cisa_kev.py`, `vendor_advisories.py`, `osint_sources.py`, `source_adapters.py` | Offline parsing and simulations only; no live verification |
+| Section 6 graph, evidence, PostgreSQL, tenant scope | `relationship_analysis.py`, `relationship_api.py`, `relationship_storage.py` and isolated DB tests | Partial: full graph prototype plus controlled write-only audited adapter; approved host identity, secure audited reads and shared graph pending |
+| Section 5.2 confidence, reliability, freshness and conflicts | `intelligence_assessment.py`, `confidence_assessment.py` | Explicit analyst-input experimental score and collection-age classification; not calibrated, no reliable source independence or conflict resolution |
+| Section 7 real intelligence integrations | `cisa_github_collector.py` | One real read from CISA GitHub mirror and offline parsing tests; no persistent ingestion/scheduler or operational readiness |
 | Section 8 AI intelligence | No verified integration | Not implemented |
-| Section 10 security | API, RLS and PostgreSQL tests; `ROLE_BOUND_TENANT_SECURITY_PROPOSAL.md` | Tenant-login role isolation locally tested under assumptions; own-tenant arbitrary SQL and audit forgery remain possible; host/production identity and security unverified |
-| Gateway and frontend coordination | `HOST_INTEGRATION_HANDOFF.md`; opt-in actual-host test scaffold | Agent 1 adapter invokes legacy demo; 6 host tests skipped; no approved host mount, frontend integration or owner approval |
+| Section 10 security | `TRUSTED_RELATIONSHIP_WRITES.md`, PostgreSQL security tests | Restricted-role controlled create audit tested locally; real actor identity, audited reads, administrator-resistant audit, production isolation and host security unverified |
+| Gateway/frontend coordination | `HOST_INTEGRATION_HANDOFF.md`, host acceptance scaffold | Actual host tests skipped; no approved host mount or frontend binding |
 
-See `P2_01_VERIFICATION_REPORT.md`; historical claims elsewhere are not substitutes for current verification.
+See `P2_01_VERIFICATION_REPORT.md` for current verification and limitations.

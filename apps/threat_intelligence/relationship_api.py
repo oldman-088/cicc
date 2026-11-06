@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
-from .relationship_storage import AuditContext, PostgresRelationshipStore, TraversalLimitExceeded
+from .relationship_storage import AuditContext, PostgresRelationshipStore, TraversalLimitExceeded, TrustedReadsUnavailable
 
 from .relationship_analysis import (
     EntityReference, RelationshipAnalysisEngine, RelationshipConfidence,
@@ -223,7 +223,11 @@ def create_relationship(
         relationship_type=data.relationship_type, confidence=data.confidence,
         evidence=[RelationshipEvidence(**item.model_dump()) for item in data.evidence],
         provenance=data.provenance, confirmed=data.confirmed, experimental_label=data.experimental_label)
-    record, outcome = store.create(ctx, idempotency_key, fingerprint, record)
+    result = store.create(ctx, idempotency_key, fingerprint, record)
+    record, outcome = result[:2]
+    if len(result) == 3:
+        ctx = AuditContext(tenant_id=ctx.tenant_id, actor=ctx.actor, correlation_id=result[2])
+        response.headers['X-Correlation-ID'] = str(ctx.correlation_id)
     if outcome == 'conflict':
         raise HTTPException(status_code=409, detail='Idempotency key conflict', headers={'X-Correlation-ID': str(ctx.correlation_id)})
     if outcome == 'replayed':
@@ -242,7 +246,10 @@ def list_relationships(
         raise HTTPException(status_code=422, detail='entity_id and entity_type must be supplied together')
     ctx = context(principal, response)
     emit(audit, principal, 'relationship.list.attempt')
-    records, total = store.list(ctx, entity_id, entity_type, relationship_type, limit, offset)
+    try:
+        records, total = store.list(ctx, entity_id, entity_type, relationship_type, limit, offset)
+    except TrustedReadsUnavailable:
+        raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
     return RelationshipPage(items=records, total=total, offset=offset, limit=limit, has_more=offset+limit<total)
 
 @router.get('/relationships/{relationship_id}', response_model=RelationshipRecord)
@@ -253,7 +260,10 @@ def get_relationship(
     authorize(principal, 'threat:read')
     ctx = context(principal, response)
     emit(audit, principal, 'relationship.read.attempt')
-    record = store.get(ctx, relationship_id)
+    try:
+        record = store.get(ctx, relationship_id)
+    except TrustedReadsUnavailable:
+        raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
     if record is None:
         raise HTTPException(status_code=404, detail='Relationship not found', headers={'X-Correlation-ID': str(ctx.correlation_id)})
     return record
@@ -268,6 +278,8 @@ def traverse_relationships(
     emit(audit, principal, 'relationship.traverse.attempt')
     try:
         result = store.traverse(ctx, data.entity_id, data.entity_type, data.max_depth, data.relationship_types, data.limit, data.offset)
+    except TrustedReadsUnavailable:
+        raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
     except TraversalLimitExceeded:
         raise HTTPException(status_code=422, detail='Traversal exceeds configured graph limit', headers={'X-Correlation-ID': str(ctx.correlation_id)}) from None
     if result is None:

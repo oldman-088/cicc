@@ -23,6 +23,10 @@ All require host identity and configured store/audit; DTOs are defined by `relat
 
 Creation validates bounded nonempty references/provenance, enums and up to 100 evidence objects with timezone-aware timestamps. Confirmed assertions require evidence and cannot have inferred confidence. This validates shape only, not truth. No confidence calculation or freshness estimate is provided. Entity identity is `(tenant, type, id)`; names are observation metadata. Ordering uses database insertion sequence for a fixed snapshot (in-memory uses insertion order); offset pagination can shift with new records between requests. Conflicting observations remain separate; conflict resolution is not implemented. Standalone response errors: 401 if supplied host auth rejects credentials, 403, 404, 409, 422, 503 as above, or generic 500. Host behavior needs agreement.
 
+## Controlled trusted-write alternative
+
+`TrustedWritePostgresRelationshipStore` provides an optional DB-identity-derived create/audit path with restricted DB grants. Its read, list and traversal methods fail closed with 503 until equally trusted audited read entry points exist. This is not the default store or actual host integration; see `TRUSTED_RELATIONSHIP_WRITES.md` for required role controls, migration, limited integrity guarantees and DB-generated correlation semantics.
+
 ## PostgreSQL and migration proposal
 `apps/threat_intelligence/relationship_storage.py` defines PostgreSQL SQLAlchemy Core tables, tenant-aware entity/relationship/idempotency constraints, adjacency/type indexes and transactional audit. A per-tenant PostgreSQL transaction advisory lock serializes creation across workers; database uniqueness and foreign keys enforce identity and idempotency. Graph reads use indexed frontier queries. This is a reviewed-domain proposal, not an approved shared schema. No schema is created at app startup.
 

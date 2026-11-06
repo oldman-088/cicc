@@ -1,4 +1,15 @@
-> **Current verification (2026-11-06):** P2-01 has an experimental role-bound PostgreSQL RLS alternative and collection-age analysis. Local isolated run: 154 passed, 6 actual-host tests skipped; includes 34 PostgreSQL tests, 10 standalone ASGI and 13 assessment tests (categories overlap). Role-bound isolation requires protected per-tenant DB logins and owner-approved host/pool controls; a tenant DB role with audit INSERT can forge its own audit. Actual Agent 1 host integration and live providers remain unverified. No shared migration was applied. See `P2_01_VERIFICATION_REPORT.md` and `ROLE_BOUND_TENANT_SECURITY_PROPOSAL.md`; historical claims below are unverified.
+> **Current verification (2026-11-06):** Isolated run: 169 passed, 7 skipped (6 real-host tests + 1 live-source opt-in). A separate CISA GitHub mirror network-read test passed. Controlled PostgreSQL write/audit is tested under restricted local roles, but audited reads, actual host identity/integration and production immutability remain unverified. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `TRUSTED_RELATIONSHIP_WRITES.md`; historical claims below are unverified.
+
+## Current delivery checklist (living)
+
+- [x] Restricted-role PostgreSQL controlled relationship create and DB-derived transactional audit: isolated tests only.
+- [x] CISA KEV GitHub mirror collector: offline tests and one opt-in real network read.
+- [ ] Implement and test controlled, audited read/list/traversal paths; current trusted adapter fails closed on reads.
+- [ ] Strengthen DB-side validation, audit protection against privileged roles, and per-user authorization.
+- [ ] Add durable, tenant-scoped collection workflow, retry/rate-limit coordination and production source observability.
+- [ ] Complete temporal/conflict frameworks and evaluate/calibrate confidence with authorized real methodology/data.
+- [ ] Agent 1 owner decision: actual host gateway, principal/tenant-to-login pool, schema/role deployment, audit and trace correlation. Run six real-host acceptance tests when approved.
+- [ ] Agent 4 integration only after stable approved host/BFF contracts; maintain create-only browser write boundary.
 
 # CICC Threat Intelligence Project - Master Task Queue
 

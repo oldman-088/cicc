@@ -225,3 +225,42 @@ class PostgresRelationshipStore:
                 frontier = next_frontier
             self._audit(conn, ctx, 'relationship.traverse', 'success')
             return edges[offset:offset+limit], len(edges), len(visited)
+
+
+class TrustedReadsUnavailable(Exception):
+    """Trusted audited read entry points have not been implemented."""
+
+
+class TrustedWritePostgresRelationshipStore(PostgresRelationshipStore):
+    """Experimental controlled write-only adapter with DB-derived audit identity.
+
+    Explicitly refuses reads until audited DB-side read entry points are available.
+    The host must provision per-actor authenticated login roles, reviewed function
+    ownership and restricted table privileges; nothing is provisioned here.
+    """
+    def __init__(self, engine: Engine):
+        super().__init__(engine, tenant_binding='session_role')
+
+    def create(self, ctx: AuditContext, key: str, fingerprint: str, record: RelationshipRecord):
+        import json
+        with self._transaction(ctx) as conn:
+            actor = conn.execute(text('SELECT ti_security.authenticated_actor()')).scalar_one_or_none()
+            if not actor or actor != ctx.actor:
+                raise RuntimeError('Database login is not bound to the authenticated actor')
+            result = conn.execute(text('SELECT ti_security.trusted_create_relationship(:key, CAST(:record AS jsonb))'),
+                {'key': key, 'record': json.dumps(record.model_dump(mode='json'))}).scalar_one()
+            # Verify the identity observed by the write statement itself, even if
+            # an administrator changed mappings after the earlier check.
+            if result['tenant'] != ctx.tenant_id or result['actor'] != ctx.actor:
+                raise RuntimeError('Database identity changed during the operation')
+            parsed = RelationshipRecord.model_validate(result['record']) if result['record'] else None
+            return parsed, result['outcome'], UUID(result['correlation_id'])
+
+    def get(self, *args, **kwargs):
+        raise TrustedReadsUnavailable()
+
+    def list(self, *args, **kwargs):
+        raise TrustedReadsUnavailable()
+
+    def traverse(self, *args, **kwargs):
+        raise TrustedReadsUnavailable()
