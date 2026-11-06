@@ -38,6 +38,14 @@ describe("unconfigured workspace modules", () => {
     expect(container).not.toHaveTextContent(/live count|service is healthy/i);
   });
 
+  it("describes vulnerability exports as package-level and still unmounted", () => {
+    render(<UnconfiguredModulePage moduleId="vulnerability-intelligence" />);
+
+    expect(screen.getByText(/supports vulnerability list\/detail and CycloneDX VEX, OpenVEX, and SARIF exports/)).toBeInTheDocument();
+    expect(screen.getByText(/OpenAPI contract is still proposed/)).toBeInTheDocument();
+    expect(screen.getByText(/No provider is connected/)).toBeInTheDocument();
+  });
+
   it("sets RTL on the Farsi module shell and keeps module labels localized", () => {
     moduleLocale.value = "fa";
     const { container } = render(<UnconfiguredModulePage moduleId="system-health" />);

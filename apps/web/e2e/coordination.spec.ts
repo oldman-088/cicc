@@ -441,6 +441,8 @@ test("keeps threat and vulnerability workspaces explicitly disconnected and acce
   await page.goto("/vulnerability-intelligence");
   await expect(page.getByRole("heading", { name: "Vulnerability API proposal is not mounted" })).toBeVisible();
   await expect(page.getByText(/still proposed and no CICC host mount/)).toBeVisible();
+  await expect(page.getByText(/CycloneDX VEX, OpenVEX, and SARIF exports/)).toBeVisible();
+  await expect(page.getByText(/No provider is connected/)).toBeVisible();
   await expectNoWcagViolations(page);
 });
 
@@ -451,6 +453,7 @@ const disconnectedModuleLocaleCases = [
     threatStatus: "بيانات التهديدات غير متصلة",
     vulnerabilityTitle: "استخبارات الثغرات",
     vulnerabilityStatus: "اقتراح API للثغرات غير مركّب",
+    vulnerabilityDisclosure: /عقد OpenAPI ما زال مقترحًا/,
   },
   {
     locale: "fa",
@@ -458,6 +461,7 @@ const disconnectedModuleLocaleCases = [
     threatStatus: "دادهٔ تهدید متصل نیست",
     vulnerabilityTitle: "اطلاعات آسیب‌پذیری",
     vulnerabilityStatus: "پیشنهاد API آسیب‌پذیری نصب نشده است",
+    vulnerabilityDisclosure: /قرارداد OpenAPI هنوز پیشنهادی است/,
   },
 ] as const;
 
@@ -474,6 +478,7 @@ for (const localeCase of disconnectedModuleLocaleCases) {
     await expect(page.locator(`[lang="${localeCase.locale}"][dir="rtl"]`).first()).toBeAttached();
     await expect(page.getByRole("heading", { name: localeCase.vulnerabilityTitle })).toBeVisible();
     await expect(page.getByRole("heading", { name: localeCase.vulnerabilityStatus })).toBeVisible();
+    await expect(page.getByText(localeCase.vulnerabilityDisclosure)).toBeVisible();
     await expectNoWcagViolations(page);
   });
 }
