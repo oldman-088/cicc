@@ -68,19 +68,37 @@ def stale_after_s() -> float:
     return float(os.getenv("CICC_DOMAIN_STALE_AFTER_S", "3600"))
 
 
-def is_result_stale(provenance: dict, now=None) -> bool:
-    """M41: evidence-based staleness — prefer explicit freshness_s, else age of produced_at."""
+def analyze_freshness(provenance: dict, now=None) -> dict:
+    """M42: evidence-based freshness analysis.
+
+    Returns {stale, age_s, clock_skew_s, basis}:
+    - basis "freshness_s": explicit domain-reported freshness wins
+    - basis "produced_at": age of the tz-aware produced_at (naive = UTC)
+    - basis "none": no usable signal -> not stale (never silently fresh either:
+      age_s is null and callers must not claim freshness)
+    - clock_skew_s > 0 when produced_at is in the future (skewed clock/domain);
+      future timestamps are never treated as fresh evidence, just flagged.
+    """
+    now = now or datetime.now(timezone.utc)
     fresh = provenance.get("freshness_s")
-    if isinstance(fresh, (int, float)) and not isinstance(fresh, bool):
-        return float(fresh) > stale_after_s()
+    if isinstance(fresh, (int, float)) and not isinstance(fresh, bool) and fresh >= 0:
+        return {"stale": float(fresh) > stale_after_s(), "age_s": float(fresh),
+                "clock_skew_s": 0.0, "basis": "freshness_s"}
     try:
         ts = datetime.fromisoformat(str(provenance.get("produced_at", "")).replace("Z", "+00:00"))
-        now = now or datetime.now(timezone.utc)
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        return (now - ts).total_seconds() > stale_after_s()
+            ts = ts.replace(tzinfo=timezone.utc)  # naive timestamps are UTC by contract
+        age = (now - ts).total_seconds()
+        skew = max(0.0, -age)
+        return {"stale": age > stale_after_s(), "age_s": max(0.0, age),
+                "clock_skew_s": skew, "basis": "produced_at"}
     except ValueError:
-        return False
+        return {"stale": False, "age_s": None, "clock_skew_s": 0.0, "basis": "none"}
+
+
+def is_result_stale(provenance: dict, now=None) -> bool:
+    """M41/M42: evidence-based staleness (see analyze_freshness)."""
+    return analyze_freshness(provenance, now)["stale"]
 
 
 def load_persisted_stats(rows: list) -> None:
@@ -242,6 +260,10 @@ def _validate_response(kind: str, resp) -> dict:
     if conf is not None and (not isinstance(conf, (int, float)) or isinstance(conf, bool)
                              or not 0.0 <= conf <= 1.0):
         raise DomainInvalid(f"{kind}: provenance.confidence must be a number in [0,1]")
+    fresh = prov.get("freshness_s")
+    if fresh is not None and (not isinstance(fresh, (int, float)) or isinstance(fresh, bool)
+                              or fresh < 0):
+        raise DomainInvalid(f"{kind}: provenance.freshness_s must be a non-negative number when present")
     return {"result": resp["result"], "provenance": prov}
 
 

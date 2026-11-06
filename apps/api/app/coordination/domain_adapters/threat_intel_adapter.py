@@ -42,9 +42,28 @@ class _NotMounted(Exception):
 def _load_api_class(module_path: str):
     if not os.path.exists(module_path):
         raise _NotMounted(f"threat_intel module not present: {module_path}")
+    import sys
     spec = importlib.util.spec_from_file_location("cicc_ti_agent2_api", module_path)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except ModuleNotFoundError:
+        # newer PR heads import sibling modules as `apps.threat_intelligence.*` —
+        # resolve by adding the module's ancestor dirs + this repo's root to
+        # sys.path (READ-ONLY path fix, no file modification) and retry once
+        here = os.path.dirname(os.path.abspath(module_path))
+        cands = [here]
+        d = here
+        for _ in range(6):
+            d = os.path.dirname(d)
+            cands.append(d)
+        cands.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")))
+        for c in cands:
+            if c not in sys.path:
+                sys.path.insert(0, c)
+        spec = importlib.util.spec_from_file_location("cicc_ti_agent2_api", module_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
     return mod, mod.ThreatIntelligenceAPI, mod.ThreatIntelligenceRequest
 
 

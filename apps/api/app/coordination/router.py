@@ -373,6 +373,8 @@ def mount_domain(kind: str, body: MountIn,
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"domain_mount_failed ({type(e).__name__})")
     with ops.SessionLocal() as s:
+        ops.record_event("info", "coordination.domains",
+                         f"domain mounted kind={kind} version={body.version} by=api-write-token", s=s)
         _persist_domain_stats(s)
         s.commit()
     return {"kind": kind, "mounted": True, "status": domains.domain_status(kind), **entry}
@@ -385,6 +387,8 @@ def deregister_domain(kind: str, _gate: None = Depends(read_token_dependency),
     require_write_token(authorization)
     removed = domains.unregister_domain(kind)
     with ops.SessionLocal() as s:
+        ops.record_event("info", "coordination.domains",
+                         f"domain deregistered kind={kind} removed={removed} by=api-write-token", s=s)
         _persist_domain_stats(s)
         s.commit()
     if not removed:
@@ -403,6 +407,7 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
     idempotency_key = body.get("idempotency_key") or None
     task_id = body.get("task_id") or f"dom-{kind}-{uuid.uuid4().hex[:12]}"
+    claimed_tenant = body.get("tenant_id")  # M42: recorded as CLAIMED metadata only; enforcement is owner-reserved
     with ops.SessionLocal() as s:
         pre = None
         if idempotency_key:
@@ -440,11 +445,20 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             _persist_domain_stats(s)
             s.commit()
             raise HTTPException(status_code=422, detail=str(e))
-        stale = domains.is_result_stale(out["provenance"])  # M41: evidence-based staleness flag
+        freshness = domains.analyze_freshness(out["provenance"])  # M42: basis + clock skew
+        stale = freshness["stale"]
         domains.record_outcome(kind, True, stale=stale)
+        ops.record_event("info", "coordination.domains",
+                         f"domain invoke ok kind={kind} task={task_id} stale={stale} by=api-write-token", s=s)
+        if claimed_tenant is not None:
+            registry.record_event(s, task_id, "claimed_tenant", f"tenant_id={claimed_tenant} (unverified claim)")
         if stale:
             registry.record_event(s, task_id, "domain_stale",
-                                  f"freshness beyond {domains.stale_after_s()}s")
+                                  f"basis={freshness['basis']} age_s={freshness['age_s']} "
+                                  f"skew_s={freshness['clock_skew_s']} limit={domains.stale_after_s()}s")
+        if freshness["clock_skew_s"] > 0:
+            registry.record_event(s, task_id, "domain_clock_skew",
+                                  f"produced_at in future by {freshness['clock_skew_s']:.1f}s")
         # persist the real domain result with provenance (incl. confidence/freshness if the domain provides them)
         t.result = json.dumps({"result": out["result"], "provenance": out["provenance"], "stale": stale})
         registry.record_event(s, task_id, "domain_result",
@@ -459,7 +473,37 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
         s.commit()
         return {"task_id": task_id, "kind": kind, "state": registry.normalize_state(t.state),
                 "result": out["result"], "provenance": out["provenance"], "stale": stale,
+                "freshness": freshness,
                 "idempotency_key": t.idempotency_key}
+
+
+@router.get("/diagnostics")
+def coordination_diagnostics(_gate: None = Depends(read_token_dependency)):
+    """M42: operational diagnostics (read-only, no secrets): DB connectivity,
+    uptime, app version, mounted domains + evidence-based statuses."""
+    from sqlalchemy import text as _text
+    db_ok = False
+    with ops.SessionLocal() as s:
+        try:
+            s.execute(_text("SELECT 1"))
+            db_ok = True
+        except Exception:
+            db_ok = False
+        _load_persisted_stats(s)
+        _persist_domain_stats(s)
+        s.commit()
+    from app.main import __version__, _STARTED_TS
+    import time as _time
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "db_ok": db_ok,
+        "version": __version__,
+        "uptime_s": round(_time.time() - _STARTED_TS, 1),
+        "mounted_domains": domains.mounted_domains(),
+        "domain_statuses": domains.all_statuses(),
+        "stale_after_s": domains.stale_after_s(),
+        "note": "diagnostics expose no credentials, tokens, or internal error details",
+    }
 
 
 @router.get("/health")

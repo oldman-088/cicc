@@ -40,6 +40,12 @@ async def lifespan(app: FastAPI):
     ops.record_event("info", "api", "CICC operations service started")
     logger.info("operations service started")
     yield
+    ops.record_event("info", "api", "CICC operations service stopping — disposing DB engine (safe shutdown)")
+    logger.info("operations service stopping — disposing DB engine")
+    try:
+        ops.engine.dispose()
+    except Exception as e:
+        logger.warning("engine dispose during shutdown failed: %s", type(e).__name__)
     ops.record_event("info", "api", "CICC operations service stopped")
     logger.info("operations service stopped")
 

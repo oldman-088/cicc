@@ -58,6 +58,20 @@ correlation{idempotency_key,…}, result{result, provenance, stale}, events[],
 deliveries[], approvals[]}`; `GET /api/v1/coordination/tasks?kind=<domain_id>`
 lists domain tasks.
 
+## Freshness / stale semantics (M42)
+
+- Invoke responses include `freshness: {stale, age_s, clock_skew_s, basis}` where
+  `basis` is `freshness_s` (domain-reported freshness wins) or `produced_at`
+  (age of the tz-aware timestamp; naive = UTC). `stale=true` when age exceeds
+  `stale_after_s` (`CICC_DOMAIN_STALE_AFTER_S`, default 3600). A future
+  `produced_at` is **never treated as fresh**: `stale=false` but
+  `clock_skew_s > 0` and a `domain_clock_skew` trace event fires. Malformed
+  `freshness_s` (non-numeric/negative) → 422 `domain_invalid`.
+- `evidence.last_stale` (status DTO) is true iff the most recent successful
+  invoke was stale; a later fresh result resets it — stale results are never
+  silently represented as fresh across recovery.
+- Trace events: `domain_stale` (with basis/age/skew detail), `domain_clock_skew`.
+
 ## Authorization & tenant scoping
 
 Reads: API read token (injected server-side by the BFF; browser holds none).
