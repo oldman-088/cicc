@@ -320,3 +320,15 @@ Deviations are deliberate and documented: this is the existing four-agent split 
 - `docs/MASTER_PROMPT_ALIGNMENT.md`, `PROJECT_STATE.json`, `MASTER_TASK_QUEUE.md`, `DEVELOPMENT_LOG.md`, `BLOCKERS.md` — project recovery/ownership record.
 
 **Incoming lead: start with a fresh `git status` and PR #4 head check. Keep the branch open, do not merge yourself, do not reset user/agent work, do not expose credentials, and do not convert a sandbox or unmerged branch result into a Beta/production claim.**
+
+## Publication and final verification addendum
+
+The detailed handover was published with M47 implementation commit `7e480d26be3b07515b6bc63b722f5b61b37e43f4`; a project-state refresh followed in commit `42e0aa0849d9d1f5579078ea7b3b512c461d8656`. At the final GitHub verification of that state-refresh head:
+
+- Local branch and `origin/arena/961971ed-cicc` both resolved to `42e0aa0849d9d1f5579078ea7b3b512c461d8656`; the worktree was clean.
+- PR #4 was **OPEN**, non-draft, based on `main`, `mergeStateStatus=CLEAN`, with empty `statusCheckRollup` and no review decision. `gh pr checks 4` reported no checks; `gh run list --branch arena/961971ed-cicc` returned `[]`. This is no Agent 1 CI run, not a CI pass.
+- The PR body update was verified: the existing 46,345-character description was preserved and extended with `## M47 Lead Handover`; the section links this document and summarizes tests, blockers, and evidence boundaries.
+- `main` remained `ca8f82c0500637e22851d7128cddf99081ef3c08`. Read-only heads: PR #1 `a942baabc3260683ec1a2b8c9d953c04dceaae9a` OPEN; PR #2 `e745cc2b8ff995b040896212eab2995607c48963` OPEN; PR #3 `7136538f74ab08b33607774c507785fc0c59cd03` OPEN/Draft; PR #6 `02616bb5a34bc0dfa6beaee598948b09b7ba1127` OPEN. No other branch or PR was modified.
+- Other-branch Actions evidence remains separate: PR #1 `vuln-intel` run `42224686079` succeeded; PR #2 `Frontend CI` run `42213869662` succeeded; PR #3 `VI candidate PostgreSQL` run `42224836523` succeeded. None is an Agent 1 PR #4 check or actual-host acceptance.
+
+These are timestamped observations, not a guarantee that GitHub metadata stays unchanged. Always use the commands in §1 immediately before an integration or merge decision. The handover changes do not merge PR #4 or alter `main`.
