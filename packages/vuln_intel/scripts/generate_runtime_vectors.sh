@@ -104,6 +104,8 @@ read -r -d '' CORPUS <<'CORPUS_EOF' || true
 1.A
 1.a
 1.0.0.a
+1-x
+1.0.0.x
 1.0.0
 1.0
 10.0
@@ -192,6 +194,7 @@ printf '%s\n' "${versions[@]}" | ruby "${work_dir}/rubygems_vectors.rb" > "${wor
 mkdir -p "$(dirname "$out_file")"
 "${PYTHON:-python3}" - "${work_dir}/maven.json" "${work_dir}/rubygems.json" "$out_file" <<'PY_EOF'
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -199,6 +202,11 @@ from datetime import datetime, timezone
 maven_path, rubygems_path, out_path = sys.argv[1:4]
 maven = json.load(open(maven_path))
 rubygems = json.load(open(rubygems_path))
+
+#: Every version the corpus actually contains, taken from the parsed output rather
+#: than re-read from the shell, so there is one source of truth.
+corpus_set = {v for pair in maven["pairs"] for v in pair[:2]}
+corpus_set |= {v for pair in rubygems["pairs"] for v in pair[:2]}
 
 
 # ---- self-check -------------------------------------------------------------
@@ -209,39 +217,19 @@ rubygems = json.load(open(rubygems_path))
 #
 # These expectations come from the upstream test suites, independently of our
 # comparators. If one fails the script exits non-zero and no vector file is written.
+#: The facts used to validate the generated vectors, loaded from a file that both this
+#: script and ``tests/test_comparator_facts.py`` read. One source of truth, so the
+#: checks cannot drift apart, and the test half enforces them on every CI run without
+#: needing a JVM or a Ruby.
+facts_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "tests", "fixtures", "comparator_facts.json")
+with open(facts_path, encoding="utf-8") as handle:
+    _facts = json.load(handle)
 SELF_CHECK = {
-    "maven": [
-        ("1.0-beta-1", "1.0-SNAPSHOT", -1, "3.9.9 ComparableVersionTest.checkVersionsOrder"),
-        ("1.0-SNAPSHOT", "1.0", -1, "snapshot precedes the release"),
-        ("1-alpha-1", "1.0", -1, "3.9.9 checkVersionsOrder"),
-        ("2.0.1", "2.0.1-xyz", -1, "3.9.9 checkVersionsOrder"),
-        ("2.0-1", "2.0.1", -1, "3.9.9 checkVersionsOrder"),
-        ("1", "1.0", 0, "3.9.9 checkVersionsEqual"),
-        ("1alpha", "1-alpha", 0, "no separator between number and character"),
-        # Deliberately NOT asserted: ("1.0.0.a","1.a") and ("5.x","5.0.0.rc2").
-        #
-        # Reading maven-3.9.9's StringItem/IntItem dispatch says these order as
-        # 1 and -1, because IntItem.compareTo(STRING_ITEM) returns 1. A probe against
-        # the real ComparableVersion in CI returned 0 and 1 — the opposite of the first
-        # one. Those two answers cannot both be right, and nothing available here can
-        # settle it: the job log and its artifact are both unreachable from the
-        # authoring environment.
-        #
-        # So they are logged by the probe step and left unasserted. Inventing an
-        # expectation either way would make this self-check agree with whichever of the
-        # two is wrong, which is precisely the failure mode it exists to catch.
-    ],
-    "rubygems": [
-        ("1.0.0.a", "1.a", 0, "leading zero-run is stripped before the first letter"),
-        ("0.beta.1", "0.0.beta.1", 0, "same rule, with several leading zeros"),
-        ("1.0.0", "1", 0, "trailing zeros are stripped"),
-        ("5.0.0.rc2", "5.x", -1, "'rc' sorts before 'x'"),
-        ("1.x", "1.0.0.a", 1, "'x' sorts after 'a', so 1.x is the greater"),
-        ("1", "1.0.0.a", 1, "a prerelease sorts below its release"),
-        # Counterparts of the discriminating maven pairs above.
-        ("5.x", "5.0.0.rc2", 1, "RubyGems: 'x' sorts after 'rc'"),
-    ],
+    family: [(row["left"], row["right"], row["expected"], row["why"]) for row in rows]
+    for family, rows in _facts["families"].items()
 }
+
 
 def _lookup(pairs, left, right):
     for a, b, value in pairs:
@@ -261,6 +249,29 @@ for family, checks in SELF_CHECK.items():
                 f"{family}: {left!r} vs {right!r} -> generator said {got}, "
                 f"upstream says {expected} ({why})"
             )
+
+# ---- corpus completeness -----------------------------------------------------
+# An absent pair and a wrong answer are different failures, and confusing them cost
+# this job two rounds: the self-check reported five pairs "absent from the corpus" and
+# I read that as the Java output not reaching its bucket, when the versions had simply
+# never been added. Check completeness explicitly, name it as its own failure, and
+# report the bucket sizes so a dead runtime cannot look like an empty corpus.
+declared = [v for family in SELF_CHECK.values() for pair in family for v in pair[:2]]
+missing_versions = sorted({v for v in declared if v not in corpus_set})
+if missing_versions:
+    print("::error title=runtime-vector corpus incomplete::The self-check asserts pairs "
+          "whose versions were never added to the corpus, so they cannot be evaluated: "
+          + ", ".join(missing_versions))
+    print(f"\ncorpus incomplete: {len(missing_versions)} asserted version(s) absent "
+          f"({', '.join(missing_versions)}); no vector file written.", file=sys.stderr)
+    raise SystemExit(1)
+for family, pairs in (("maven", maven["pairs"]), ("rubygems", rubygems["pairs"])):
+    if not pairs:
+        print(f"::error title=runtime-vector runtime dead::The {family} bucket is empty, "
+              f"so that runtime produced nothing. Any agreement it appears to show is an "
+              f"artefact of an empty comparison.")
+        raise SystemExit(1)
+    print(f"{family}: {len(pairs)} pairs from the real implementation")
 
 if problems:
     print("::error title=runtime-vector self-check::The generated vectors are wrong, "

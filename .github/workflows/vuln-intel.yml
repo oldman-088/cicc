@@ -173,7 +173,75 @@ jobs:
   # but is not the same as running it. This is the job that turns B-17 from
   # "vector-verified" into "differentially verified", so it must fail rather than skip.
   # ---------------------------------------------------------------------------
+  comparator-oracle-status:
+    runs-on: ubuntu-latest
+    # GATING, and deliberately not the same thing as the runtime job above.
+    #
+    # This job answers "do we still match the upstream facts?" without needing a JVM or
+    # a Ruby, so it cannot skip. The runtime job answers the stronger question "do we
+    # match the implementations?" but can be unavailable, so it is advisory. Keeping
+    # them as two jobs is what makes a green board honest: this one means the known
+    # facts hold; neither means every comparison passed.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test tooling
+        run: pip install -q "pytest>=8,<10" rpm-vercmp semantic_version packaging pyyaml jsonschema
+      - name: Enforce the upstream ordering facts
+        working-directory: packages/vuln_intel
+        run: python -m pytest tests/test_comparator_facts.py -q
+      - name: Summarise oracle status
+        working-directory: packages/vuln_intel
+        run: |
+          {
+            echo "### Comparator oracle status"
+            echo ""
+            echo "| Check | Scope | Gating? |"
+            echo "| --- | --- | --- |"
+            echo "| upstream facts (this job) | 21 known facts from maven-3.9.9 and RubyGems | **yes** |"
+            echo "| hand-transcribed vectors | 55 Maven + 52 RubyGems upstream cases | yes (test job) |"
+            echo "| live runtime diff | full corpus vs real ComparableVersion / Gem::Version | **no — advisory** |"
+            echo ""
+            echo "A green run here means the known facts hold. It does **not** mean every"
+            echo "comparison against the real implementations passed; that is reported"
+            echo "separately by the \`maven-rubygems-runtime\` job, which is provisional."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   maven-rubygems-runtime:
+    # PROVISIONAL / NON-BLOCKING — read this before reading a green tick.
+    #
+    # This job runs Apache ComparableVersion on a JVM and Gem::Version on MRI and diffs
+    # our comparators against them. It is the only check in the repository that can
+    # claim a *differential* result for those two schemes, and it has already earned its
+    # keep: it found the Maven SNAPSHOT qualifier rank, the omission of Apache's
+    # sublist rules, and a normalize() that stopped too early. Those are fixed and
+    # guarded by tests.
+    #
+    # It stays continue-on-error because one thing it reports cannot be resolved from
+    # the environment that maintains this branch: the job log and its artifact are both
+    # unreachable there, so a disagreement can be *seen* (via check annotations and the
+    # job summary) but not *investigated*. Shipping it as gating would mean either
+    # blocking every merge on an unreadable failure or deleting the check.
+    #
+    # What that means for reporting, stated so it cannot be misread later:
+    #   * a green overall CI result does NOT mean all oracle comparisons passed;
+    #   * the definitive statement of oracle status is the job SUMMARY, which counts
+    #     confirmed matches and unresolved disagreements separately, and the
+    #     "Comparator oracle status" gate below, which is gating;
+    #   * `tests/test_comparator_facts.py` enforces 21 upstream facts on every commit
+    #     without needing a JVM, so the facts are checked even when this job cannot run.
+    #
+    # Condition for removing this flag, so it is not indefinite:
+    #   1. the runtime job completes with zero disagreements for two consecutive runs on
+    #      two different commits, AND
+    #   2. `test_comparator_facts.py` is green (it is gating and runs unconditionally),
+    #      AND
+    #   3. the self-check in the generator reports a non-zero fact count and no
+    #      corpus-completeness failure.
+    # Removing it is the definition of done for B-17.
+
     runs-on: ubuntu-latest
     # ADVISORY, NOT GATING - and deliberately visible about it.
     #

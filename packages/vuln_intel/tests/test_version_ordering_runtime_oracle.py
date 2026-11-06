@@ -71,6 +71,20 @@ def _diff(scheme: VersionScheme, pairs: list) -> list[str]:
             problems.append(f"{left!r} vs {right!r}: we returned None, runtime said {expected}")
         elif actual != expected:
             problems.append(f"{left!r} vs {right!r}: we said {actual}, runtime said {expected}")
+    # Report both halves in the job summary. A summary that lists only failures makes a
+    # run with 2,800 agreements and 9 disagreements look like a run with 9 answers; a
+    # summary that lists only the total makes nine real defects look like rounding.
+    checked = len(pairs)
+    confirmed = checked - len(problems)
+    verdict = (
+        "all confirmed"
+        if not problems
+        else f"{len(problems)} UNRESOLVED DISAGREEMENT(S)"
+    )
+    print(
+        f"::notice title={scheme.value} oracle::{confirmed}/{checked} pairs confirmed "
+        f"against the real implementation — {verdict}"
+    )
     if problems:
         # Emit GitHub workflow commands so each disagreement becomes a check annotation.
         # Without this the only copy of the evidence is the job log, and a failure that
