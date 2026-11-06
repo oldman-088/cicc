@@ -9,3 +9,5 @@
 5. **Reuse path:** publish approved versioned package/interface or owner-approved shared module on an agreed merge path, preserve both histories, pin versions, then add adversarial cross-parser, source identity/provenance, tenant, failure and actual-host regression tests. No branch edits, copying, claims of integration or shared migrations/role changes before review.
 
 **Acceptance needed:** written decision and owner for each parser/format, source, schema, guard and reuse item; security and gateway approval for any mounted path; Agent 4 version/error/unknown-state acceptance and actual integration test evidence. Record any rejection or gaps rather than treating silence as consent.
+
+Agent 4's prior PR #3 feedback (`6685317496`, `6685485386`) identifies opaque nested DTO bodies and missing untrusted-wire validation, and reports test-only decoders without fetch/UI binding. Do not treat that as acceptance of M54's trace schema. PR #1 advanced to `999532d9b39554a6dcdbe0827926c401ab9b53e4` during this milestone; read-only inspection of its parser still shows the same JSON format/version constants, but no full retest or owner approval is claimed.
