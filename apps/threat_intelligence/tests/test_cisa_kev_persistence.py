@@ -353,3 +353,18 @@ def test_conflict_inspection_reproducible_and_preserves_both_bytes(db):
     with db.begin() as conn:
         conn.execute(text("UPDATE ti_kev.source_blob SET source_bytes=decode('00','hex') WHERE content_sha256=:digest"), {'digest':candidate.content_sha256})
     with pytest.raises(SnapshotUnavailable): inspect_conflict(db,origin=original.origin,conflict_id=conflict.conflict_id)
+
+
+def test_versioned_inspection_document_is_read_only_and_json_reproducible(db):
+    import json
+    from apps.threat_intelligence.cisa_kev_snapshot import conflict_document
+    before=collected(sample());persist_catalog(db,before)
+    data=sample();data['vulnerabilities'][0]['product']='EXPERIMENTAL_DEMO_DATA_ONLY fixture change'
+    result=persist_catalog(db,collected(data)); before_counts=counts(db)
+    kw=dict(origin=before.origin,conflict_id=result.conflict_id,schema_version='cicc.kev-conflict-summary/1')
+    one=conflict_document(db,**kw); two=conflict_document(db,**kw)
+    assert json.dumps(one,sort_keys=True)==json.dumps(two,sort_keys=True)
+    assert one['schema_version']=='cicc.kev-conflict-summary/1'
+    assert 'previous' not in one and 'candidate' not in one and one['observed_at'].endswith('+00:00')
+    assert counts(db)==before_counts
+    with pytest.raises(ValueError,match='unsupported'): conflict_document(db,**(kw|{'schema_version':'cicc.kev-conflict-summary/2'}))

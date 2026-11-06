@@ -1,3 +1,5 @@
+> **M50 verification:** 261 passed / 10 skipped isolated PostgreSQL suite; default 164 passed / 107 skipped; separately 2 live CISA GitHub mirror tests passed; actual Agent 1 host 0 executed / 8 skipped. Subset SBOM import and resolution planning are offline, not production integrations. See `INTELLIGENCE_HOST_HANDOFF_M50.md`. Earlier counts below are historical.
+
 > **M49 current verification:** 245 passed / 10 skipped isolated PostgreSQL suite; offline 153 passed / 102 skipped; separately live GitHub CISA mirror 2 passed; actual host 0 executed / 8 skipped. Quality report and conflict inspection are independent, not mounted; see `VULNERABILITY_QUALITY_CONTRACT.md` and `KEV_CONFLICT_LIFECYCLE.md`. Earlier verification counts are historical.
 
 > **M48 current verification:** 241 passed / 10 skipped in isolated PostgreSQL suite; offline 150 / 101 skipped; separate live GitHub mirror 2 passed; actual host 0 executed / 8 skipped. See `VULNERABILITY_QUALITY_CONTRACT.md` and `M46_HOST_ADAPTER.md`. Older counts and assertions below are historical.

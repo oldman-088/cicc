@@ -245,3 +245,16 @@ def test_disposable_db_owner_can_modify_audit_so_not_admin_resistant(host):
         assert updated.rowcount==1
     with admin.connect() as conn:
         assert conn.execute(select(audit_event.c.actor).where(audit_event.c.correlation_id==correlation)).scalar_one()=='EXPERIMENTAL_DEMO_DATA_ONLY_admin_fixture'
+
+
+def test_quality_library_does_not_publish_unapproved_routes_or_change_adapter(host):
+    from datetime import timedelta
+    from apps.threat_intelligence.vulnerability_quality import quality_json_for_version
+    from test_vulnerability_quality import inventory, obs, CVE, NOW
+    app, _, _, _=host
+    data=quality_json_for_version('cicc.vulnerability-quality/1',inventory(),[obs(1,'NVD',CVE)],[],as_of=NOW,max_observation_age=timedelta(days=1))
+    assert 'cicc.vulnerability-quality/1' in data
+    assert call(app,'GET','/vulnerability-quality')[0]==404
+    assert call(app,'GET','/kev-conflicts/1')[0]==404
+    # Existing mounted relationship adapter still enforces its authentication.
+    assert call(app,'GET','/relationships',identity='invalid')[0]==401

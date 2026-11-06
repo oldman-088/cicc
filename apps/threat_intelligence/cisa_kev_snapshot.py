@@ -136,3 +136,15 @@ def inspect_conflict(engine: Engine, *, origin: str, conflict_id: int):
                 'previous_blob_sha':previous.github_blob_sha,'candidate_blob_sha':candidate.github_blob_sha,
                 'metadata_fields_changed':metadata_fields,'added_cves':added,'removed_cves':removed,'changed_cves':changed,
                 'previous':previous,'candidate':candidate}
+
+
+def conflict_document(engine: Engine, *, origin: str, conflict_id: int, schema_version: str):
+    """JSON-compatible, read-only summary; original bytes stay in trusted inspection."""
+    from datetime import timezone
+    if schema_version != 'cicc.kev-conflict-summary/1':
+        raise ValueError('unsupported conflict summary schema version')
+    result=inspect_conflict(engine,origin=origin,conflict_id=conflict_id)
+    document={k:(v.astimezone(timezone.utc).isoformat() if k in ('observed_at','release_at','previous_collected_at','candidate_collected_at') else v)
+              for k,v in result.items() if k not in ('previous','candidate')}
+    document['schema_version']=schema_version
+    return document
