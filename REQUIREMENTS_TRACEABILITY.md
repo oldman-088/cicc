@@ -59,3 +59,14 @@ README.md (ULTIMATE MASTER PROMPT v1.0, main@ca8f82c) §12.
 | Exact merged-application acceptance | `scripts/m47_merged_app_acceptance.py`, `apps/api/tests/test_m47_acceptance_preflight.py`, `docs/M47_MERGED_APPLICATION_ACCEPTANCE.md` | No-manifest preflight BLOCKED before app startup; requires exact source/tree identity and owner-approved manifest/tenant driver | IMPLEMENTED; MERGED-APPLICATION NOT RUN |
 | TI/VI trusted host integration | Agent 2/Replacement Agent 3 contract and exact source owners required; Agent 1 adapters remain legacy candidates | PR #3 reports actual-host tests 0 executed / 8 skipped; no approved manifest/host/pool/audit driver | BLOCKED; no integration approval or production claim |
 | Master Prompt source alignment | `README.md` v1.0 reread; SHA-256 `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1`; original unchanged | `docs/MASTER_PROMPT_ALIGNMENT.md`; full technical mapping in `docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md` | DOCUMENTED; production DoD remains unmet |
+
+## M48 whole-product acceptance status (2026-11-06)
+
+| Master Prompt / acceptance item | Current evidence | Status / boundary |
+|---|---|---|
+| Agent 1 API, PostgreSQL and Web regression checks | API 309/309; PostgreSQL-selected 42/42; Web 35/35; typecheck/build PASS; PR #4 CI `42246801975` 3/3 jobs | PASS on Agent 1 branch `157645e9`; not merged/deployed product acceptance |
+| Exact-revision merged application | `scripts/m47_merged_app_acceptance.py --checkout .` exited 2 because no owner-approved revision/module/host/tenant manifest; app did not start | BLOCKED / NOT RUN |
+| TI actual Agent 1 host | PR #3 CI explicitly excludes actual-host tests; handover 0/8 | BLOCKED; no integration credit |
+| VI actual Agent 1 host | PR #1 handover claims 6/6; all six workflow jobs succeeded, but raw log/count unavailable to this audit and no mounted route exists | Candidate evidence only; not merged-app acceptance |
+| Production authentication and tenant isolation (§10, §17) | No principal-bound tenant data pools, RLS or cross-tenant acceptance; AMD-003 pending | NOT IMPLEMENTED/VERIFIED; tenant-isolation acceptance 0% |
+| Product-wide core modules, graph, source integrations, AI, 3D, localization and deployment (§4–§9, §17) | Candidate branches and documentation are tracked separately; no integrated acceptance evidence for full scope | INCOMPLETE; see `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md` |

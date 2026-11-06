@@ -1544,3 +1544,13 @@ Only read-only codeload exports were used; no other branch or PR was modified.
 - The exact-revision runner requires exact PR merge results or an owner-approved integration checkout, exact module source/tree identity, approved payload/source/owner manifest, real host execution, and an owner-approved tenant driver. It has not passed against a merged or approved application.
 
 See `docs/M47_CROSS_AGENT_CONTRACT_STATUS.md`, `docs/M47_MERGED_APPLICATION_ACCEPTANCE.md`, and `docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md` for owner-specific gaps and acceptance evidence. No other agent branch or PR was modified.
+
+## M48 whole-product status snapshot (2026-11-06 15:58 UTC)
+
+- Agent 1 code/CI baseline: PR #4 HEAD `157645e9d46bef4c120ff46fc3028320971fe286`, OPEN/CLEAN. GitHub PR run `42246801975` and push run `42246787299` both passed the full API, PostgreSQL-selected, and Web/typecheck/build jobs. Local: API 309/309, PostgreSQL-selected 42/42, Web 35/35, typecheck and production build passed.
+- Exact-revision merged-app acceptance: rerun is **BLOCKED** (exit 2) because no owner-approved manifest/module/host/tenant contract exists; no app started. This is not a test pass or fail of the merged product.
+- PR #3 at `7136538f74ab08b33607774c507785fc0c59cd03`: PostgreSQL CI success, but the job explicitly excludes live/actual-host tests; handover remains 0/8 actual-host. Experimental TI host is not mounted in Agent 1.
+- PR #1 at `a942baabc3260683ec1a2b8c9d953c04dceaae9a`: six CI jobs green; handover claims six actual-host checks, but raw hosted log/count was unavailable to this audit. The package and migration remain unmerged/unmounted; this is not merged-app acceptance.
+- Working ownership map follows the current assignment (PR #1 original Agent 3; PR #3 replacement Agent 3 with historical Agent 2 TI). PR #1's current handover contradicts it and GitHub commit metadata is not independently attributable. Requests for clarification/evidence are linked in `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`.
+- PR #2 frontend remains a separate branch; Agent 1 `apps/web/app` is not the same tree as PR #2 `apps/web/src`. No approved TI/VI UI route or domain host contract exists.
+- Completion scoring, full PR inventory, and non-production caveats: `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md` (29% weighted integrated Beta estimate; tenant-isolation acceptance 0%).

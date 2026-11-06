@@ -213,3 +213,11 @@ The Arena/owner orchestration split the single-team prompt into 4 agents. **Agen
   auth/tenant isolation and integration evidence are missing. RabbitMQ is not
   being misrepresented as required for the human-assisted workflow; autonomous
   broker delivery remains optional and unverified.
+
+## M48 whole-product recheck and completion estimate (2026-11-06)
+
+- Re-read the original `README.md` Master Prompt v1.0 at `ca8f82c0500637e22851d7128cddf99081ef3c08`; SHA-256 remains `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1`. The prompt file is unchanged.
+- Agent 1 added branch CI for API, PostgreSQL-selected, Web tests, typecheck and production build. Local tests and GitHub CI are green at `157645e9d46bef4c120ff46fc3028320971fe286`.
+- Product scope remains the full §4/§5 domains and extensions, §6 unified graph, §7 real-source integrations, §8 AI governance, §9 immersive/accessible 3D and localization, and §10/§17 production security/data/release acceptance. Those are not delivered by Agent 1's Ops/Coord control-plane slice or by candidate code on open PRs.
+- PR #1/#3 ownership metadata is non-conclusive and their TI/VI code is not mounted. PR #3's current actual-host result remains 0/8; the exact merged-app gate exited 2/BLOCKED before startup for lack of an approved manifest. No production authentication, tenant isolation, RLS or deployment is claimed; AMD-003 remains pending.
+- **Whole-product integrated Beta estimate: 29%**, using explicit weights and only integrated/verified evidence; candidate implementation estimates are shown separately. Tenant-isolation acceptance is 0%. §17 Definition of Done remains unmet. Detailed score, evidence classes, PR state and blockers: `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`.

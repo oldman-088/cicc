@@ -25976,3 +25976,9 @@ Running log; newest entries last. Checkpoint on interruption: this file +
 - **Publication verification @13:38Z:** commit `7e480d26be3b07515b6bc63b722f5b61b37e43f4` is present on `origin/arena/961971ed-cicc`; PR #4 is OPEN/CLEAN at that SHA, `statusCheckRollup=[]`, and `gh pr checks 4` reports no checks. The M47 handover head is pushed; the PR remains open for owner review.
 
 Continue M47 independently of PR #1/#3: resolve no owner decisions unilaterally, preserve PR #4 and the other branches, keep exact evidence classes, and do not claim production authentication, RLS, tenant isolation, or a merged-application pass.
+
+## 2026-11-06T15:58Z — M48 (CI + whole-product status)
+- Added Agent 1 GitHub Actions workflow for full API, PostgreSQL-selected tests, Web tests, TypeScript typecheck and Next production build; pinned Ubuntu 24.04, setup-node v7 and Node 22. At product-code SHA `157645e9d46bef4c120ff46fc3028320971fe286`, local API 309/309, PostgreSQL 42/42, Web 35/35, typecheck/build PASS; PR CI `42246801975` and push CI `42246787299` each 3/3 jobs passed.
+- Exact acceptance was re-run: `scripts/m47_merged_app_acceptance.py --checkout .` returned BLOCKED / exit 2 because no owner-approved revision/module/host/tenant manifest was supplied. No application started; not a merged-app test.
+- Read-only GitHub review: PR #1 six-job CI succeeded; PR #3 PostgreSQL job succeeded but explicitly excludes actual-host tests (handover remains 0/8); PR #2 Web checks succeeded on its own branch. PR #1/#3 ownership remains ambiguous from commit metadata and conflicting handovers. Scoped requests posted on PRs #1/#2/#3.
+- Published `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`, including weighted overall integrated Beta estimate **29%**, separate candidate-vs-integrated subsystem estimates, current PR states and remaining work. Original Master Prompt unchanged; AMD-003/auth/tenant isolation remain pending; no other agent branch modified.

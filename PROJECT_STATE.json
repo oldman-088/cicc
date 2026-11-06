@@ -6,7 +6,7 @@
  "pr": 4,
  "domains": {
   "coordination": {
-   "status": "implemented+locally tested; M47 exact expiring circuit probe leases and mount-generation guards; coordination status/diagnostics GETs are SQL-DML-free; exact merged-app runner prepared but BLOCKED (PR #1/#3 open, no owner-approved TI/VI source/host or tenant manifest); no production auth/tenant isolation",
+   "status": "implemented and locally tested on Agent 1 PR #4; M47 expiring half-open probe leases, mount-generation guards and SQL-DML-free coordination status/diagnostics GETs; exact-revision merged-app acceptance remains BLOCKED for lack of owner-approved revision/module/host/tenant manifest; not merged to main and no production auth/tenant isolation claim",
    "components": [
     "webhook (HMAC/replay/allowlist)",
     "github api sync (LIVE)",
@@ -19,17 +19,17 @@
     "DAG",
     "sweep"
    ],
-   "tests": "API 309/309; PostgreSQL-selected 42/42; web 35/35; typecheck PASS; M47 focused reliability/preflight 23/23; M44 fixture 17/17 on clean and non-empty scratch SQLite with circuit threshold 3; M47 exact merged-app preflight BLOCKED before API startup; MERGED-APPLICATION NOT RUN"
+   "tests": "API 309/309; PostgreSQL-selected 42/42; web 35/35; typecheck PASS; production build PASS; Agent 1 GitHub CI PR run 42246801975 3/3 jobs PASS at 157645e9d46bef4c120ff46fc3028320971fe286; exact merged-app preflight BLOCKED before app startup; MERGED-APPLICATION NOT RUN"
   },
   "ops": {
-   "status": "implemented+locally tested; optional platform-auth adapter is not verified production identity; no Agent 1 CI check at pre-publication head",
+   "status": "implemented and locally tested on Agent 1 PR #4; optional platform-auth adapter is not verified production identity; new Agent 1 API/PostgreSQL/Web CI is green on 157645e9; no production deployment",
    "components": [
     "health/metrics/alerts/maintenance/workers/tasks/system",
     "escalation+flap",
     "retention",
     "platform-auth adapter (inert)"
    ],
-   "tests": "API 309/309; PostgreSQL-selected 42/42; web 35/35; typecheck PASS; sandbox only; no build rerun"
+   "tests": "API 309/309; PostgreSQL-selected 42/42; web 35/35; typecheck PASS; NEXT_TELEMETRY_DISABLED=1 npm run build PASS; Agent 1 CI run 42246801975 PASS; sandbox/local evidence only"
   }
  },
  "not_production_ready": [
@@ -37,7 +37,7 @@
   "tenant isolation unimplemented/unverified (no principal-bound data pools, RLS, or cross-tenant acceptance)",
   "versioned database migration process absent; startup uses SQLAlchemy create_all; AMD-003 pending",
   "PR #1/#3 are open; TI/VI host contract/approved modules unresolved; PR #3 reports 0/8 actual host tests",
-  "M47 exact merged-application runner blocked; Agent 1 PR #4 had no status checks at pre-publication head",
+  "M47 exact merged-application runner remains BLOCKED (no owner-approved manifest; no app started); Agent 1 CI is now green on PR #4 head 157645e9, but CI is not merged-app acceptance",
   "RabbitMQ broker verification and outbound notifications remain unverified/disabled; broker not required for human-assisted workflow"
  ],
  "repo_rules": {
@@ -46,9 +46,10 @@
   "never_touch_other_branches": true
  },
  "milestones_done": [
-  "M1..M46"
+  "M1..M47",
+  "M48 Agent 1 CI and whole-product completion status (CI green; exact app acceptance blocked)"
  ],
- "contracts": "v1.0 proposed in docs/INTEGRATION_CONTRACTS.md; no Agent 2/3/4 approval inferred. PR #3 currently contains Agent 2 TI handover and Replacement Agent 3 VI work; Agent 1 legacy TI adapter does not match the experimental relationship host. See docs/M47_CROSS_AGENT_CONTRACT_STATUS.md.",
+ "contracts": "v1.0 proposed in docs/INTEGRATION_CONTRACTS.md; no Agent 2/3/4 approval inferred. Working assignment for this continuation is PR #1 original Agent 3 VI and PR #3 replacement Agent 3 VI with historical Agent 2 TI lineage; PR #1 current handover contradicts this and GitHub commit metadata cannot independently attribute roles. Requests for clarification/evidence are posted in PR #1 and #3. Preserve both branches; see CICC_PROJECT_COMPLETION_STATUS.md.",
  "tenant_isolation": "NOT IMPLEMENTED/VERIFIED: claimed tenant metadata only; no trusted principal-to-tenant resolver, actor-specific data pool, RLS, or cross-tenant acceptance; AMD-003 pending; see docs/TENANT_AUTH_READINESS.md",
  "rabbitmq": "Not a blocker for human-assisted handoff; broker-confirmed delivery not verified; revisit autonomous integration if background coordination becomes required.",
  "bff": {
@@ -86,30 +87,33 @@
  "i18n": "en/ar parity 187/187 at every commit since M11 (M14 '188' was a report miscount; no key lost)",
  "pr_heads_checked": {
   "main": "ca8f82c0500637e22851d7128cddf99081ef3c08",
-  "1": "a942baabc3260683ec1a2b8c9d953c04dceaae9a (OPEN)",
-  "2": "e745cc2b8ff995b040896212eab2995607c48963 (OPEN)",
-  "3": "7136538f74ab08b33607774c507785fc0c59cd03 (OPEN/Draft)",
-  "4": "7e480d26be3b07515b6bc63b722f5b61b37e43f4 (OPEN/CLEAN; GitHub head verified 2026-11-06T13:38Z; statusCheckRollup empty)",
-  "6": "02616bb5a34bc0dfa6beaee598948b09b7ba1127 (OPEN)",
-  "checked": "2026-11-06T13:38Z"
+  "1": "a942baabc3260683ec1a2b8c9d953c04dceaae9a (OPEN; 6/6 CI jobs PASS)",
+  "2": "e745cc2b8ff995b040896212eab2995607c48963 (OPEN; Web check PASS)",
+  "3": "7136538f74ab08b33607774c507785fc0c59cd03 (OPEN/Draft; PostgreSQL check PASS; actual-host 0/8)",
+  "4": "157645e9d46bef4c120ff46fc3028320971fe286 (OPEN/CLEAN; PR run 42246801975 and push run 42246787299 each 3/3 PASS)",
+  "6": "02616bb5a34bc0dfa6beaee598948b09b7ba1127 (OPEN; no checks)",
+  "7": "63a6064618b888d4c6a5effea324ccbedab9d154 (OPEN; older Web check PASS)",
+  "8": "3bc65275a941b7cb53202516d81add1dac650e99 (MERGED into PR #1 feature branch, not main)",
+  "checked": "2026-11-06T15:58Z"
  },
  "adoption": {
-  "agent2": "No integration approval inferred. PR #3 contains Agent 2 TI handover; experimental relationship host unmounted; actual-host tests 0 executed / 8 skipped; Agent 1 adapter targets legacy simulated dispatcher.",
-  "agent3_replacement": "Replacement Agent 3 VI work currently coexists on PR #3 with Agent 2 TI handover; current source/entrypoint is not proven compatible with Agent 1 adapter. No approval inferred.",
-  "agent4": "PR #2 candidate lifecycle/diagnostic decoders and readiness UI, frontend CI succeeded on e745cc2; checked-out Agent 1 UI does not call domain lifecycle/diagnostic/TI/VI routes; no approval inferred.",
+  "agent2": "No integration approval inferred. PR #3 contains Agent 2 TI lineage and experimental relationship host; current CI explicitly excludes live/actual-host tests and handover reports 0/8 actual-host. Agent 1 legacy adapter targets a different simulated dispatcher. Scoped own-branch host/contract request posted at PR #3 comment 6689102337.",
+  "agent3_replacement": "Current task assignment places replacement VI work on PR #3, historically mixed with Agent 2 TI; exact source/entrypoint and ownership remain unapproved. Preserve PR #1 separately. Clarification/host-test request posted at PR #3 comment 6689102337.",
+  "agent4": "PR #2 candidate lifecycle/diagnostic decoders and readiness UI; Web check succeeded at e745cc2. Agent 1 checkout does not call TI/VI routes. Scoped M47 decoder/test update request posted at PR #2 comment 6689102403; no approval inferred.",
   "agent6": "PR #6 is a separate backup contribution; no current integration approval.",
   "backup_agent4": "Historical PR #7 adoption/verification remains separate from M47 domain integration."
  },
- "cross_agent_execution": "Historical PR #7 shared-sandbox execution remains distinct. M47 current state: no Agent 2/Replacement Agent 3 host mount, PR #3 actual-host tests 0/8, no approved host/schema/security contract; Agent 4 candidate UI does not exercise domain routes. No merged-application or production integration is claimed.",
+ "cross_agent_execution": "M48 status: no Agent 2/Replacement Agent 3 host mount; PR #3 actual-host tests remain 0/8; no approved revision/module/host/tenant contract; Agent 4 candidate UI remains separate. Specialist requests posted on PRs #1/#2/#3; no reply/approval observed at snapshot. Agent 1 CI is green, but exact merged-app acceptance remains BLOCKED and no merged-application or production integration is claimed.",
  "bff_write_path": "APPROVED+IMPLEMENTED on PR#4 reference BFF: POST /api/v1/coordination/tasks only, WEB_BFF_ALLOW_COORD_WRITE=1 + WEB_BFF_WRITE_TOKEN, DTO allowlist, server idempotency_key; live VERIFIED 201 + persisted + events @2026-11-05T12:22Z",
- "updated_at": "2026-11-06T13:38Z",
- "last_commit": "7e480d26be3b07515b6bc63b722f5b61b37e43f4 (published M47 implementation/handover commit; current exact branch HEAD is available via git rev-parse HEAD)",
+ "updated_at": "2026-11-06T15:58Z",
+ "last_commit": "157645e9d46bef4c120ff46fc3028320971fe286 (latest product-code/CI evidence baseline; following milestone commits are documentation-only)",
  "milestone_notes": {
   "M27": "complete: idempotency_key on reads, BFF hardening 31/31, PG 14, traceability doc, 197/197 API, 31/31 contract, 24/24 e2e",
   "M44": "complete: domain gateway observability GET /domains/metrics (per-kind invokes/successes/failures/success_rate/timeouts/retries/stale_count/skew_count/latency{count,avg_s,max_s,last_s}/circuit{open,opens,closes}/mount_count/status; labels=[kind] bounded, no tenant ids/tokens/payloads; latency+circuit counters process-local, invokes/successes persisted) + M43 regression tests (concurrent failures open once, concurrent recovery closes once, repeated remounts, boundary payloads, restart = process-local documented); test_m44_observability.py 6/6; m44_observability_trial.py 17/17 @09:44:12Z SANDBOX/FIXTURE; API 275/275, PG 42/42",
   "M45": "complete: beta-readiness persistence (startup restore of persisted stats for all kinds; circuit transitions persisted as audit events; mounts_total persisted; last_success_at process-local; 502 sanitization hardened) + cross-domain MVP trial m45_mvp_beta_trial.py --manage-api 26/26 @10:33:17Z (11 acceptance items incl. real PR-head TI f3d3a7f + VI f8e96c7 via gateway, SIGKILL restart recovery); test_m45_beta_readiness.py 7/7; AMD-003 plan doc M45_AMD003_IMPLEMENTATION_PLAN.md (PENDING, reversible); API 282/282, PG 42/42",
   "M46": "complete: reliability edge fixes — one concurrent half-open probe per process with exact lease identity (only admitted probe closes/re-arms; unrelated in-flight outcomes cannot consume it), failed-probe cooldown re-arm/audit without duplicate opens count, remount/deregister circuit reset (including prior-handler consecutive_failures), acknowledged-alert recovery/reactivation with stale ack metadata cleared; persisted-stat ties preserve volatile M44 counters and M44 trial now baselines after remount; test_m46_ops_reliability.py 9/9 + test_m46_acceptance_gate.py 4/4; API 295/295, PG 42/42, web 35/35; live SANDBOX: M44 17/17 @12:21:42Z, M43 11/11 @12:20:46Z, M45 PR#3 5fec62ef + PR#1 78f869b8 26/26 @12:25:40Z, M40 PR#3 23/23 @12:26:11Z, M46 ops 7/7 @12:26:21Z; contract 31/31, E2E 24/24, MVP 23/23, cross-domain 32/32, M41 17/17, M42 16/16. Main ca8f82c0500637e22851d7128cddf99081ef3c08; PR#1/#3 OPEN, heads not on main; MERGED-APPLICATION NOT RUN. AMD-003 PENDING; no shared schema changes; no production claims. M46 implementation commit 9bd95949004331d3d07c0345f6dc6339a8bcb208.",
-  "M47": "published implementation/handover commit 7e480d26be3b07515b6bc63b722f5b61b37e43f4 on Agent 1 branch; GitHub confirmed PR #4 OPEN/CLEAN at this SHA at 13:38Z, empty statusCheckRollup and gh pr checks reported no checks. Exact current branch HEAD must always be refreshed with git rev-parse/gh pr view. Exact expiring UUID half-open circuit probe leases with stale-owner callback rejection; per-mount generations guard remount/deregister callbacks; specified coordination GETs SQL-DML-free; repeated startup/stat restore idempotent; optional build_commit and probe lease metrics; exact-revision runner and preflight. Focused M46/M47 group 23/23; full API 309/309; PostgreSQL-selected 42/42; web 35/35; typecheck passed; M44 clean/non-empty fixture 17/17 with threshold 3. No schema change. PR #1 a942baab, #2 e745cc2b, #3 7136538f, #6 02616bb5; main ca8f82c. PR #3 Agent 2 TI handover + Replacement Agent 3 VI coexist; actual-host tests 0/8, no owner approval; Agent 1 TI adapter mismatch. No-manifest exact-app preflight BLOCKED before startup; merged-app and production NOT RUN/NOT CLAIMED; authentication, tenant isolation, migration process, AMD-003 and source ownership remain pending. Full handover: docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md."
+  "M47": "published implementation/handover commit 7e480d26be3b07515b6bc63b722f5b61b37e43f4 on Agent 1 branch; GitHub confirmed PR #4 OPEN/CLEAN at this SHA at 13:38Z, empty statusCheckRollup and gh pr checks reported no checks. Exact current branch HEAD must always be refreshed with git rev-parse/gh pr view. Exact expiring UUID half-open circuit probe leases with stale-owner callback rejection; per-mount generations guard remount/deregister callbacks; specified coordination GETs SQL-DML-free; repeated startup/stat restore idempotent; optional build_commit and probe lease metrics; exact-revision runner and preflight. Focused M46/M47 group 23/23; full API 309/309; PostgreSQL-selected 42/42; web 35/35; typecheck passed; M44 clean/non-empty fixture 17/17 with threshold 3. No schema change. PR #1 a942baab, #2 e745cc2b, #3 7136538f, #6 02616bb5; main ca8f82c. PR #3 Agent 2 TI handover + Replacement Agent 3 VI coexist; actual-host tests 0/8, no owner approval; Agent 1 TI adapter mismatch. No-manifest exact-app preflight BLOCKED before startup; merged-app and production NOT RUN/NOT CLAIMED; authentication, tenant isolation, migration process, AMD-003 and source ownership remain pending. Full handover: docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md.",
+  "M48": "Added .github/workflows/agent1-ci.yml on Agent 1 branch. API 309/309, PostgreSQL-selected 42/42, Web 35/35, typecheck and Next production build pass locally. PR #4 Actions run 42246801975 (API, PostgreSQL, Web/typecheck/build) and push run 42246787299 each pass 3/3 jobs at 157645e9. Re-ran scripts/m47_merged_app_acceptance.py --checkout .: BLOCKED (exit 2) because no owner-approved manifest; no app started. Created docs/handover/CICC_PROJECT_COMPLETION_STATUS.md with weighted overall integrated Beta estimate 29%, subsystem scores, PR/CI inventory and open work. PR #1/#3 ownership remains non-conclusive from commit metadata; requests posted at PR comments 6689102306, 6689102337, 6689102403. README Master Prompt unchanged."
  },
  "backup_restore": "DONE M36: scripts/backup_restore.py tested vs SQLite+PG; docs/DISASTER_RECOVERY.md",
  "agent_model": {
@@ -125,5 +129,44 @@
  },
  "ti_integration": "PR #3 current head 7136538f74ab08b33607774c507785fc0c59cd03 OPEN/Draft includes Agent 2 TI handover and Replacement Agent 3 VI work. TI relationship routes/host adapter are experimental and not mounted in Agent 1; actual-host tests 0/8 skipped. Agent 1 adapter targets legacy simulated ThreatIntelligenceAPI, not experimental relationship API. No approved source, host, principal/DB/audit/trace contract; no merged-app or production claim. See docs/M47_CROSS_AGENT_CONTRACT_STATUS.md.",
  "milestone_in_progress": "M47",
- "handover": "docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md (technical lead handover; PR #4 body summary)"
+ "handover": "docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md; whole-product snapshot: docs/handover/CICC_PROJECT_COMPLETION_STATUS.md",
+ "completion_estimate": {
+  "overall_integrated_beta_percent": 29,
+  "method": "Evidence-weighted estimate over the complete original Master Prompt scope; weighted by integrated/verified functionality, not candidate code alone. Not production acceptance.",
+  "weights_percent": {
+   "coordination": 12,
+   "operations": 8,
+   "threat_intelligence": 12,
+   "vulnerability_intelligence": 12,
+   "backend_apis_data": 15,
+   "frontend_ui": 10,
+   "security_tenant_isolation": 16,
+   "testing_deployment": 10,
+   "other_master_prompt_modules": 5
+  },
+  "candidate_implementation_percent": {
+   "coordination": 85,
+   "operations": 80,
+   "threat_intelligence": 45,
+   "vulnerability_intelligence": 75,
+   "backend_apis_data": 60,
+   "frontend_ui": 60,
+   "security_tenant_isolation": 40,
+   "testing_deployment": 70,
+   "other_master_prompt_modules": 5
+  },
+  "integrated_verified_percent": {
+   "coordination": 70,
+   "operations": 65,
+   "threat_intelligence": 0,
+   "vulnerability_intelligence": 0,
+   "backend_apis_data": 40,
+   "frontend_ui": 25,
+   "security_tenant_isolation": 10,
+   "testing_deployment": 50,
+   "other_master_prompt_modules": 0
+  },
+  "tenant_isolation_acceptance_percent": 0,
+  "source": "docs/handover/CICC_PROJECT_COMPLETION_STATUS.md"
+ }
 }

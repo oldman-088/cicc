@@ -25802,3 +25802,17 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - **Blockers:** PR #1/#3 open; PR #3 combines Agent 2 TI handover with Replacement Agent 3 VI work, but no accepted host contract (0/8 actual host tests); Agent 1 TI adapter targets a mismatched legacy simulated dispatcher. PR #2 frontend contracts are candidate/unapproved and not wired in Agent 1's checkout. No trusted principal/tenant isolation, approved tenant driver, CI checks on Agent 1 PR #4, or exact merged-app result. AMD-003 remains pending.
 - **Next:** keep implementing independent Agent 1 reliability work; coordinate owner decisions without modifying other branches; add/enable Agent 1 PR CI; obtain approved TI/VI module and host contracts; establish identity/tenant/migration design; then run the exact-revision acceptance runner on the final approved/merged application. RabbitMQ remains non-blocking for human-assisted handoff.
 - **Handover:** `docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md`; detailed gates in `docs/M47_MERGED_APPLICATION_ACCEPTANCE.md` and `docs/M47_CROSS_AGENT_CONTRACT_STATUS.md`.
+
+## Done — M48 (2026-11-06; Agent 1 CI and whole-product status)
+- Added `.github/workflows/agent1-ci.yml` on `arena/961971ed-cicc`: full API suite, PostgreSQL-selected suite, Web tests, typecheck and production build. Updated the workflow to a pinned Ubuntu 24.04 runner and current setup-node v7 / Node 22 after the first green run surfaced a runner-action deprecation annotation.
+- Local evidence on product-code baseline `157645e9d46bef4c120ff46fc3028320971fe286`: API 309/309; PostgreSQL-selected 42/42 (267 deselected); Web 35/35; typecheck PASS; production Next.js build PASS. GitHub PR run `42246801975` and push run `42246787299` each pass all three jobs.
+- Re-ran `scripts/m47_merged_app_acceptance.py --checkout .`: expected exit 2 / BLOCKED (no owner-approved exact-revision manifest; no API process started). No merged-app or production claim.
+- Added `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`: evidence-based branch/PR/source review, completion rubric and weighted **29%** integrated Beta estimate, blockers, requests and remaining work. README Master Prompt unchanged.
+- Read-only GitHub inspection reconfirmed PR #1/#3 source-role discrepancy; posted scoped requests to PR #1 (ownership/actual-host evidence), PR #3 (Agent 2 TI + replacement Agent 3 VI), and PR #2 (Agent 4 current M47 decoder tests). No other branch modified; no reply or approval inferred.
+
+## In progress / blocked after M48 (current priorities; supersedes older queue snapshot above)
+1. Obtain owner-approved exact source/module/host/tenant manifest and explicit PR #1/#3 role confirmation; keep both implementation histories intact.
+2. Resolve production identity, authorization, tenant isolation/RLS, AMD-003 and migration governance before any shared schema or sensitive multi-tenant Beta.
+3. After approval, execute non-skipped actual-Agent-1-host TI/VI acceptance and the exact-revision merged-app runner; current PR #3 remains 0/8 actual-host tests.
+4. Keep Agent 4's domain decoder/UI disconnected until the API/BFF/tenant/error contract is approved; review its own-branch M47 update when delivered.
+5. Continue the full Master Prompt roadmap (shared data/graph, real-source collection, investigations, AI governance, accessible localized UI, 3D, deployment/recovery acceptance); do not call candidate PR code a delivered module.
