@@ -8,7 +8,7 @@ import json
 import re
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
-from .cisa_github_collector import CollectedCatalog, CollectionError, METADATA_URL, parse_catalog
+from .cisa_github_collector import CollectedCatalog, CollectionError, METADATA_URL, parse_catalog, verify_source_bytes
 
 class SnapshotUnavailable(Exception):
     """Snapshot is absent, predates metadata migration, or is incomplete."""
@@ -51,5 +51,15 @@ def load_snapshot(engine: Engine, *, origin: str, snapshot_id: int | None = None
             raise SnapshotUnavailable('stored catalog validation failed') from None
         if catalog.dateReleased != row['released_at'] or catalog.catalogVersion != row['catalog_version']:
             raise SnapshotUnavailable('stored catalog metadata is inconsistent')
-        return CollectedCatalog(catalog=catalog,source_url=row['source_url'],github_blob_sha=row['blob_sha'],
+        blob=conn.execute(text('SELECT blob_sha,source_bytes FROM ti_kev.source_blob WHERE origin=:origin AND content_sha256=:digest'),
+            {'origin':origin,'digest':row['content_sha256']}).mappings().first()
+        if blob is None or blob['blob_sha'] != row['blob_sha']:
+            raise SnapshotUnavailable('original source blob unavailable')
+        result=CollectedCatalog(catalog=catalog,source_url=row['source_url'],github_blob_sha=row['blob_sha'],
             content_sha256=row['content_sha256'],collected_at=row['collected_at'],origin=row['origin'])
+        result._source_bytes=bytes(blob['source_bytes'])
+        try:
+            verify_source_bytes(result)
+        except CollectionError:
+            raise SnapshotUnavailable('original source blob integrity check failed') from None
+        return result

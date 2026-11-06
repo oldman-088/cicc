@@ -19,6 +19,7 @@ def db(tmp_path_factory):
     with engine.connect() as conn:
         conn.exec_driver_sql(path.read_text())
         conn.exec_driver_sql((path.parent/'p2_03_kev_metadata_proposal.sql').read_text())
+        conn.exec_driver_sql((path.parent/'p2_04_kev_blob_proposal.sql').read_text())
     yield engine
     engine.dispose(); server.cleanup()
 
@@ -126,7 +127,7 @@ def test_least_privilege_worker_cannot_rewrite_or_delete_history(db):
         item=collected(data)
         assert persist_catalog(worker,item).outcome=='created'
         assert persist_catalog(worker,item).outcome=='unchanged'
-        for sql in ['DELETE FROM ti_kev.snapshot', "UPDATE ti_kev.revision SET record='{}'::jsonb", 'UPDATE ti_kev.snapshot SET origin=\'FETCHED_FROM_GITHUB_CISA_REPO\'']:
+        for sql in ['DELETE FROM ti_kev.snapshot', "UPDATE ti_kev.revision SET record='{}'::jsonb", "UPDATE ti_kev.source_blob SET source_bytes=decode('00','hex')", 'DELETE FROM ti_kev.source_blob', 'UPDATE ti_kev.snapshot SET origin=\'FETCHED_FROM_GITHUB_CISA_REPO\'']:
             with pytest.raises(Exception):
                 with worker.begin() as conn: conn.exec_driver_sql(sql)
     finally:
@@ -138,10 +139,12 @@ def test_isolated_schema_rollback_and_reapply(db):
     folder=Path(__file__).parents[1]/'schema'
     assert persist_catalog(db,collected(sample())).outcome=='created'
     with db.connect() as conn:
+        conn.exec_driver_sql((folder/'p2_04_kev_blob_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_03_kev_metadata_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_02_kev_storage_rollback_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_02_kev_storage_proposal.sql').read_text())
         conn.exec_driver_sql((folder/'p2_03_kev_metadata_proposal.sql').read_text())
+        conn.exec_driver_sql((folder/'p2_04_kev_blob_proposal.sql').read_text())
     assert counts(db)==(0,0,0)
     assert persist_catalog(db,collected(sample())).outcome=='created'
 
@@ -200,4 +203,70 @@ def test_snapshot_detects_corrupted_revision(db):
     with db.begin() as conn:
         conn.execute(text("UPDATE ti_kev.revision SET record=jsonb_set(record,'{product}',to_jsonb('altered fixture'::text))"))
     with pytest.raises(SnapshotUnavailable,match='integrity'):
+        load_snapshot(db,origin=item.origin)
+
+
+def test_source_blob_is_exact_and_forged_catalog_is_rejected(db):
+    from apps.threat_intelligence.cisa_github_collector import CollectionError, CollectedCatalog
+    from apps.threat_intelligence.cisa_kev_snapshot import load_snapshot
+    item=collected(sample()); before=counts(db)
+    # A JSON/model reconstruction lacks original bytes; it cannot masquerade as
+    # a validated source fetch. Both fixture origin and fake data remain labeled.
+    detached=CollectedCatalog.model_validate(item.model_dump())
+    with pytest.raises(CollectionError,match='bytes unavailable'):
+        persist_catalog(db,detached)
+    assert counts(db)==before
+    altered_catalog=item.catalog.model_copy(update={'title':'different fixture'})
+    forged=item.model_copy(update={'catalog':altered_catalog})
+    with pytest.raises(CollectionError,match='metadata does not match'):
+        persist_catalog(db,forged)
+    result=persist_catalog(db,item)
+    loaded=load_snapshot(db,origin=item.origin,snapshot_id=result.snapshot_id)
+    assert loaded._source_bytes==item._source_bytes
+    assert '_source_bytes' not in loaded.model_dump() and '_source_bytes' not in loaded.model_dump_json()
+
+
+def test_blob_corruption_detected_and_missing_blob_backfilled(db):
+    from apps.threat_intelligence.cisa_kev_snapshot import load_snapshot, SnapshotUnavailable
+    item=collected(sample()); result=persist_catalog(db,item)
+    with db.begin() as conn:
+        conn.execute(text("UPDATE ti_kev.source_blob SET source_bytes=decode('00','hex') WHERE origin=:origin"),{'origin':item.origin})
+    with pytest.raises(SnapshotUnavailable,match='blob integrity'): load_snapshot(db,origin=item.origin)
+    with pytest.raises(ValueError,match='stored source blob'): persist_catalog(db,item)
+    # Deletion is test-only: production restricted worker has no DELETE grant.
+    with db.begin() as conn: conn.execute(text('DELETE FROM ti_kev.source_blob WHERE origin=:origin'),{'origin':item.origin})
+    with pytest.raises(SnapshotUnavailable,match='unavailable'): load_snapshot(db,origin=item.origin)
+    assert persist_catalog(db,item).outcome=='unchanged'
+    assert load_snapshot(db,origin=item.origin,snapshot_id=result.snapshot_id)._source_bytes==item._source_bytes
+
+
+def test_blob_rolls_back_with_snapshot_on_failure(db):
+    item=collected(sample())
+    with db.begin() as conn:
+        conn.exec_driver_sql("CREATE FUNCTION ti_kev.test_blob_rollback() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture'; END $$")
+        conn.exec_driver_sql('CREATE TRIGGER test_blob_rollback BEFORE INSERT ON ti_kev.snapshot FOR EACH ROW EXECUTE FUNCTION ti_kev.test_blob_rollback()')
+    try:
+        with pytest.raises(Exception): persist_catalog(db,item)
+    finally:
+        with db.begin() as conn:
+            conn.exec_driver_sql('DROP TRIGGER test_blob_rollback ON ti_kev.snapshot')
+            conn.exec_driver_sql('DROP FUNCTION ti_kev.test_blob_rollback()')
+    with db.connect() as conn:
+        assert conn.execute(text('SELECT count(*) FROM ti_kev.source_blob')).scalar_one()==0
+    assert persist_catalog(db,item).outcome=='created'
+
+
+def test_rehashed_normalized_tampering_still_disagrees_with_original_blob(db):
+    import hashlib, json
+    from apps.threat_intelligence.cisa_kev_snapshot import load_snapshot, SnapshotUnavailable
+    item=collected(sample()); result=persist_catalog(db,item)
+    with db.begin() as conn:
+        row=conn.execute(text('SELECT origin,cve_id,record FROM ti_kev.revision')).mappings().one()
+        changed=dict(row['record'], product='EXPERIMENTAL_DEMO_DATA_ONLY tampered fixture')
+        encoded=json.dumps(changed,sort_keys=True,ensure_ascii=False,separators=(',',':'))
+        digest=hashlib.sha256(encoded.encode()).hexdigest()
+        conn.execute(text('INSERT INTO ti_kev.revision(origin,cve_id,content_sha256,record) VALUES (:origin,:cve,:digest,CAST(:record AS jsonb))'),
+                     {'origin':row['origin'],'cve':row['cve_id'],'digest':digest,'record':encoded})
+        conn.execute(text('UPDATE ti_kev.snapshot_entry SET content_sha256=:digest WHERE snapshot_id=:id'),{'digest':digest,'id':result.snapshot_id})
+    with pytest.raises(SnapshotUnavailable,match='blob integrity'):
         load_snapshot(db,origin=item.origin)

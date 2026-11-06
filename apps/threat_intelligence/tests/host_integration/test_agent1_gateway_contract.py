@@ -12,16 +12,39 @@ from uuid import uuid4
 import pytest
 
 
+class HostConfigurationError(Exception):
+    pass
+
+
+def host_harness_module(environ):
+    """Skip only when no harness was requested; partial configuration is an error."""
+    isolation = environ.get('CICC_TI_HOST_ISOLATED')
+    module = environ.get('CICC_TI_HOST_TEST_HARNESS')
+    if not module and isolation in (None, '', '0'):
+        return None
+    if isolation != '1':
+        raise HostConfigurationError('actual-host testing requires explicit isolated-host opt-in')
+    if not module or not module.strip():
+        raise HostConfigurationError('actual-host testing requires an approved harness module')
+    return module
+
+
 @pytest.fixture
 def host():
-    module = os.getenv('CICC_TI_HOST_TEST_HARNESS')
-    if os.getenv('CICC_TI_HOST_ISOLATED') != '1' or not module:
+    try:
+        module = host_harness_module(os.environ)
+    except HostConfigurationError as exc:
+        pytest.fail(str(exc), pytrace=False)
+    if module is None:
         pytest.skip('actual host harness and isolated environment are not configured')
     # Harness is owner-supplied, executable test code; never load from a request.
     harness = importlib.import_module(module).build_harness()
-    harness.assert_isolated_actual_host()
-    yield harness
-    harness.close()
+    try:
+        if harness.assert_isolated_actual_host() is not True:
+            pytest.fail('harness must positively verify the isolated actual host', pytrace=False)
+        yield harness
+    finally:
+        harness.close()
 
 
 def sample():
@@ -103,3 +126,14 @@ def test_actual_gateway_list_is_tenant_scoped_and_audited(host):
     assert event['tenant_id'] == host.tenant_a_id and event['operation'] == 'relationship.list'
     other = host.list(host.tenant_b, entity['entity_type'], entity['entity_id'], limit=1, offset=0)
     assert other.status == 200 and other.body['total'] == 0 and not other.body['items']
+
+
+def test_actual_host_rejects_unauthorized_direct_sql(host):
+    """Harness uses the actual restricted runtime DB login on an isolated host."""
+    result = host.verify_direct_sql_denied()
+    assert result.used_actual_runtime_login is True
+    assert result.relationship_select_denied is True
+    assert result.relationship_insert_update_delete_denied is True
+    assert result.audit_select_insert_update_delete_denied is True
+    assert result.tenant_mapping_mutation_denied is True
+    assert result.other_tenant_role_denied is True

@@ -1,15 +1,15 @@
-> **Current verification (2026-11-06):** Isolated run: 211 passed, 9 skipped (7 actual-host tests + 2 live-source opt-in). Two separate live CISA GitHub mirror tests passed, including disposable PostgreSQL persistence/reload. The authenticated-host adapter was tested only in an independent mounted host, not Agent 1. Real identity/integration, scheduler and administrator-resistant audit remain unverified. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `M46_HOST_ADAPTER.md`; historical claims below are unverified.
+> **Current verification (2026-11-06):** Isolated run: 225 passed, 10 skipped (8 actual-host tests + 2 live-source opt-in). Two separate live CISA GitHub mirror tests passed, including original-byte persistence/reload in disposable PostgreSQL. Actual Agent 1 host integration and scheduler remain unverified; a DB administrator can alter audit. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `M46_HOST_ADAPTER.md`; historical claims below are unverified.
 
 ## Current delivery checklist (living)
 
 - [x] Restricted-role PostgreSQL controlled relationship create/get/list/traversal and DB-derived transactional audit: isolated tests only.
-- [x] CISA KEV GitHub mirror collection, incremental snapshot persistence/reload, health and one-shot execution: isolated tests and live-source persistence read.
+- [x] CISA KEV GitHub mirror collection, incremental snapshot persistence/reload with exact source-byte checks, health and one-shot execution: isolated tests and live-source persistence read.
 - [x] Independent host-mount binding, trace/audit callback handling and exact KEV correlation: locally tested; no actual host integration claim.
 - [ ] Harden SQL validation, optimize traversal resource controls and test real-host multi-page/pool behavior.
 - [ ] Strengthen DB-side validation, audit protection against privileged roles, and per-user authorization.
 - [ ] Deploy owner-approved public-feed schema, restricted worker and host scheduler; implement cross-worker rate limits and production observability.
 - [ ] Complete temporal/conflict frameworks and evaluate/calibrate confidence with authorized real methodology/data.
-- [ ] Agent 1 owner decision: actual host gateway, principal/tenant-to-login pool, schema/role deployment, audit and trace correlation. Run seven real-host acceptance tests when approved.
+- [ ] Agent 1 owner decision: actual host gateway, principal/tenant-to-login pool, schema/role deployment, audit and trace correlation. Run eight real-host acceptance tests when approved.
 - [ ] Agent 4 integration only after stable approved host/BFF contracts; maintain create-only browser write boundary.
 
 # CICC Threat Intelligence Project - Master Task Queue

@@ -22,7 +22,8 @@ def host(databases):
     def resolve(req):
         identities = {'fixture-A': Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:read','threat:write'})),
                       'fixture-B': Principal(subject='actor-B',tenant_id='tenant-B',permissions=frozenset({'threat:read','threat:write'})),
-                      'fixture-read': Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:read'}))}
+                      'fixture-read': Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:read'})),
+                      'fixture-write': Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:write'}))}
         return identities.get(req.headers.get('Authorization'))
     def pools(principal): return {'tenant-A':a, 'tenant-B':b}[principal.tenant_id]
     domain=create_host_application(resolve_principal=resolve,engine_for_principal=pools,security_audit=events.append,link_trace=links.append)
@@ -201,3 +202,46 @@ def test_host_failure_audit_timeout_fails_closed(databases):
     app=FastAPI();app.mount('/approved-host-prefix',domain)
     code, body, _=call(app,'GET','/relationships')
     assert code==503 and body=={'detail':'Security audit unavailable'}
+
+
+def test_read_denied_for_write_only_and_forged_tenant_headers(host):
+    app, _, _, events=host
+    token=uuid4().hex; node='tenant-forgery-'+token
+    created=call(app,'POST','/relationships',payload(node,'target-'+token),extra={'Idempotency-Key':token})[1]
+    assert call(app,'GET','/relationships',identity='fixture-write')[0]==403
+    assert call(app,'POST','/relationship-analysis/traverse',{'entity_id':node,'entity_type':'Actor'},identity='fixture-write')[0]==403
+    assert events[-1]['status']==403 and events[-1]['tenant_id']=='tenant-A'
+    status, page, _=call(app,'GET','/relationships',query={'entity_id':node,'entity_type':'Actor','tenant_id':'tenant-B'},
+                         extra={'X-Tenant-ID':'tenant-B','X-Actor-ID':'actor-B'})
+    assert status==200 and page['total']==1 and page['items'][0]['relationship_id']==created['relationship_id']
+
+
+def test_mounted_adapter_database_audit_failure_rolls_back(host):
+    app, admin, _, _=host
+    key=uuid4().hex; data=payload('host-audit-rollback-'+key,'target-'+key)
+    with admin.begin() as conn:
+        conn.exec_driver_sql("CREATE FUNCTION public.ti_host_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture failure'; END $$")
+        conn.exec_driver_sql('CREATE TRIGGER ti_host_audit_failure BEFORE INSERT ON public.ti_relationship_audit FOR EACH ROW EXECUTE FUNCTION public.ti_host_audit_failure()')
+    try:
+        status, body, _=call(app,'POST','/relationships',data,extra={'Idempotency-Key':key})
+        assert status==500 and body=={'detail':'Internal server error'}
+    finally:
+        with admin.begin() as conn:
+            conn.exec_driver_sql('DROP TRIGGER ti_host_audit_failure ON public.ti_relationship_audit')
+            conn.exec_driver_sql('DROP FUNCTION public.ti_host_audit_failure()')
+    with admin.connect() as conn:
+        assert conn.execute(select(idempotency.c.key).where(idempotency.c.tenant_id=='tenant-A',idempotency.c.key==key)).first() is None
+    assert call(app,'POST','/relationships',data,extra={'Idempotency-Key':key})[0]==201
+
+
+def test_disposable_db_owner_can_modify_audit_so_not_admin_resistant(host):
+    app, admin, _, _=host; key=uuid4().hex
+    status, _, headers=call(app,'POST','/relationships',payload('admin-boundary-'+key,'target-'+key),extra={'Idempotency-Key':key})
+    assert status==201
+    correlation=UUID(headers[b'x-correlation-id'].decode())
+    # Intentional privileged tamper against only this disposable test DB row.
+    with admin.begin() as conn:
+        updated=conn.execute(audit_event.update().where(audit_event.c.correlation_id==correlation).values(actor='EXPERIMENTAL_DEMO_DATA_ONLY_admin_fixture'))
+        assert updated.rowcount==1
+    with admin.connect() as conn:
+        assert conn.execute(select(audit_event.c.actor).where(audit_event.c.correlation_id==correlation)).scalar_one()=='EXPERIMENTAL_DEMO_DATA_ONLY_admin_fixture'

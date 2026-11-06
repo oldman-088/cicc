@@ -17,7 +17,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 API = 'https://api.github.com/repos/cisagov/kev-data'
 METADATA_URL = API + '/contents/known_exploited_vulnerabilities.json?ref=develop'
@@ -71,6 +71,7 @@ class CollectedCatalog(BaseModel):
     content_sha256: str
     collected_at: datetime
     origin: Literal['FETCHED_FROM_GITHUB_CISA_REPO', 'EXPERIMENTAL_DEMO_DATA_ONLY']
+    _source_bytes: bytes | None = PrivateAttr(default=None)
 
 
 def _json(raw: bytes):
@@ -180,6 +181,33 @@ def fetch_catalog(*, timeout: float = 10, retries: int = 2, min_interval: float 
     if computed != sha:
         raise CollectionError('GitHub blob digest mismatch')
     catalog = parse_catalog(raw)
-    return CollectedCatalog(catalog=catalog, source_url=METADATA_URL, github_blob_sha=sha,
+    collected = CollectedCatalog(catalog=catalog, source_url=METADATA_URL, github_blob_sha=sha,
                             content_sha256=hashlib.sha256(raw).hexdigest(), collected_at=datetime.now(timezone.utc),
                             origin='FETCHED_FROM_GITHUB_CISA_REPO' if transport is _get else 'EXPERIMENTAL_DEMO_DATA_ONLY')
+    collected._source_bytes = raw
+    return collected
+
+
+def verify_source_bytes(collected: CollectedCatalog) -> bytes:
+    """Verify original bytes and their agreement with normalized catalog data.
+
+    The private bytes are not serialized in API models. Verification detects
+    corruption, not a malicious worker or false source claims.
+    """
+    raw = collected._source_bytes
+    if not isinstance(raw, bytes) or len(raw) > MAX_CATALOG_BYTES:
+        raise CollectionError('Original source bytes unavailable')
+    if hashlib.sha256(raw).hexdigest() != collected.content_sha256:
+        raise CollectionError('Source content digest mismatch')
+    blob = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
+    if blob != collected.github_blob_sha:
+        raise CollectionError('Source blob digest mismatch')
+    original = parse_catalog(raw)
+    current = collected.catalog
+    if original.model_dump(mode='json', exclude={'vulnerabilities'}) != current.model_dump(mode='json', exclude={'vulnerabilities'}):
+        raise CollectionError('Catalog metadata does not match source bytes')
+    source_entries = {x.cveID:x.model_dump(mode='json') for x in original.vulnerabilities}
+    current_entries = {x.cveID:x.model_dump(mode='json') for x in current.vulnerabilities}
+    if len(current_entries) != len(current.vulnerabilities) or source_entries != current_entries:
+        raise CollectionError('Catalog records do not match source bytes')
+    return raw

@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
-from .cisa_github_collector import CollectedCatalog, METADATA_URL
+from .cisa_github_collector import CollectedCatalog, METADATA_URL, verify_source_bytes
 
 @dataclass(frozen=True)
 class PersistenceResult:
@@ -33,6 +33,7 @@ def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceR
         or not re.fullmatch(r'[0-9a-f]{40}', collected.github_blob_sha)
         or not re.fullmatch(r'[0-9a-f]{64}', collected.content_sha256)):
         raise ValueError('invalid collection provenance')
+    raw = verify_source_bytes(collected)
     catalog = collected.catalog
     if catalog.count != len(catalog.vulnerabilities) or len({r.cveID for r in catalog.vulnerabilities}) != catalog.count:
         raise ValueError('incomplete or duplicate catalog')
@@ -49,6 +50,13 @@ def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceR
         previous = conn.execute(text("SELECT id, blob_sha, content_sha256, released_at FROM ti_kev.snapshot WHERE origin=:origin ORDER BY id DESC LIMIT 1"), {'origin':collected.origin}).mappings().first()
         if previous and catalog.dateReleased < previous['released_at']:
             raise StaleCatalogError('source catalog is older than current snapshot')
+        conn.execute(text('''INSERT INTO ti_kev.source_blob(origin,content_sha256,blob_sha,source_bytes)
+            VALUES (:origin,:digest,:blob,:raw) ON CONFLICT (origin,content_sha256) DO NOTHING'''),
+            {'origin':collected.origin,'digest':collected.content_sha256,'blob':collected.github_blob_sha,'raw':raw})
+        stored = conn.execute(text('SELECT blob_sha,source_bytes FROM ti_kev.source_blob WHERE origin=:origin AND content_sha256=:digest'),
+            {'origin':collected.origin,'digest':collected.content_sha256}).mappings().one()
+        if stored['blob_sha'] != collected.github_blob_sha or bytes(stored['source_bytes']) != raw:
+            raise ValueError('stored source blob does not match collected bytes')
         if previous and previous['blob_sha'] == collected.github_blob_sha:
             if previous['content_sha256'] != collected.content_sha256:
                 raise ValueError('inconsistent blob digest')
