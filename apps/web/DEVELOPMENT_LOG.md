@@ -1,6 +1,40 @@
 # CICC frontend development log
 
-Updated: 2026-11-05 · Working branch: `arena/09952395-cicc`
+Updated: 2026-11-06 · Working branch: `arena/09952395-cicc`
+
+## 2026-11-06 — Coordination health/trace, PR coordination, and verification refresh
+
+### Changes and evidence
+
+- Re-reviewed current PR #4 M34 head `e10e9f57afed4da715949ac3b3038116977029f2`; the health/trace router implementation remains the M33 source at `b112d4c522aed996e1466040774db04f1e1711f4`. Added read-only Coordination health and lazy per-task trace through fixed BFF routes, strict runtime DTO parsers, and EN/AR/FA UI. Health retains provider status/reasons and is labelled as an on-demand check; trace displays only returned correlation, lifecycle, delivery-attempt, and approval records. No writes or inferred broker confirmations were added.
+- PR #4 M34 reports a separate 32/32 cross-domain trial using sandbox/fixture tokens and synthetic domain-agent IDs against its coordination/reference-BFF workflow. This is not a production/live result and does not exercise this branch's `/api/integrations/...` BFF. Separately, this session ran an ephemeral PR #4 M34 API copy with SQLite/test-only tokens and verified this branch's BFF handler against actual local HTTP health and task-trace responses; those responses passed the runtime decoders. This remains isolated sandbox evidence, not a deployed/live connection.
+- Kept the server BFF fail-closed and read-only. A local task ID is validated as one safe path segment; browser input cannot select the upstream host or route. Test fixtures remain synthetic and isolated to tests.
+- Added Playwright coverage for reported health/trace, a permission denial, and Arabic RTL, with intercepted test-only responses. Three specs are discoverable; a real run is **blocked before assertions** because the sandbox lacks the Chromium executable (`/home/user/.cache/ms-playwright/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell`). This is not a passing E2E run.
+- Posted contract/owner questions without changing other branches: Agent 1 / PR #4 original reference request [#6678099565](https://github.com/oldman-088/cicc/pull/4#issuecomment-6678099565) and M34 follow-up [#6678515605](https://github.com/oldman-088/cicc/pull/4#issuecomment-6678515605); Agent 2 status / PR #3 [#6678099552](https://github.com/oldman-088/cicc/pull/3#issuecomment-6678099552); Replacement Agent 3 host-mount request / PR #8 [#6678099551](https://github.com/oldman-088/cicc/pull/8#issuecomment-6678099551) and current-head follow-up [#6678515587](https://github.com/oldman-088/cicc/pull/8#issuecomment-6678515587). PR #7 and owner branches were not modified.
+- Threat Intelligence and Vulnerability Intelligence remain explicitly disconnected: the reviewed PR #3/#6 and PR #1/#8 work does not yet provide a verified mounted frontend HTTP/auth/tenant contract. No fixtures or proposed routes are shown as live data. No persistent `API_INTERNAL_URL`, BFF token/trust acknowledgement, or approved deployment environment is configured here; deployed/live request/response integration remains unverified.
+
+### Verification
+
+- `npm run typecheck` passed.
+- `npm test -- --reporter=dot` passed: **91 tests across 17 files**.
+- `npm run test:e2e --workspace=@cicc/web -- --list` discovered all **3** Playwright specs. The full Playwright run could not launch Chromium and did not reach the test assertions.
+- Next.js 16.4.5 production build passed in a temporary in-repository copy (kept separate from the running dev server's `.next` directory); all seven application pages were generated and the integration API route remained dynamic. An initial external `/tmp` copy was rejected by Turbopack because its linked dependencies were outside the detected root; the in-repository isolated run passed.
+- `npm audit --audit-level=high` reported **0 vulnerabilities**; `git diff --check` passed at verification time.
+- Port-3000 HTTP smoke: all seven application routes returned 200; Coordination health and a valid task-trace request returned the expected `503 provider_not_configured`; a traversal-like task ID returned 400; `HEAD` and `POST` returned 405. The persistent preview made no upstream request.
+- Isolated local API integration smoke: copied PR #4 M34's API into a temporary directory, installed its pinned requirements into a temporary venv, and ran it against a temporary SQLite DB with test-only tokens. A direct POST seeded synthetic task `arena-frontend-smoke-20261106`; this branch's actual BFF `GET` handler fetched health and the task trace over HTTP, returned 200, and both DTOs passed the production parsers. The service, DB, tokens, venv, and temporary test file were removed. This verifies only local source-to-adapter request/response behavior, not the deployed PR #4 service.
+- No browser visual/screenshot, device, manual keyboard, assistive-technology, fluent-speaker, contrast, or real GPU/WebGL QA was performed.
+
+### Master Prompt alignment snapshot (no prompt edits)
+
+- Source checked: `README.md`, **ULTIMATE MASTER PROMPT v1.0**, baseline commit `ca8f82c0500637e22851d7128cddf99081ef3c08` on `main`. Its frontend requirements include responsive modular UI, reusable design, accessibility, loading/error/empty/offline states, type safety, lazy/performance-aware visualization, a dark command-center interface (optional light theme), EN/AR/FA with RTL/LTR, and complete API-backed modules with permissions, auditability, and tests. The prompt also requires real integration evidence and forbids claims of unverified functionality.
+- Alignment evidenced in this frontend slice: Next.js/React/TypeScript app shell; responsive route-based workspace and design tokens; EN/AR/FA with document direction and mixed-direction identifier handling; data-source/error/empty/unconfigured disclosures; runtime-validated fixed-path BFF reads for the PR #4 source-backed pages; accessible 2D alternative and lazy optional 3D Command Theater; unit tests, build, dependency audit, and fail-closed HTTP smoke. The health/trace UI is read-only and only presents provider-returned fields.
+- Incomplete against the prompt's overall target: this branch is a frontend slice, not a complete CICC platform. Threat/Vulnerability and production investigation data remain disconnected; no authenticated user/tenant model or deployed/live backend integration has been verified (the isolated local BFF smoke is not a deployed integration); full module workflows, provenance/data foundation, permissions/audit integration, and production readiness are not established. Optional light theme is not implemented. Browser E2E assertions and visual/AT/device QA remain blocked or unperformed.
+- Stack variance: the prompt lists Tailwind, Zustand, TanStack Query, and next-intl as preferred options; this repository uses CSS Modules and small in-house context/resource hooks. Three.js/React Three Fiber/Drei are present for the optional 3D view. This work did not migrate the existing stack, and does not claim exact conformance to every preferred library.
+- Priority: obtain owner-approved mounted HTTP/auth/tenant contracts for TI/Vulnerability; align PR #4's public DTO documentation; verify an approved deployed test service and its authenticated request/response path (beyond the local source smoke); then execute the existing Playwright suite in Chromium and complete browser/accessibility review. Keep CICC labeled non-production-ready until those gaps and the wider platform requirements are closed.
+
+### Current status
+
+- PR #2 is still open. The changes in this log are local until the final diff is reviewed, committed, pushed only to `arena/09952395-cicc`, and the PR #2 description is refreshed. No push to `main` or other agent branch is authorized.
 
 ## 2026-11-05 — read-only Ops/Coordination adapters and current PR #4 review
 

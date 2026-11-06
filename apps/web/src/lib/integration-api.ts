@@ -105,6 +105,7 @@ export type CoordinationAgent = {
   specialization: string | null;
   capabilities: string[];
   status: string;
+  health: string | null;
   stale: boolean;
   last_seen: string | null;
   last_seen_field: "last_seen" | "last_heartbeat" | null;
@@ -124,6 +125,7 @@ export type CoordinationTask = {
   branch_ref: string | null;
   created_at: string | null;
   updated_at: string | null;
+  idempotency_key: string | null;
   dead_letter: boolean;
 };
 
@@ -156,12 +158,70 @@ export type CoordinationAgents = { agents: CoordinationAgent[] };
 export type CoordinationTasks = { tasks: CoordinationTask[] };
 export type CoordinationEvents = { events: CoordinationEvent[] };
 
+export type CoordinationHealthStatus =
+  | "healthy"
+  | "degraded"
+  | "stale"
+  | "failed"
+  | "unavailable"
+  | "not_configured"
+  | "unknown";
+
+export type CoordinationHealth = {
+  overall: CoordinationHealthStatus;
+  components: Array<{
+    key: string;
+    status: CoordinationHealthStatus;
+    detail: string;
+    reasons: string[];
+  }>;
+  reasons: string[];
+  last_operations: {
+    last_webhook_received: string | null;
+    last_github_sync_success: string | null;
+    last_github_sync_attempt: string | null;
+    last_task_event: string | null;
+    checked_at: string | null;
+    note: string;
+  };
+  at: string | null;
+};
+
+export type CoordinationTaskTrace = {
+  task_id: string;
+  correlation: { idempotency_key: string | null; event_id: string | null };
+  state: string;
+  agent: string | null;
+  attempts: number;
+  dead_letter: boolean;
+  events: Array<{ id: number; at: string | null; kind: string; detail: string | null }>;
+  deliveries: Array<{
+    id: number;
+    channel: string | null;
+    queue: string | null;
+    message_id: string | null;
+    status: string | null;
+    attempt: number;
+    at: string | null;
+  }>;
+  approvals: Array<{
+    id: number;
+    status: string;
+    requested_by: string | null;
+    decided_by: string | null;
+    at: string | null;
+  }>;
+};
+
 export const integrationEndpoints = {
   opsOverview: "/api/integrations/ops/overview",
   opsAlerts: "/api/integrations/ops/alerts",
   opsWorkers: "/api/integrations/ops/workers",
   coordinationAgents: "/api/integrations/coordination/agents",
+  coordinationHealth: "/api/integrations/coordination/health",
   coordinationTasks: "/api/integrations/coordination/tasks",
+  coordinationTaskTrace: (taskId: string) =>
+    `/api/integrations/coordination/task-trace?task_id=${encodeURIComponent(taskId)}`,
   coordinationMetrics: "/api/integrations/coordination/metrics",
   coordinationEvents: "/api/integrations/coordination/events",
 } as const;
@@ -365,6 +425,7 @@ function parseCoordinationAgent(value: unknown, index: number): CoordinationAgen
     specialization: nullableString(item.specialization, `agents[${index}].specialization`),
     capabilities: stringArray(item.capabilities, `agents[${index}].capabilities`),
     status: string(item.status, `agents[${index}].status`),
+    health: nullableString(item.health, `agents[${index}].health`),
     stale: boolean(item.stale, `agents[${index}].stale`),
     last_seen: reportedTimestamp.value,
     last_seen_field: reportedTimestamp.field,
@@ -392,6 +453,7 @@ function parseCoordinationTask(value: unknown, index: number): CoordinationTask 
     branch_ref: nullableString(item.branch_ref, `tasks[${index}].branch_ref`),
     created_at: nullableString(item.created_at, `tasks[${index}].created_at`),
     updated_at: nullableString(item.updated_at, `tasks[${index}].updated_at`),
+    idempotency_key: nullableString(item.idempotency_key, `tasks[${index}].idempotency_key`),
     dead_letter: optionalBoolean(item.dead_letter, `tasks[${index}].dead_letter`, false),
   };
 }
@@ -441,6 +503,100 @@ function parseCoordinationEvent(value: unknown, index: number): CoordinationEven
 export function parseCoordinationEvents(value: unknown): CoordinationEvents {
   const root = object(value, "events response");
   return { events: array(root.events, "events", parseCoordinationEvent) };
+}
+
+const coordinationHealthStatuses = new Set<CoordinationHealthStatus>([
+  "healthy", "degraded", "stale", "failed", "unavailable", "not_configured", "unknown",
+]);
+
+function coordinationHealthStatus(value: unknown, label: string): CoordinationHealthStatus {
+  const parsed = string(value, label);
+  if (!coordinationHealthStatuses.has(parsed as CoordinationHealthStatus)) {
+    return fail(`${label} is not a documented coordination health status`);
+  }
+  return parsed as CoordinationHealthStatus;
+}
+
+function parseCoordinationHealthComponent(value: unknown, index: number): CoordinationHealth["components"][number] {
+  const item = object(value, `health.components[${index}]`);
+  return {
+    key: nonEmptyString(item.key, `health.components[${index}].key`),
+    status: coordinationHealthStatus(item.status, `health.components[${index}].status`),
+    detail: string(item.detail, `health.components[${index}].detail`),
+    reasons: stringArray(item.reasons, `health.components[${index}].reasons`),
+  };
+}
+
+export function parseCoordinationHealth(value: unknown): CoordinationHealth {
+  const root = object(value, "coordination health");
+  const operations = object(root.last_operations, "health.last_operations");
+  return {
+    overall: coordinationHealthStatus(root.overall, "health.overall"),
+    components: array(root.components, "health.components", parseCoordinationHealthComponent),
+    reasons: stringArray(root.reasons, "health.reasons"),
+    last_operations: {
+      last_webhook_received: nullableString(operations.last_webhook_received, "health.last_operations.last_webhook_received"),
+      last_github_sync_success: nullableString(operations.last_github_sync_success, "health.last_operations.last_github_sync_success"),
+      last_github_sync_attempt: nullableString(operations.last_github_sync_attempt, "health.last_operations.last_github_sync_attempt"),
+      last_task_event: nullableString(operations.last_task_event, "health.last_operations.last_task_event"),
+      checked_at: nullableString(operations.checked_at, "health.last_operations.checked_at"),
+      note: string(operations.note, "health.last_operations.note"),
+    },
+    at: nullableString(root.at, "health.at"),
+  };
+}
+
+function parseTraceEvent(value: unknown, index: number): CoordinationTaskTrace["events"][number] {
+  const item = object(value, `trace.events[${index}]`);
+  return {
+    id: nonNegativeInteger(item.id, `trace.events[${index}].id`),
+    at: nullableString(item.at, `trace.events[${index}].at`),
+    kind: nonEmptyString(item.kind, `trace.events[${index}].kind`),
+    detail: nullableString(item.detail, `trace.events[${index}].detail`),
+  };
+}
+
+function parseTraceDelivery(value: unknown, index: number): CoordinationTaskTrace["deliveries"][number] {
+  const item = object(value, `trace.deliveries[${index}]`);
+  return {
+    id: nonNegativeInteger(item.id, `trace.deliveries[${index}].id`),
+    channel: nullableString(item.channel, `trace.deliveries[${index}].channel`),
+    queue: nullableString(item.queue, `trace.deliveries[${index}].queue`),
+    message_id: nullableString(item.message_id, `trace.deliveries[${index}].message_id`),
+    status: nullableString(item.status, `trace.deliveries[${index}].status`),
+    attempt: nonNegativeInteger(item.attempt, `trace.deliveries[${index}].attempt`),
+    at: nullableString(item.at, `trace.deliveries[${index}].at`),
+  };
+}
+
+function parseTraceApproval(value: unknown, index: number): CoordinationTaskTrace["approvals"][number] {
+  const item = object(value, `trace.approvals[${index}]`);
+  return {
+    id: nonNegativeInteger(item.id, `trace.approvals[${index}].id`),
+    status: nonEmptyString(item.status, `trace.approvals[${index}].status`),
+    requested_by: nullableString(item.requested_by, `trace.approvals[${index}].requested_by`),
+    decided_by: nullableString(item.decided_by, `trace.approvals[${index}].decided_by`),
+    at: nullableString(item.at, `trace.approvals[${index}].at`),
+  };
+}
+
+export function parseCoordinationTaskTrace(value: unknown): CoordinationTaskTrace {
+  const root = object(value, "coordination task trace");
+  const correlation = object(root.correlation, "trace.correlation");
+  return {
+    task_id: nonEmptyString(root.task_id, "trace.task_id"),
+    correlation: {
+      idempotency_key: nullableString(correlation.idempotency_key, "trace.correlation.idempotency_key"),
+      event_id: nullableString(correlation.event_id, "trace.correlation.event_id"),
+    },
+    state: nonEmptyString(root.state, "trace.state"),
+    agent: nullableString(root.agent, "trace.agent"),
+    attempts: nonNegativeInteger(root.attempts, "trace.attempts"),
+    dead_letter: boolean(root.dead_letter, "trace.dead_letter"),
+    events: array(root.events, "trace.events", parseTraceEvent),
+    deliveries: array(root.deliveries, "trace.deliveries", parseTraceDelivery),
+    approvals: array(root.approvals, "trace.approvals", parseTraceApproval),
+  };
 }
 
 function errorKind(code: unknown, status: number): IntegrationFailureKind {

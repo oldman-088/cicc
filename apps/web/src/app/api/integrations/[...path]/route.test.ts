@@ -90,6 +90,38 @@ describe("server-side integration adapter", () => {
     expect(url.toString()).toBe("https://api.example.test/api/v1/coordination/tasks?state=RUNNING&kind=threat-intel&limit=100");
   });
 
+  it("proxies the source-confirmed health and task-trace GETs without accepting arbitrary task paths", async () => {
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/internal/");
+    vi.stubEnv("WEB_BFF_API_TOKEN", "read-token");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const health = await get(["coordination", "health"]);
+    expect(health.status).toBe(200);
+    expect(fetchMock.mock.calls[0]?.[0]?.toString()).toBe(
+      "https://api.example.test/internal/api/v1/coordination/health",
+    );
+
+    const trace = await get(["coordination", "task-trace"], "?task_id=api-task-123");
+    expect(trace.status).toBe(200);
+    expect(fetchMock.mock.calls[1]?.[0]?.toString()).toBe(
+      "https://api.example.test/internal/api/v1/coordination/tasks/api-task-123/trace",
+    );
+    const [, traceInit] = fetchMock.mock.calls[1] as [URL, RequestInit];
+    expect(traceInit.method).toBe("GET");
+    expect(new Headers(traceInit.headers).get("authorization")).toBe("Bearer read-token");
+
+    const traversal = await get(["coordination", "task-trace"], "?task_id=..%2F..%2Fops");
+    expect(traversal.status).toBe(400);
+    const malformedId = await get(["coordination", "task-trace"], "?task_id=not%20a%20backend%20id");
+    expect(malformedId.status).toBe(400);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("sanitizes upstream rate-limit errors and preserves a safe Retry-After", async () => {
     vi.stubEnv("API_INTERNAL_URL", "https://api.example.test");
     vi.stubEnv("WEB_BFF_API_TOKEN", "read-token");

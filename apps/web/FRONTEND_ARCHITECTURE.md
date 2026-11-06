@@ -1,10 +1,10 @@
 # CICC frontend architecture
 
-**Status:** living document · **Updated:** 2026-11-05
+**Status:** living document · **Updated:** 2026-11-06
 
 ## Product and trust boundary
 
-`apps/web` is a Next.js App Router frontend. The current checkout does not contain the API server or deployment credentials. System Health and Agent Coordination now consume Agent 1's read-side contract documented on open PR #4, current reviewed head `43c90259b3868340d4e1b929a9fb2b74250b6c29`; that server is not merged or running in this checkout. Threat Intelligence, Vulnerability Intelligence, Command Theater production data, global search, identity, and tenant preferences remain unconnected.
+`apps/web` is a Next.js App Router frontend. The current checkout does not contain the API server or deployment credentials. PR #4 is open at current M34 head `e10e9f57afed4da715949ac3b3038116977029f2`; its read-only Coordination health and per-task trace routes remain the M33 source introduced at `b112d4c522aed996e1466040774db04f1e1711f4`, consumed through fixed GET-only BFF mappings here. M34 also records a sandbox/fixture-token cross-domain trial through the reference workflow, not this frontend BFF or a production integration. No persistent provider is configured in this checkout; a separate ephemeral local API+BFF request/response smoke is recorded in `DEVELOPMENT_LOG.md`, but no deployed/live service is verified. Threat Intelligence, Vulnerability Intelligence, Command Theater production data, global entity search, identity, and tenant preferences remain unconnected.
 
 The Ops/Coordination contract is explicitly **trusted single-tenant only**: its tables have no `tenant_id`, the frontend does not authenticate users, and a shared API read token does not create user or tenant authorization. The deployment must provide network/access controls and must not expose this UI to untrusted or multiple tenants. The visible page warning is not an access-control mechanism.
 
@@ -19,7 +19,7 @@ A route is not evidence of a connected provider. Do not invent backend paths, pa
 | `/threat-intelligence` | `UnconfiguredModulePage` | Localized destination and planned threat-analysis scope | No API contract/provider |
 | `/vulnerability-intelligence` | `UnconfiguredModulePage` | Localized destination and planned exposure/remediation scope | No mounted API or approved host contract |
 | `/system-health` | `SystemHealthWorkspace` | Read-only Ops overview/components/metrics/activity, active alerts, and workers | Server-side adapter wired to PR #4 contract; runtime service not configured/verified here |
-| `/coordination` | `CoordinationWorkspace` | Read-only agents, tasks, aggregates, webhook events; local filtering of returned tasks | Server-side adapter wired to PR #4 contract; consumer adoption from Agents 2/3 is not assumed |
+| `/coordination` | `CoordinationWorkspace` | Read-only agents, tasks, aggregates, webhook events, on-demand health and per-task trace; local filtering of returned tasks | Fixed server-side GET adapter wired to PR #4 M33 reads; ephemeral local API request/response smoke passed; no persistent provider or deployed/live service configured/verified; Agent 2/Replacement Agent 3 adoption is not assumed |
 | `/settings` | `SettingsPage` | EN/AR/FA locale and local reduced-motion preference | Browser-local only; no account, user, tenant, or preference-service integration |
 
 ## Component and state ownership
@@ -54,7 +54,7 @@ src/app/api/integrations/[...path]/route.ts
 - **`WorkspaceOverview`** describes what is and is not configured; it does not aggregate backend health/events.
 - **`CommandTheater`** owns graph filters, visualization, local selection history, and fallback state. Its typed source boundary is a frontend presentation contract, not a backend schema; see `src/components/command-theater/COMMAND_THEATER_INTEGRATION.md`.
 - **`SystemHealthWorkspace`** independently loads the documented Ops overview, active alerts, and worker list. It renders provider fields without inferring health; the exact `live-ops-database` source label is required before counters are displayed. Empty alerts do not imply system health.
-- **`CoordinationWorkspace`** independently loads documented agent, task, metric, and event reads. Agent staleness is shown only from the provider's `stale` boolean. The current API reference and `agents.py` disagree on timestamp/counter property names; the decoder accepts only the two reviewed spellings, rejects conflicts, and shows the provider's actual timestamp field name. Agent 1 was asked to align docs/source in [PR #4 follow-up](https://github.com/oldman-088/cicc/pull/4#issuecomment-6656004782). State/search filters apply only to the maximum 100 task records returned by this adapter; there are no write controls.
+- **`CoordinationWorkspace`** independently loads agents, tasks, metrics, webhook events, and the source-reviewed M33 health route. Agent staleness is shown only from the provider's `stale` boolean; the current source also returns a provider health classification. Its decoder retains compatibility with the two previously observed timestamp/counter spellings while rejecting conflicting aliases. Health status and reasons are API-reported; the on-demand response explicitly says it is not continuous monitoring. Each task can lazily load its read-only correlation/audit trace (events, delivery attempts, approval records) from a fixed BFF path. State/search filters still apply only to the maximum 100 task records returned; no write controls exist. PR #4's public API reference currently omits some M33 health/trace details, and Agent 1 has been asked to align it.
 - **`ResourcePanel` / `useIntegrationResource`** distinguish initial loading, unconfigured provider, request/authorization/rate-limit errors, malformed DTO, empty success, retry, and prior successful data shown as stale after refresh failure. Refresh is manual; there is no polling.
 - **`src/lib/integration-api.ts`** declares the reviewed DTO shapes and validates unknown JSON at runtime. It never substitutes fixtures after a provider error.
 
@@ -81,7 +81,8 @@ Exact API versions, paths, DTOs, errors, cache handling, and unresolved adoption
 - Graph limits remain 250 nodes/relationships per visualization and 50 visible explorer rows per page.
 - Shared tokens are in `src/app/globals.css`; page styles are CSS Modules. System Health and Coordination use responsive two-column layouts that collapse on narrow screens.
 - `prefers-reduced-motion`, local motion reduction, visible focus, and forced-color focus styles are implemented; browser validation remains outstanding.
-- Automated component tests and JSDOM/axe checks do not establish visual contrast, screen-reader, device, browser/GPU, or WCAG conformance. See `ACCESSIBILITY_REVIEW.md` and `PERFORMANCE_REPORT.md`.
+- Current unit/component coverage is 91 tests across 17 files. JSDOM/axe checks are structural and do not establish visual contrast or WCAG conformance. Three Coordination Playwright E2E specs are present and discoverable, but the suite cannot launch in this sandbox because its Chromium binary is absent; no E2E assertions have passed here.
+- No automated or HTTP check establishes screen-reader, device, real-browser layout, browser/GPU, or WCAG conformance. See `ACCESSIBILITY_REVIEW.md` and `PERFORMANCE_REPORT.md`.
 
 ## Extension checklist
 

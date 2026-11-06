@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   IntegrationApiError,
   parseCoordinationAgents,
+  parseCoordinationHealth,
   parseCoordinationMetrics,
+  parseCoordinationTaskTrace,
   parseCoordinationTasks,
   parseOpsOverview,
   readIntegrationResource,
@@ -150,6 +152,60 @@ describe("owner-provided API response decoders", () => {
       updated_at: null,
       dead_letter: false,
     }] })).toThrow(/tasks\[0\]\.task_id must not be empty/);
+  });
+  it("validates the source-reported health contract and preserves unknown/empty as explicit states", () => {
+    const health = parseCoordinationHealth({
+      overall: "degraded",
+      components: [{ key: "broker", status: "not_configured", detail: "Human-assisted delivery only", reasons: ["No broker configured"] }],
+      reasons: ["broker: No broker configured"],
+      last_operations: {
+        last_webhook_received: null,
+        last_github_sync_success: null,
+        last_github_sync_attempt: null,
+        last_task_event: null,
+        checked_at: "2026-11-06T09:00:00Z",
+        note: "on-demand check; NOT continuous monitoring (no scheduler running)",
+      },
+      at: "2026-11-06T09:00:00Z",
+    });
+    expect(health.overall).toBe("degraded");
+    expect(health.components[0]?.status).toBe("not_configured");
+    expect(health.last_operations.last_webhook_received).toBeNull();
+    expect(() => parseCoordinationHealth({
+      overall: "green",
+      components: [],
+      reasons: [],
+      last_operations: { note: "unknown" },
+      at: null,
+    })).toThrow(/not a documented coordination health status/);
+  });
+
+  it("decodes the read-only task trace without coercing missing correlation or lifecycle records", () => {
+    const trace = parseCoordinationTaskTrace({
+      task_id: "api-task-1",
+      correlation: { idempotency_key: null, event_id: "delivery-event-1" },
+      state: "RUNNING",
+      agent: "agent-a",
+      attempts: 2,
+      dead_letter: false,
+      events: [{ id: 1, at: "2026-11-06T09:00:00Z", kind: "created", detail: "Task accepted" }],
+      deliveries: [],
+      approvals: [],
+    });
+    expect(trace.correlation.idempotency_key).toBeNull();
+    expect(trace.events[0]).toMatchObject({ kind: "created", detail: "Task accepted" });
+    expect(trace.deliveries).toEqual([]);
+    expect(() => parseCoordinationTaskTrace({
+      task_id: "api-task-1",
+      correlation: {},
+      state: "RUNNING",
+      agent: null,
+      attempts: -1,
+      dead_letter: false,
+      events: [],
+      deliveries: [],
+      approvals: [],
+    })).toThrow(/attempts must be a non-negative integer/);
   });
 });
 

@@ -7,12 +7,17 @@ import {
   integrationEndpoints,
   parseCoordinationAgents,
   parseCoordinationEvents,
+  parseCoordinationHealth,
   parseCoordinationMetrics,
+  parseCoordinationTaskTrace,
   parseCoordinationTasks,
   type CoordinationAgent,
   type CoordinationEvent,
+  type CoordinationHealth,
+  type CoordinationHealthStatus,
   type CoordinationMetrics,
   type CoordinationTask,
+  type CoordinationTaskTrace,
 } from "../../lib/integration-api";
 import { ResourcePanel } from "../integrations/ResourcePanel";
 import { useIntegrationResource } from "../integrations/useIntegrationResource";
@@ -72,6 +77,49 @@ type Messages = {
   linkedTask: string;
   noValue: string;
   count: string;
+  health: string;
+  healthOverall: string;
+  healthComponents: string;
+  healthReasons: string;
+  healthNoComponents: string;
+  healthNoReasons: string;
+  healthLastOperations: string;
+  healthCheckedAt: string;
+  healthLastWebhook: string;
+  healthLastSyncSuccess: string;
+  healthLastSyncAttempt: string;
+  healthLastTaskEvent: string;
+  healthOnDemandNote: string;
+  healthStatus: Record<CoordinationHealthStatus, string>;
+  healthField: string;
+  healthDetail: string;
+  traceOpen: string;
+  traceClose: string;
+  trace: string;
+  traceSummary: string;
+  traceNoEntries: string;
+  traceEvents: string;
+  traceDeliveries: string;
+  traceApprovals: string;
+  traceCorrelation: string;
+  traceIdempotencyKey: string;
+  traceEventId: string;
+  traceAttempts: string;
+  traceAgent: string;
+  traceAt: string;
+  traceKind: string;
+  traceDetail: string;
+  traceChannel: string;
+  traceQueue: string;
+  traceMessageId: string;
+  traceDeliveryStatus: string;
+  traceAttempt: string;
+  traceRequestedBy: string;
+  traceDecidedBy: string;
+  traceEmptyEvents: string;
+  traceEmptyDeliveries: string;
+  traceEmptyApprovals: string;
+  taskIdempotencyKey: string;
 };
 
 const copy: Record<Locale, Messages> = {
@@ -129,6 +177,52 @@ const copy: Record<Locale, Messages> = {
     linkedTask: "Task ID from event mapping",
     noValue: "Not provided",
     count: "Count",
+    health: "Coordination service health",
+    healthOverall: "Provider-reported overall status",
+    healthComponents: "Component status",
+    healthReasons: "Actionable provider-reported reasons",
+    healthNoComponents: "The provider returned no component health records.",
+    healthNoReasons: "The provider reported no reasons for this component.",
+    healthLastOperations: "Recent recorded operations",
+    healthCheckedAt: "Health check time",
+    healthLastWebhook: "Last webhook received",
+    healthLastSyncSuccess: "Last successful GitHub sync",
+    healthLastSyncAttempt: "Last GitHub sync attempt",
+    healthLastTaskEvent: "Last task event",
+    healthOnDemandNote: "On-demand status check — not continuous monitoring.",
+    healthStatus: {
+      healthy: "Healthy", degraded: "Degraded", stale: "Stale", failed: "Failed",
+      unavailable: "Unavailable", not_configured: "Not configured", unknown: "Unknown",
+    },
+    healthField: "Agent health reported by provider",
+    healthDetail: "Provider detail",
+    traceOpen: "View task trace",
+    traceClose: "Hide task trace",
+    trace: "Task audit trace",
+    traceSummary: "Lifecycle, delivery, and approval records returned by the coordination API.",
+    traceNoEntries: "No lifecycle, delivery, or approval entries were returned.",
+    traceEvents: "Lifecycle events",
+    traceDeliveries: "Delivery attempts",
+    traceApprovals: "Approval records",
+    traceCorrelation: "Correlation",
+    traceIdempotencyKey: "Idempotency key",
+    traceEventId: "Source event ID",
+    traceAttempts: "Task attempts",
+    traceAgent: "Agent",
+    traceAt: "Recorded at",
+    traceKind: "Event kind",
+    traceDetail: "Event detail",
+    traceChannel: "Channel",
+    traceQueue: "Queue",
+    traceMessageId: "Message ID",
+    traceDeliveryStatus: "Delivery status",
+    traceAttempt: "Attempt",
+    traceRequestedBy: "Requested by",
+    traceDecidedBy: "Decided by",
+    traceEmptyEvents: "No lifecycle events were returned.",
+    traceEmptyDeliveries: "No delivery attempts were returned.",
+    traceEmptyApprovals: "No approval records were returned.",
+    taskIdempotencyKey: "Idempotency key",
   },
   ar: {
     eyebrow: "CICC / التنسيق",
@@ -184,6 +278,52 @@ const copy: Record<Locale, Messages> = {
     linkedTask: "معرّف المهمة من ربط الحدث",
     noValue: "غير متوفر",
     count: "العدد",
+    health: "صحة خدمة التنسيق",
+    healthOverall: "الحالة العامة كما أبلغ عنها المزوّد",
+    healthComponents: "حالة المكوّنات",
+    healthReasons: "أسباب قابلة للإجراء كما أبلغ عنها المزوّد",
+    healthNoComponents: "لم يُرجع المزوّد سجلات لصحة المكوّنات.",
+    healthNoReasons: "لم يُبلغ المزوّد عن أسباب لهذا المكوّن.",
+    healthLastOperations: "أحدث العمليات المسجّلة",
+    healthCheckedAt: "وقت فحص الصحة",
+    healthLastWebhook: "آخر ويب هوك مستلم",
+    healthLastSyncSuccess: "آخر مزامنة GitHub ناجحة",
+    healthLastSyncAttempt: "آخر محاولة مزامنة GitHub",
+    healthLastTaskEvent: "آخر حدث مهمة",
+    healthOnDemandNote: "فحص حالة عند الطلب — وليس مراقبة مستمرة.",
+    healthStatus: {
+      healthy: "سليم", degraded: "متدهور", stale: "قديم", failed: "فشل",
+      unavailable: "غير متاح", not_configured: "غير مضبوط", unknown: "غير معروف",
+    },
+    healthField: "صحة الوكيل كما أبلغ عنها المزوّد",
+    healthDetail: "تفاصيل المزوّد",
+    traceOpen: "عرض أثر المهمة",
+    traceClose: "إخفاء أثر المهمة",
+    trace: "أثر تدقيق المهمة",
+    traceSummary: "سجلات دورة الحياة والتسليم والموافقة التي أعادتها واجهة التنسيق.",
+    traceNoEntries: "لم تُرجع الواجهة سجلات لدورة الحياة أو التسليم أو الموافقات.",
+    traceEvents: "أحداث دورة الحياة",
+    traceDeliveries: "محاولات التسليم",
+    traceApprovals: "سجلات الموافقة",
+    traceCorrelation: "الربط",
+    traceIdempotencyKey: "مفتاح منع التكرار",
+    traceEventId: "معرّف الحدث المصدر",
+    traceAttempts: "محاولات المهمة",
+    traceAgent: "الوكيل",
+    traceAt: "وقت التسجيل",
+    traceKind: "نوع الحدث",
+    traceDetail: "تفاصيل الحدث",
+    traceChannel: "القناة",
+    traceQueue: "قائمة الانتظار",
+    traceMessageId: "معرّف الرسالة",
+    traceDeliveryStatus: "حالة التسليم",
+    traceAttempt: "المحاولة",
+    traceRequestedBy: "طلبها",
+    traceDecidedBy: "حسمها",
+    traceEmptyEvents: "لم تُرجع أحداث لدورة الحياة.",
+    traceEmptyDeliveries: "لم تُرجع محاولات للتسليم.",
+    traceEmptyApprovals: "لم تُرجع سجلات للموافقة.",
+    taskIdempotencyKey: "مفتاح منع التكرار",
   },
   fa: {
     eyebrow: "CICC / هماهنگی",
@@ -239,6 +379,52 @@ const copy: Record<Locale, Messages> = {
     linkedTask: "شناسهٔ وظیفه از نگاشت رویداد",
     noValue: "ارائه نشده است",
     count: "شمار",
+    health: "سلامت سرویس هماهنگی",
+    healthOverall: "وضعیت کلی گزارش‌شده از منبع",
+    healthComponents: "وضعیت مؤلفه‌ها",
+    healthReasons: "دلایل قابل اقدام گزارش‌شده از منبع",
+    healthNoComponents: "منبع رکوردی برای سلامت مؤلفه‌ها برنگرداند.",
+    healthNoReasons: "منبع برای این مؤلفه دلیلی گزارش نکرد.",
+    healthLastOperations: "آخرین عملیات ثبت‌شده",
+    healthCheckedAt: "زمان بررسی سلامت",
+    healthLastWebhook: "آخرین وب‌هوک دریافت‌شده",
+    healthLastSyncSuccess: "آخرین همگام‌سازی موفق گیت‌هاب",
+    healthLastSyncAttempt: "آخرین تلاش همگام‌سازی گیت‌هاب",
+    healthLastTaskEvent: "آخرین رویداد وظیفه",
+    healthOnDemandNote: "بررسی وضعیت هنگام درخواست — نه پایش پیوسته.",
+    healthStatus: {
+      healthy: "سالم", degraded: "مختل", stale: "کهنه", failed: "ناموفق",
+      unavailable: "در دسترس نیست", not_configured: "پیکربندی نشده", unknown: "نامشخص",
+    },
+    healthField: "سلامت عامل، گزارش‌شده از منبع",
+    healthDetail: "جزئیات منبع",
+    traceOpen: "مشاهدهٔ رد وظیفه",
+    traceClose: "پنهان‌کردن رد وظیفه",
+    trace: "رد ممیزی وظیفه",
+    traceSummary: "رکوردهای چرخهٔ عمر، تحویل و تأیید بازگشتی از API هماهنگی.",
+    traceNoEntries: "رکوردی از چرخهٔ عمر، تحویل یا تأیید بازگشت داده نشد.",
+    traceEvents: "رویدادهای چرخهٔ عمر",
+    traceDeliveries: "تلاش‌های تحویل",
+    traceApprovals: "رکوردهای تأیید",
+    traceCorrelation: "هم‌بستگی",
+    traceIdempotencyKey: "کلید جلوگیری از تکرار",
+    traceEventId: "شناسهٔ رویداد مبدأ",
+    traceAttempts: "تلاش‌های وظیفه",
+    traceAgent: "عامل",
+    traceAt: "زمان ثبت",
+    traceKind: "نوع رویداد",
+    traceDetail: "جزئیات رویداد",
+    traceChannel: "کانال",
+    traceQueue: "صف",
+    traceMessageId: "شناسهٔ پیام",
+    traceDeliveryStatus: "وضعیت تحویل",
+    traceAttempt: "تلاش",
+    traceRequestedBy: "درخواست‌کننده",
+    traceDecidedBy: "تصمیم‌گیرنده",
+    traceEmptyEvents: "رویدادی از چرخهٔ عمر بازگردانده نشد.",
+    traceEmptyDeliveries: "تلاشی برای تحویل بازگردانده نشد.",
+    traceEmptyApprovals: "رکوردی از تأیید بازگردانده نشد.",
+    taskIdempotencyKey: "کلید جلوگیری از تکرار",
   },
 };
 
@@ -306,6 +492,77 @@ function MetricContent({ data, locale, messages }: { data: CoordinationMetrics; 
   );
 }
 
+function healthStatusLabel(status: CoordinationHealthStatus, messages: Messages): string {
+  return messages.healthStatus[status];
+}
+
+function HealthContent({ data, locale, messages }: { data: CoordinationHealth; locale: Locale; messages: Messages }) {
+  const operations = data.last_operations;
+  const operationRows = [
+    [messages.healthLastWebhook, operations.last_webhook_received],
+    [messages.healthLastSyncSuccess, operations.last_github_sync_success],
+    [messages.healthLastSyncAttempt, operations.last_github_sync_attempt],
+    [messages.healthLastTaskEvent, operations.last_task_event],
+  ] as const;
+
+  return (
+    <div className={styles.healthContent}>
+      <div className={styles.healthSummary}>
+        <div>
+          <span className={styles.healthLabel}>{messages.healthOverall}</span>
+          <strong className={styles.statusTag} data-health-status={data.overall}>
+            {healthStatusLabel(data.overall, messages)}
+          </strong>
+        </div>
+        <p>{messages.healthOnDemandNote} <bdi dir="auto">{operations.note}</bdi></p>
+        {data.at && <time aria-label={messages.healthCheckedAt} dateTime={data.at}>{messages.healthCheckedAt}: {formatTimestamp(data.at, locale, messages.noTimestamp)}</time>}
+      </div>
+
+      <section className={styles.healthSection} aria-label={messages.healthComponents}>
+        <h3>{messages.healthComponents}</h3>
+        {data.components.length === 0 ? <p className={styles.inlineNote}>{messages.healthNoComponents}</p> : (
+          <ul className={styles.healthList}>
+            {data.components.map((component) => (
+              <li key={component.key} className={styles.healthCard}>
+                <div className={styles.cardHeading}>
+                  <h4><bdi dir="ltr">{component.key}</bdi></h4>
+                  <span className={styles.statusTag} data-health-status={component.status}>
+                    {healthStatusLabel(component.status, messages)}
+                  </span>
+                </div>
+                <p className={styles.healthDetail} dir="auto">{component.detail}</p>
+                {component.reasons.length > 0 ? (
+                  <ul className={styles.healthReasons} aria-label={messages.healthReasons}>
+                    {component.reasons.map((reason, index) => <li key={`${component.key}-${index}`} dir="auto">{reason}</li>)}
+                  </ul>
+                ) : <p className={styles.inlineNote}>{messages.healthNoReasons}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {data.reasons.length > 0 && (
+          <div className={styles.overallReasons}>
+            <h4>{messages.healthReasons}</h4>
+            <ul>{data.reasons.map((reason, index) => <li key={`${index}-${reason}`} dir="auto">{reason}</li>)}</ul>
+          </div>
+        )}
+      </section>
+
+      <section className={styles.healthSection} aria-label={messages.healthLastOperations}>
+        <h3>{messages.healthLastOperations}</h3>
+        <dl className={styles.smallMeta}>
+          {operationRows.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{formatTimestamp(value, locale, messages.noTimestamp)}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </div>
+  );
+}
+
 function AgentContent({ agents, locale, messages }: { agents: CoordinationAgent[]; locale: Locale; messages: Messages }) {
   return (
     <ul className={styles.agentList}>
@@ -323,6 +580,7 @@ function AgentContent({ agents, locale, messages }: { agents: CoordinationAgent[
           </div>
           <dl className={styles.smallMeta}>
             <div><dt>{messages.agentStatus}</dt><dd><bdi dir="auto">{agent.status}</bdi></dd></div>
+            {agent.health && <div><dt>{messages.healthField}</dt><dd><bdi dir="ltr">{agent.health}</bdi></dd></div>}
             <div><dt>{messages.lastSeen}{agent.last_seen_field && <> · <code><bdi dir="ltr">{agent.last_seen_field}</bdi></code></>}</dt><dd>{formatTimestamp(agent.last_seen, locale, messages.noTimestamp)}</dd></div>
             <div><dt>{messages.activeTasks}</dt><dd>{formatNumber(agent.active_tasks, locale)}</dd></div>
             <div><dt>{messages.completedTasks}</dt><dd>{formatNumber(agent.completed_tasks, locale)}</dd></div>
@@ -337,6 +595,122 @@ function AgentContent({ agents, locale, messages }: { agents: CoordinationAgent[
         </li>
       ))}
     </ul>
+  );
+}
+
+function TaskTraceContent({
+  data,
+  locale,
+  messages,
+}: {
+  data: CoordinationTaskTrace;
+  locale: Locale;
+  messages: Messages;
+}) {
+  const hasRecords = data.events.length + data.deliveries.length + data.approvals.length > 0;
+  return (
+    <div className={styles.traceContent}>
+      <p className={styles.scopeNote}>{messages.traceSummary}</p>
+      <dl className={styles.smallMeta}>
+        <div><dt>{messages.taskId}</dt><dd><code><bdi dir="ltr">{data.task_id}</bdi></code></dd></div>
+        <div><dt>{messages.state}</dt><dd><bdi dir="ltr">{data.state}</bdi></dd></div>
+        <div><dt>{messages.traceAgent}</dt><dd>{data.agent ? <bdi dir="ltr">{data.agent}</bdi> : messages.noAgent}</dd></div>
+        <div><dt>{messages.traceAttempts}</dt><dd>{formatNumber(data.attempts, locale)}</dd></div>
+        {data.dead_letter && <div><dt>{messages.deadLetter}</dt><dd>{messages.deadLetter}</dd></div>}
+        <div><dt>{messages.traceIdempotencyKey}</dt><dd>{data.correlation.idempotency_key ? <code><bdi dir="ltr">{data.correlation.idempotency_key}</bdi></code> : messages.noValue}</dd></div>
+        <div><dt>{messages.traceEventId}</dt><dd>{data.correlation.event_id ? <code><bdi dir="ltr">{data.correlation.event_id}</bdi></code> : messages.noValue}</dd></div>
+      </dl>
+      {!hasRecords && <p className={styles.inlineNote}>{messages.traceNoEntries}</p>}
+
+      <section className={styles.traceSection} aria-label={messages.traceEvents}>
+        <h3>{messages.traceEvents}</h3>
+        {data.events.length === 0 ? <p className={styles.inlineNote}>{messages.traceEmptyEvents}</p> : (
+          <ol className={styles.traceList}>
+            {data.events.map((event) => (
+              <li key={event.id} className={styles.traceRecord}>
+                <div className={styles.cardHeading}>
+                  <h4><bdi dir="ltr">{event.kind}</bdi></h4>
+                  <span className={styles.traceTime}>{formatTimestamp(event.at, locale, messages.noTimestamp)}</span>
+                </div>
+                {event.detail && <p className={styles.healthDetail} dir="auto">{event.detail}</p>}
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      <section className={styles.traceSection} aria-label={messages.traceDeliveries}>
+        <h3>{messages.traceDeliveries}</h3>
+        {data.deliveries.length === 0 ? <p className={styles.inlineNote}>{messages.traceEmptyDeliveries}</p> : (
+          <ol className={styles.traceList}>
+            {data.deliveries.map((delivery) => (
+              <li key={delivery.id} className={styles.traceRecord}>
+                <div className={styles.cardHeading}>
+                  <h4><bdi dir="ltr">{delivery.channel ?? messages.noValue}</bdi></h4>
+                  {delivery.status && <span className={styles.statusTag}><bdi dir="ltr">{delivery.status}</bdi></span>}
+                </div>
+                <dl className={styles.smallMeta}>
+                  <div><dt>{messages.traceQueue}</dt><dd>{delivery.queue ? <bdi dir="ltr">{delivery.queue}</bdi> : messages.noValue}</dd></div>
+                  <div><dt>{messages.traceMessageId}</dt><dd>{delivery.message_id ? <code><bdi dir="ltr">{delivery.message_id}</bdi></code> : messages.noValue}</dd></div>
+                  <div><dt>{messages.traceAttempt}</dt><dd>{formatNumber(delivery.attempt, locale)}</dd></div>
+                  <div><dt>{messages.traceAt}</dt><dd>{formatTimestamp(delivery.at, locale, messages.noTimestamp)}</dd></div>
+                </dl>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      <section className={styles.traceSection} aria-label={messages.traceApprovals}>
+        <h3>{messages.traceApprovals}</h3>
+        {data.approvals.length === 0 ? <p className={styles.inlineNote}>{messages.traceEmptyApprovals}</p> : (
+          <ol className={styles.traceList}>
+            {data.approvals.map((approval) => (
+              <li key={approval.id} className={styles.traceRecord}>
+                <div className={styles.cardHeading}>
+                  <h4><bdi dir="ltr">{approval.status}</bdi></h4>
+                  <span className={styles.traceTime}>{formatTimestamp(approval.at, locale, messages.noTimestamp)}</span>
+                </div>
+                <dl className={styles.smallMeta}>
+                  <div><dt>{messages.traceRequestedBy}</dt><dd>{approval.requested_by ? <bdi dir="auto">{approval.requested_by}</bdi> : messages.noValue}</dd></div>
+                  <div><dt>{messages.traceDecidedBy}</dt><dd>{approval.decided_by ? <bdi dir="auto">{approval.decided_by}</bdi> : messages.noValue}</dd></div>
+                </dl>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function TaskTracePanel({ taskId, locale, messages }: { taskId: string; locale: Locale; messages: Messages }) {
+  const trace = useIntegrationResource(integrationEndpoints.coordinationTaskTrace(taskId), parseCoordinationTaskTrace);
+  return (
+    <ResourcePanel title={messages.trace} state={trace.state} onRefresh={trace.refresh}>
+      {(data) => <TaskTraceContent data={data} locale={locale} messages={messages} />}
+    </ResourcePanel>
+  );
+}
+
+function TaskTraceDisclosure({ taskId, locale, messages }: { taskId: string; locale: Locale; messages: Messages }) {
+  const [expanded, setExpanded] = useState(false);
+  const panelId = useId().replaceAll(":", "");
+  return (
+    <div className={styles.traceDisclosure}>
+      <button
+        type="button"
+        className={styles.traceButton}
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {expanded ? messages.traceClose : messages.traceOpen}
+      </button>
+      <div id={panelId} hidden={!expanded}>
+        {expanded && <TaskTracePanel taskId={taskId} locale={locale} messages={messages} />}
+      </div>
+    </div>
   );
 }
 
@@ -398,7 +772,9 @@ function TaskContent({
                   <div><dt>{messages.branch}</dt><dd>{task.branch_ref ? <bdi dir="ltr">{task.branch_ref}</bdi> : messages.noValue}</dd></div>
                   <div><dt>{messages.created}</dt><dd>{formatTimestamp(task.created_at, locale, messages.noTimestamp)}</dd></div>
                   <div><dt>{messages.updated}</dt><dd>{formatTimestamp(task.updated_at, locale, messages.noTimestamp)}</dd></div>
+                  <div><dt>{messages.taskIdempotencyKey}</dt><dd>{task.idempotency_key ? <code><bdi dir="ltr">{task.idempotency_key}</bdi></code> : messages.noValue}</dd></div>
                 </dl>
+                <TaskTraceDisclosure taskId={task.task_id} locale={locale} messages={messages} />
               </details>
             </li>
           ))}
@@ -434,6 +810,7 @@ export function CoordinationWorkspace() {
   const locale = useCiccLocale()?.locale ?? "en";
   const text = copy[locale];
   const id = useId().replaceAll(":", "");
+  const health = useIntegrationResource(integrationEndpoints.coordinationHealth, parseCoordinationHealth);
   const metrics = useIntegrationResource(integrationEndpoints.coordinationMetrics, parseCoordinationMetrics);
   const agents = useIntegrationResource(integrationEndpoints.coordinationAgents, parseCoordinationAgents);
   const tasks = useIntegrationResource(integrationEndpoints.coordinationTasks, parseCoordinationTasks);
@@ -456,6 +833,12 @@ export function CoordinationWorkspace() {
       </aside>
 
       <div className={styles.dashboardGrid}>
+        <div className={styles.widePanel}>
+          <ResourcePanel title={text.health} state={health.state} onRefresh={health.refresh}>
+            {(data) => <HealthContent data={data} locale={locale} messages={text} />}
+          </ResourcePanel>
+        </div>
+
         <ResourcePanel title={text.metrics} state={metrics.state} onRefresh={metrics.refresh}>
           {(data) => <MetricContent data={data} locale={locale} messages={text} />}
         </ResourcePanel>

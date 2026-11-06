@@ -5,6 +5,7 @@ type QueryRule = {
 
 type UpstreamRoute = {
   path: string;
+  pathFromQuery?: (query: URLSearchParams) => string;
   query?: Record<string, QueryRule>;
 };
 
@@ -31,6 +32,13 @@ const integerInRange = (min: number, max: number) => (value: string) => {
   return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max;
 };
 
+const safeTaskId = (value: string) =>
+  value.length > 0 &&
+  value.length <= 128 &&
+  value !== "." &&
+  value !== ".." &&
+  /^[A-Za-z0-9_.:-]+$/.test(value);
+
 const routes: Record<string, UpstreamRoute> = {
   "ops/overview": { path: "api/v1/ops/overview" },
   "ops/alerts": {
@@ -45,6 +53,13 @@ const routes: Record<string, UpstreamRoute> = {
   },
   "ops/workers": { path: "api/v1/ops/workers" },
   "coordination/agents": { path: "api/v1/coordination/agents" },
+  "coordination/health": { path: "api/v1/coordination/health" },
+  "coordination/task-trace": {
+    path: "api/v1/coordination/tasks",
+    pathFromQuery: (query) =>
+      `api/v1/coordination/tasks/${encodeURIComponent(query.get("task_id") ?? "")}/trace`,
+    query: { task_id: { defaultValue: "", validate: safeTaskId } },
+  },
   "coordination/tasks": {
     path: "api/v1/coordination/tasks",
     query: {
@@ -200,8 +215,8 @@ export async function GET(
   if (!trustedSingleTenant) return problem("provider_not_configured", 503);
   if (bffToken && /[\r\n]/.test(bffToken)) return problem("provider_not_configured", 503);
 
-  const upstreamUrl = new URL(spec.path, base);
-  upstreamUrl.search = query.toString();
+  const upstreamUrl = new URL(spec.pathFromQuery?.(query) ?? spec.path, base);
+  if (!spec.pathFromQuery) upstreamUrl.search = query.toString();
   const headers: Record<string, string> = { Accept: "application/json" };
   if (bffToken) headers.Authorization = `Bearer ${bffToken}`;
 

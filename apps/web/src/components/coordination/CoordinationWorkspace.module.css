@@ -376,6 +376,198 @@
   font-size: 0.62rem;
 }
 
+.healthContent,
+.traceContent {
+  display: grid;
+  min-width: 0;
+  gap: 0.8rem;
+}
+
+.healthSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem 0.9rem;
+  padding: 0.7rem;
+  border: 1px solid #294258;
+  border-radius: 0.65rem;
+  background: rgb(10 28 42 / 72%);
+}
+
+.healthSummary > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.healthLabel,
+.healthSummary time,
+.traceTime {
+  color: #9db0c3;
+  font-size: 0.62rem;
+}
+
+.healthSummary p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #b5c5d4;
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+.healthSummary time {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: end;
+}
+
+.healthSection,
+.traceSection {
+  min-width: 0;
+}
+
+.healthSection h3,
+.traceSection h3,
+.overallReasons h4 {
+  margin: 0 0 0.5rem;
+  color: #dce9f6;
+  font-size: 0.72rem;
+}
+
+.healthList,
+.traceList {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.healthCard,
+.traceRecord {
+  min-width: 0;
+  padding: 0.65rem;
+  border: 1px solid #20384d;
+  border-radius: 0.62rem;
+  background: rgb(9 23 36 / 72%);
+}
+
+.healthCard h4,
+.traceRecord h4 {
+  min-width: 0;
+  margin: 0;
+  color: #e5eef8;
+  font-size: 0.68rem;
+  font-weight: 680;
+  overflow-wrap: anywhere;
+}
+
+.statusTag[data-health-status="healthy"] {
+  border-color: rgb(76 177 137 / 50%);
+  color: #a7e2c4;
+}
+
+.statusTag[data-health-status="degraded"],
+.statusTag[data-health-status="stale"],
+.statusTag[data-health-status="not_configured"] {
+  border-color: rgb(238 186 101 / 48%);
+  color: #f0d19a;
+  background: rgb(81 62 33 / 26%);
+}
+
+.statusTag[data-health-status="failed"],
+.statusTag[data-health-status="unavailable"] {
+  border-color: rgb(237 126 132 / 48%);
+  color: #ffc0c3;
+  background: rgb(72 29 37 / 35%);
+}
+
+.statusTag[data-health-status="unknown"] {
+  border-color: #4b5c6b;
+  color: #c2d1df;
+}
+
+.healthDetail {
+  margin: 0.5rem 0 0;
+  color: #a9bbcd;
+  font-size: 0.64rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.healthReasons,
+.overallReasons ul {
+  display: grid;
+  gap: 0.32rem;
+  margin: 0.5rem 0 0;
+  padding-inline-start: 1.2rem;
+  color: #f0d19a;
+  font-size: 0.63rem;
+  line-height: 1.5;
+}
+
+.overallReasons {
+  margin-block-start: 0.65rem;
+  padding: 0.65rem;
+  border-inline-start: 2px solid #e4b86b;
+  border-radius: 0.35rem;
+  background: rgb(81 62 33 / 18%);
+}
+
+.overallReasons ul {
+  margin-block-start: 0;
+}
+
+.traceDisclosure {
+  display: grid;
+  gap: 0.55rem;
+  margin-block-start: 0.75rem;
+  padding-block-start: 0.65rem;
+  border-block-start: 1px solid #20384d;
+}
+
+.traceButton {
+  justify-self: start;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #326074;
+  border-radius: 0.55rem;
+  color: #b6f0eb;
+  background: #102b3a;
+  font: inherit;
+  font-size: 0.67rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.traceButton:hover {
+  background: #173a4a;
+}
+
+.traceButton:focus-visible {
+  outline: 3px solid var(--cicc-focus, #f3bf68);
+  outline-offset: 2px;
+}
+
+.traceContent > .smallMeta {
+  margin-block-start: 0;
+}
+
+.traceSection {
+  padding-block-start: 0.65rem;
+  border-block-start: 1px solid #20384d;
+}
+
+.traceRecord .smallMeta {
+  margin-block-start: 0.45rem;
+}
+
+.traceTime {
+  text-align: end;
+}
+
 @media (max-width: 800px) {
   .dashboardGrid {
     grid-template-columns: minmax(0, 1fr);
@@ -398,6 +590,16 @@
 
   .filterBar {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .healthSummary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .healthSummary time {
+    grid-column: 1;
+    grid-row: auto;
+    text-align: start;
   }
 
   .smallMeta {

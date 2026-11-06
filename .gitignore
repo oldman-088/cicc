@@ -3,3 +3,8 @@ node_modules/
 coverage/
 *.tsbuildinfo
 .DS_Store
+
+# Playwright output (traces, screenshots, and generated reports)
+**/test-results/
+**/playwright-report/
+**/blob-report/
