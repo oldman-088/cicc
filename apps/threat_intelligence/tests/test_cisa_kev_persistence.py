@@ -270,3 +270,31 @@ def test_rehashed_normalized_tampering_still_disagrees_with_original_blob(db):
         conn.execute(text('UPDATE ti_kev.snapshot_entry SET content_sha256=:digest WHERE snapshot_id=:id'),{'digest':digest,'id':result.snapshot_id})
     with pytest.raises(SnapshotUnavailable,match='blob integrity'):
         load_snapshot(db,origin=item.origin)
+
+
+def test_unchanged_fetch_detects_corruption_before_advancing_health(db):
+    from datetime import timedelta
+    from apps.threat_intelligence.cisa_kev_persistence import SnapshotIntegrityError
+    from apps.threat_intelligence.cisa_kev_health import check_health
+    item=collected(sample()); result=persist_catalog(db,item)
+    with db.begin() as conn:
+        conn.execute(text("UPDATE ti_kev.revision SET record=jsonb_set(record,'{product}',to_jsonb('broken fixture'::text))"))
+    later=item.model_copy(update={'collected_at':item.collected_at+timedelta(hours=2)})
+    with pytest.raises(SnapshotIntegrityError): persist_catalog(db,later)
+    health=check_health(db,origin=item.origin,as_of=later.collected_at,max_check_age=timedelta(hours=1))
+    assert health.status=='check_overdue' and health.snapshot_id==result.snapshot_id
+    assert health.checked_at==item.collected_at
+
+
+def test_unchanged_fetch_detects_missing_membership_and_bad_metadata(db):
+    from apps.threat_intelligence.cisa_kev_persistence import SnapshotIntegrityError
+    item=collected(sample()); result=persist_catalog(db,item)
+    with db.begin() as conn:
+        conn.execute(text('DELETE FROM ti_kev.snapshot_entry WHERE snapshot_id=:id'),{'id':result.snapshot_id})
+    with pytest.raises(SnapshotIntegrityError,match='membership'): persist_catalog(db,item)
+    # Restore only the isolated test fixture, then inject independently corrupt metadata.
+    with db.begin() as conn:
+        conn.execute(text('''INSERT INTO ti_kev.snapshot_entry(snapshot_id,origin,cve_id,content_sha256)
+            SELECT :id,origin,cve_id,content_sha256 FROM ti_kev.revision'''),{'id':result.snapshot_id})
+        conn.execute(text("UPDATE ti_kev.catalog_metadata SET catalog=jsonb_set(catalog,'{title}',to_jsonb('altered fixture'::text)) WHERE snapshot_id=:id"),{'id':result.snapshot_id})
+    with pytest.raises(SnapshotIntegrityError,match='metadata'): persist_catalog(db,item)

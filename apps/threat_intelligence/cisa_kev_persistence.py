@@ -25,6 +25,9 @@ class PersistenceResult:
 class StaleCatalogError(Exception):
     """An older catalog cannot silently replace a newer active snapshot."""
 
+class SnapshotIntegrityError(Exception):
+    """The latest persisted snapshot is inconsistent with the collected feed."""
+
 
 def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceResult:
     if engine.dialect.name != 'postgresql':
@@ -47,7 +50,7 @@ def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceR
     catalog_metadata = json.dumps(catalog.model_dump(mode='json', exclude={'vulnerabilities'}), ensure_ascii=False, separators=(',', ':'))
     with engine.begin() as conn:
         conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {'key':'ti_kev_snapshot:'+collected.origin})
-        previous = conn.execute(text("SELECT id, blob_sha, content_sha256, released_at FROM ti_kev.snapshot WHERE origin=:origin ORDER BY id DESC LIMIT 1"), {'origin':collected.origin}).mappings().first()
+        previous = conn.execute(text("SELECT id, blob_sha, content_sha256, released_at, source_url, catalog_version, entry_count FROM ti_kev.snapshot WHERE origin=:origin ORDER BY id DESC LIMIT 1"), {'origin':collected.origin}).mappings().first()
         if previous and catalog.dateReleased < previous['released_at']:
             raise StaleCatalogError('source catalog is older than current snapshot')
         conn.execute(text('''INSERT INTO ti_kev.source_blob(origin,content_sha256,blob_sha,source_bytes)
@@ -61,6 +64,21 @@ def persist_catalog(engine: Engine, collected: CollectedCatalog) -> PersistenceR
             if previous['content_sha256'] != collected.content_sha256:
                 raise ValueError('inconsistent blob digest')
             conn.execute(text('INSERT INTO ti_kev.catalog_metadata(snapshot_id,catalog) VALUES (:id, CAST(:catalog AS jsonb)) ON CONFLICT DO NOTHING'), {'id':previous['id'],'catalog':catalog_metadata})
+            stored_metadata = conn.execute(text('SELECT catalog FROM ti_kev.catalog_metadata WHERE snapshot_id=:id'), {'id':previous['id']}).scalar_one()
+            if (previous['source_url'] != collected.source_url or previous['released_at'] != catalog.dateReleased
+                    or previous['catalog_version'] != catalog.catalogVersion or previous['entry_count'] != catalog.count
+                    or stored_metadata != json.loads(catalog_metadata)):
+                raise SnapshotIntegrityError('stored snapshot metadata is inconsistent')
+            saved = conn.execute(text('''SELECT e.cve_id,e.content_sha256,r.record FROM ti_kev.snapshot_entry e
+                JOIN ti_kev.revision r ON (e.origin,e.cve_id,e.content_sha256)=(r.origin,r.cve_id,r.content_sha256)
+                WHERE e.snapshot_id=:id AND e.origin=:origin'''), {'id':previous['id'],'origin':collected.origin}).mappings().all()
+            if len(saved) != len(incoming):
+                raise SnapshotIntegrityError('stored snapshot membership is incomplete')
+            for revision in saved:
+                encoded = json.dumps(revision['record'], sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+                if (incoming.get(revision['cve_id']) != revision['content_sha256']
+                        or hashlib.sha256(encoded).hexdigest() != revision['content_sha256']):
+                    raise SnapshotIntegrityError('stored snapshot revision is inconsistent')
             conn.execute(text('UPDATE ti_kev.snapshot SET checked_at=GREATEST(checked_at, :checked) WHERE id=:id'), {'checked':collected.collected_at, 'id':previous['id']})
             return PersistenceResult(previous['id'],'unchanged',0,0,0)
         previous_entries = dict(conn.execute(text('SELECT cve_id,content_sha256 FROM ti_kev.snapshot_entry WHERE snapshot_id=:id'), {'id':previous['id']}).all()) if previous else {}

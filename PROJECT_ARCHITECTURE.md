@@ -1,4 +1,4 @@
-> **Current verification (2026-11-06):** Isolated run: 225 passed, 10 skipped (8 actual-host tests + 2 live-source opt-in). Two separate live CISA GitHub mirror tests passed, including original-byte persistence/reload in disposable PostgreSQL. Actual Agent 1 host integration and scheduler remain unverified; a DB administrator can alter audit. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `M46_HOST_ADAPTER.md`; historical claims below are unverified.
+> **Current verification (2026-11-06):** Isolated run: 227 passed, 10 skipped (8 actual-host tests + 2 live-source opt-in). Two separate live CISA GitHub mirror tests passed, including original-byte persistence/reload in disposable PostgreSQL. Actual Agent 1 host integration and scheduler remain unverified; a DB administrator can alter audit. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `M46_HOST_ADAPTER.md`; historical claims below are unverified.
 
 # Threat Intelligence Module Architecture
 
