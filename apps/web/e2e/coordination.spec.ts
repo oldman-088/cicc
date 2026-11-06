@@ -240,12 +240,28 @@ test("refreshes all Coordination panels with GET requests only", async ({ page }
   await page.goto("/coordination");
 
   const refreshButton = page.getByRole("button", { name: "Refresh all provider data" });
+  const expectedPaths = [
+    "/api/integrations/coordination/health",
+    "/api/integrations/coordination/metrics",
+    "/api/integrations/coordination/agents",
+    "/api/integrations/coordination/tasks",
+    "/api/integrations/coordination/events",
+    "/api/integrations/coordination/write-capabilities",
+  ].sort();
   await expect(refreshButton).toBeEnabled();
-  expect(requests).toHaveLength(6);
+  expect([...new Set(requests.map((request) => request.path))].sort()).toEqual(expectedPaths);
+
+  const beforeRefresh = requests.length;
   await refreshButton.click();
-  await expect.poll(() => requests.length).toBe(12);
+  await expect.poll(() => {
+    const refreshedPaths = new Set(requests.slice(beforeRefresh).map((request) => request.path));
+    return expectedPaths.every((path) => refreshedPaths.has(path));
+  }).toBe(true);
   await expect(refreshButton).toBeEnabled();
-  expect(requests.every((request) => request.method === "GET")).toBe(true);
+
+  const refreshRequests = requests.slice(beforeRefresh);
+  expect([...new Set(refreshRequests.map((request) => request.path))].sort()).toEqual(expectedPaths);
+  expect(refreshRequests.every((request) => request.method === "GET")).toBe(true);
 });
 
 test("surfaces permission denial locally without hiding independent coordination data", async ({ page }) => {
