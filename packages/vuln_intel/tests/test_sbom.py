@@ -202,11 +202,45 @@ class TestFormatDetectionAndFailureModes:
         assert result.component_count == 1
 
     def test_the_supported_format_list_is_accurate(self):
+        """Every name in this list must have a parser behind it.
+
+        This test previously asserted that ``"spdx-tag-value"`` was in the list, on the
+        reasoning that listing it documented what was accepted. It documented the
+        opposite: there was no tag-value code path, and the assertion locked the
+        over-claim in place. A list of supported formats is a promise to a caller.
+        """
         assert "cyclonedx-json" in SUPPORTED_FORMATS
         assert "spdx-json" in SUPPORTED_FORMATS
-        # Only JSON is read; tag-value is listed as unsupported by omission, and the
-        # error message names what is supported rather than leaving a caller guessing.
-        assert "spdx-tag-value" in SUPPORTED_FORMATS
+        assert "spdx-tag-value" not in SUPPORTED_FORMATS
+
+    def test_a_tag_value_document_is_refused_and_the_message_names_the_truth(self):
+        """SPDX tag-value is not supported; say so instead of failing on a JSON error.
+
+        The old behaviour decoded every document as JSON first, so a tag-value document
+        produced "Expecting value: line 1 column 1", which reads like a bug in the
+        caller's file rather than an unsupported format.
+        """
+        tag_value = (
+            "SPDXVersion: SPDX-2.3\n"
+            "DocumentName: test\n"
+            "PackageName: lodash\n"
+            "PackageVersion: 4.17.20\n"
+        )
+        with pytest.raises(SbomError) as caught:
+            inventory_from_sbom(tag_value)
+        message = str(caught.value)
+        assert "tag-value" in message
+        assert "not supported" in message
+
+    def test_every_claimed_format_has_a_working_parser(self):
+        """No name in the list may be aspirational. This is the guard, not the prose."""
+        import inspect
+
+        import vuln_intel.sbom as module
+
+        source = inspect.getsource(module)
+        for name in SUPPORTED_FORMATS:
+            assert repr(name) in source or f'"{name}"' in source
 
 
 class TestTheLoopCloses:

@@ -27,11 +27,16 @@ than an absent one.
 
 No dependencies
 ---------------
-Both formats are JSON, and both are read with ``json`` from the standard library. SPDX
-also has a tag-value serialisation; it is accepted where it is unambiguous, and a
-document in that form that cannot be read is an error rather than an empty inventory —
-an empty inventory is a *fact* ("nothing is installed"), so it must never be the result
-of a parse failure.
+Both formats are JSON, and both are read with ``json`` from the standard library.
+
+SPDX also has a tag-value serialisation, and **it is not supported**. This module used
+to list it in ``SUPPORTED_FORMATS`` while having no code path for it, so the constant
+named a capability that did not exist. M52 tested it: a valid tag-value document is
+refused with "the document is not JSON". The claim is removed rather than the gap
+hidden, because a caller who reads ``SUPPORTED_FORMATS`` to decide what it may send is
+entitled to a truthful answer. A document that cannot be read is an error rather than an
+empty inventory — an empty inventory is a *fact* ("nothing is installed"), so it must
+never be the result of a parse failure.
 """
 
 from __future__ import annotations
@@ -55,7 +60,11 @@ __all__ = [
 
 #: Formats this module reads. Named so a caller can say what is supported without
 #: importing and calling the parser.
-SUPPORTED_FORMATS = ("cyclonedx-json", "spdx-json", "spdx-tag-value")
+#: Formats this module can actually parse. Every entry has a code path and a test.
+#: ``spdx-tag-value`` was removed in M52: it was listed here for several milestones with
+#: no parser behind it, and `inventory_from_sbom` refused every tag-value document with
+#: a JSON decode error. Do not add a name here before the parser that reads it.
+SUPPORTED_FORMATS = ("cyclonedx-json", "spdx-json")
 
 
 #: Hard ceilings on what one document may contain.
@@ -74,6 +83,18 @@ MAX_LICENSES_PER_COMPONENT = 100
 #: Ceiling on a document's size in bytes. Matches the second implementation's limit;
 #: an unbounded document is a memory-exhaustion vector at a network boundary.
 MAX_DOCUMENT_BYTES = 1_000_000
+
+
+def _looks_like_spdx_tag_value(raw: bytes) -> bool:
+    """True when the bytes look like SPDX tag-value rather than JSON.
+
+    Deliberately narrow: it must start with an SPDX tag-value header and contain no
+    leading ``{``. A JSON document can never match, so this cannot shadow a real parse.
+    """
+    head = raw.lstrip()[:64]
+    if not head or head[:1] in (b"{", b"[", b'"'):
+        return False
+    return head.startswith(b"SPDXVersion:") or b"\nSPDXVersion:" in raw[:200]
 
 
 def _no_duplicate_keys(pairs: Sequence[tuple[str, Any]]) -> dict[str, Any]:
@@ -669,6 +690,15 @@ def inventory_from_sbom(
     digest: str | None = None
     if isinstance(document, (str, bytes)):
         raw = document.encode("utf-8") if isinstance(document, str) else document
+        # SPDX tag-value looks like key: value lines. Detect it before the JSON decode
+        # so the caller is told the format is unsupported, not that their file is
+        # malformed -- the second message sends them looking for a bug that is ours.
+        if _looks_like_spdx_tag_value(raw):
+            raise SbomError(
+                "this is an SPDX tag-value document, and tag-value is not supported: "
+                f"only JSON SBOMs are read ({', '.join(SUPPORTED_FORMATS)}). Convert it "
+                "to spdx-json or provide a CycloneDX JSON document."
+            )
         if len(raw) > MAX_DOCUMENT_BYTES:
             raise SbomError(
                 f"the document is {len(raw)} bytes, which exceeds the "
