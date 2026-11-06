@@ -234,6 +234,9 @@ jobs:
     # back. If it ever has to go advisory again, the reason belongs in this comment with
     # the same three conditions listed.
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/vuln_intel
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

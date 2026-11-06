@@ -69,6 +69,47 @@ class TestStructure:
         assert not problems, "; ".join(problems)
 
 
+class TestPathsAreResolvable:
+    """A job that runs ``./scripts/...`` must declare where that path is relative to.
+
+    The runtime job failed with exit 127 in CI while passing locally. The annotation
+    finally said it: "./scripts/generate_runtime_vectors.sh: No such file or directory".
+    An edit to the job header had deleted its ``defaults.run.working-directory`` block,
+    so every relative path in it resolved against the repository root.
+
+    127 reads as "a binary is missing", and I spent two rounds looking for a missing
+    binary. The real fault was a deleted three-line block, which is why this is asserted
+    structurally rather than left to whoever edits the file next.
+    """
+
+    @pytest.mark.parametrize(
+        "job_name", ["test", "oracle", "maven-rubygems-runtime"]
+    )
+    def test_jobs_using_relative_scripts_declare_a_working_directory(
+        self, workflow, job_name
+    ):
+        job = workflow["jobs"][job_name]
+        runs = " ".join(str(step.get("run", "")) for step in job["steps"])
+        if "./scripts/" not in runs:
+            pytest.skip(f"{job_name} runs no relative script")
+        declared = job.get("defaults", {}).get("run", {}).get("working-directory")
+        assert declared, (
+            f"{job_name} runs ./scripts/... but declares no "
+            "defaults.run.working-directory, so the path resolves against the repo root"
+        )
+
+    @pytest.mark.parametrize(
+        "job_name", ["test", "oracle", "maven-rubygems-runtime"]
+    )
+    def test_the_declared_directory_exists_in_the_repository(self, workflow, job_name):
+        job = workflow["jobs"][job_name]
+        declared = job.get("defaults", {}).get("run", {}).get("working-directory")
+        if not declared:
+            pytest.skip(f"{job_name} declares no working directory")
+        repo_root = WORKFLOW.parents[2]
+        assert (repo_root / declared).is_dir(), f"{job_name}: no such directory {declared}"
+
+
 class TestTheOracleJobsSayWhatTheyClaim:
     def test_the_runtime_oracle_is_gating(self, workflow):
         """It was advisory while one question was unresolvable; the condition is met.
