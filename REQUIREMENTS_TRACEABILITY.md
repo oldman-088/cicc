@@ -70,3 +70,15 @@ README.md (ULTIMATE MASTER PROMPT v1.0, main@ca8f82c) §12.
 | VI actual Agent 1 host | PR #1 handover claims 6/6; all six workflow jobs succeeded, but raw log/count unavailable to this audit and no mounted route exists | Candidate evidence only; not merged-app acceptance |
 | Production authentication and tenant isolation (§10, §17) | No principal-bound tenant data pools, RLS or cross-tenant acceptance; AMD-003 pending | NOT IMPLEMENTED/VERIFIED; tenant-isolation acceptance 0% |
 | Product-wide core modules, graph, source integrations, AI, 3D, localization and deployment (§4–§9, §17) | Candidate branches and documentation are tracked separately; no integrated acceptance evidence for full scope | INCOMPLETE; see `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md` |
+
+## M49 whole-product and gateway trace (2026-11-06)
+
+| Requirement / control | Implementation / evidence | Status and boundary |
+|---|---|---|
+| Surface domain lifecycle/probe evidence in Agent 1 dashboard | `apps/web/lib/domain-gateway.mjs`, `apps/web/app/page.tsx`, `apps/web/components/CoordinationView.tsx`; reads `/api/v1/coordination/domains` and `/domains/metrics` via existing BFF; bounded states/counters, no writes | IMPLEMENTED for read-only gateway status on Agent 1 branch; not a TI/VI data route or feature integration |
+| Fail-closed client normalization and metadata minimization | Invalid payload -> unavailable; contradictory/unknown lifecycle -> `UNKNOWN`; TI/VI rows show `NOT_MOUNTED` when no handlers; bounded custom kinds; no source refs/version/errors/tenant IDs in UI | IMPLEMENTED + 5 new Web tests; does not assert production or tenant identity |
+| Browser/BFF boundary smoke | `scripts/m49_domain_gateway_smoke.py`; temporary SQLite/token/API + production Next.js server; direct API no-token read 401, BFF GETs 200, cross-site GET/POST 403, no mounted TI/VI, no server token in responses | PASS locally and in both M49 hosted CI events; isolated branch evidence only |
+| M49 full build/test gate | Web 40/40, typecheck, production build; API 309 passed; PostgreSQL-selected 42 passed; hosted runs `42252536511` and `42252527313`, each 3/3 jobs | PASS on Agent 1 commit `e1122bd3aed644af8607bd0873f1863a2a2edf94`; not merged/mainline/deployment acceptance |
+| Original Master Prompt status | `README.md`, v1.0 at `ca8f82c0500637e22851d7128cddf99081ef3c08`, SHA-256 `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d`; every §2 objective, §4 module, §5 extension, §12 deliverable and §17 DoD mapped | See `docs/M49_MASTER_PROMPT_REQUIREMENT_STATUS.md`; full prompt and §17 remain INCOMPLETE |
+| Cross-agent source, host and migration review | Exact PR #1/#3 heads and source trees reviewed; role-level map corrected; PR #1 migration 0043/body mismatch and unpinned host-test scope documented | See `docs/M49_CROSS_AGENT_INTEGRATION_REVIEW.md`; no owner approval or migration application |
+| Merged-app, production auth and tenant isolation | Existing M47 gate remains fail-closed without approved manifest; no trusted production principal/tenant pool/RLS acceptance | BLOCKED / NOT VERIFIED; tenant-isolation acceptance 0% |

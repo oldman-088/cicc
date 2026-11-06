@@ -25810,9 +25810,16 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - Added `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`: evidence-based branch/PR/source review, completion rubric and weighted **29%** integrated Beta estimate, blockers, requests and remaining work. README Master Prompt unchanged.
 - Read-only GitHub inspection reconfirmed PR #1/#3 source-role discrepancy; posted scoped requests to PR #1 (ownership/actual-host evidence), PR #3 (Agent 2 TI + replacement Agent 3 VI), and PR #2 (Agent 4 current M47 decoder tests). No other branch modified; no reply or approval inferred.
 
-## In progress / blocked after M48 (current priorities; supersedes older queue snapshot above)
-1. Obtain owner-approved exact source/module/host/tenant manifest and explicit PR #1/#3 role confirmation; keep both implementation histories intact.
-2. Resolve production identity, authorization, tenant isolation/RLS, AMD-003 and migration governance before any shared schema or sensitive multi-tenant Beta.
-3. After approval, execute non-skipped actual-Agent-1-host TI/VI acceptance and the exact-revision merged-app runner; current PR #3 remains 0/8 actual-host tests.
-4. Keep Agent 4's domain decoder/UI disconnected until the API/BFF/tenant/error contract is approved; review its own-branch M47 update when delivered.
-5. Continue the full Master Prompt roadmap (shared data/graph, real-source collection, investigations, AI governance, accessible localized UI, 3D, deployment/recovery acceptance); do not call candidate PR code a delivered module.
+## Done — M49 (2026-11-06; Agent 1 domain-gateway visibility + alignment)
+- Implemented and pushed Agent 1 code commit `e1122bd3aed644af8607bd0873f1863a2a2edf94`: read-only gateway lifecycle/probe panel in Coordination view, fail-closed normalizer and TypeScript declaration, five Web tests, and production-BFF/API disposable smoke wired into Agent 1 CI. No API schema, migration, TI/VI route, or other-agent code changed.
+- Local verification: Web **40/40**, typecheck and production build PASS; API **309/309**; PostgreSQL-selected **42/42**; `scripts/m49_domain_gateway_smoke.py` PASS. GitHub PR run `42252536511` and push run `42252527313` each passed **3/3** jobs; the Web job included the BFF smoke.
+- Re-read `README.md` ULTIMATE MASTER PROMPT v1.0 directly (revision `ca8f82c0500637e22851d7128cddf99081ef3c08`, SHA-256 `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1`). Added complete per-requirement status in `docs/M49_MASTER_PROMPT_REQUIREMENT_STATUS.md`.
+- Exact-head review corrected the M48 role statement: PR #1 current handover supports original Agent 3 VI; PR #3 body supports replacement Agent 3 VI with earlier Agent 2 TI history. No independent human identity or source/host approval is inferred. PR #1 migration 0043 exists despite the PR body claim and remains marked unapplied; its candidate host checks do not establish mounted-app persistence. See `docs/M49_CROSS_AGENT_INTEGRATION_REVIEW.md`.
+- Posted correction/follow-up comments on PR #1 `6689778670`, PR #3 `6689783355`, PR #2 `6689786705`; no response or owner approval observed. No other branch/PR changed. Whole-product integrated Beta estimate remains **29%**; tenant-isolation acceptance **0%**; no production or TI/VI integration claim.
+
+## In progress / blocked after M49 (current priorities; supersedes older queue snapshot above)
+1. Obtain owner-approved exact application/source/module/host/tenant/auth/DB/audit/trace manifest and executable host harness; choose a single TI/VI source/revision only after approval.
+2. Resolve production identity, authorization, tenant isolation/RLS, AMD-003 and migration governance before any shared schema or sensitive multi-tenant Beta. Do not apply PR #1 migration 0043 without approval.
+3. After approval, execute non-skipped actual-Agent-1-host TI/VI acceptance and the exact-revision merged-app runner; current PR #3 actual-host suite remains **0/8**.
+4. Keep Agent 4's decoder/UI work on its own branch and disconnected from TI/VI until the API/BFF/tenant/error contract is approved; track response to PR #2 M49 request.
+5. Continue the full Master Prompt roadmap (shared data/graph, real-source collection, investigations, AI governance, Persian and accessible localized UI, 3D, deployment/recovery acceptance); do not call candidate PR code a delivered module.

@@ -1,17 +1,17 @@
-# RELEASE READINESS — Agent 1 scope (updated 2026-11-06, M36) — NOT production-ready product-wide
+# RELEASE READINESS — Agent 1 scope (updated 2026-11-06, M49) — NOT production-ready product-wide
 
-Per master prompt DoD (README.md §17, main@ca8f82c), the project must not be called
-production-ready until all items verified. Agent 1 scope status:
+Per Master Prompt DoD (repository `README.md` §17, v1.0), do not call the project
+production-ready until every applicable item is verified. Current Agent 1 branch evidence:
 
-- Automated tests passing: YES (API 234/234 incl. real-PG races + 1 live-GitHub; PG suite 41/41; web 35/35 + tsc + build).
-- Monitoring/health checks: YES (ops API, live-smoked).
-- Authentication/authorization verified: YES for token model + BFF; platform auth + tenant isolation NOT enabled (owner decision pending) → DoD security item unmet.
-- Audit logging: YES (coordination transitions audited).
-- API documentation: YES (docs/API_REFERENCE.md + /docs).
-- Deployment instructions: PARTIAL (docker-compose.verify.yml for RabbitMQ verification; no full deployment guide — DEPLOYMENT_GUIDE.md not created, infra scope).
-- Backup/restore/DR: DONE (M36) — scripts/backup_restore.py logical backup/restore/verify, TESTED vs SQLite + real PG (test_m36_backup_restore.py 3/3); docs/DISASTER_RECOVERY.md with RPO/RTO + limitations (webhook dedup state loss on restore of an old backup — SECURITY_REVIEW §M14).
-- Requirements traceability: Agent-1 scope in REQUIREMENTS_TRACEABILITY.md; product-wide pending other agents.
-- Known limitations: RabbitMQ live verification env-blocked; notifications disabled; tenant isolation pending; agent contract confirmations pending.
+- Automated checks: API **309/309**, PostgreSQL-selected **42/42**, Web **40/40**, typecheck/build and disposable API-to-production-BFF smoke **PASS** locally; hosted PR/push runs `42252536511` and `42252527313` each pass all three jobs.
+- Monitoring/health checks: Ops API and gateway lifecycle/metrics available in Agent 1 branch; M49 panel exposes gateway evidence only and no TI/VI feed.
+- Authentication/authorization: branch token gates, BFF, and same-origin tests pass; **production identity, tenant-bound authorization, and tenant isolation are NOT verified** → DoD security item unmet.
+- Audit logging: coordination transitions and Ops events are audited; trusted actor identity and cross-domain data-access audit are not established.
+- API documentation: `docs/API_REFERENCE.md` + FastAPI `/docs` cover Agent 1 APIs.
+- Deployment instructions: PARTIAL (`docs/DEPLOYMENT.md` and RabbitMQ verification tooling exist); no verified intended-production deployment guide/run.
+- Backup/restore/DR: Agent 1 logical backup/restore/verify is tested vs SQLite and PostgreSQL; `docs/DISASTER_RECOVERY.md` records limitations. No intended-production recovery drill.
+- Requirements traceability: Agent 1 scope in `REQUIREMENTS_TRACEABILITY.md`; full prompt map in `docs/M49_MASTER_PROMPT_REQUIREMENT_STATUS.md`; whole product remains incomplete.
+- Known limitations: owner-approved host/source/tenant manifest and executable harness absent; AMD-003 and migration 0043 approval pending; PR #3 actual-host tests 0/8; no mounted TI/VI; tenant-isolation acceptance 0%; RabbitMQ verification is optional/unverified for autonomous delivery; notifications disabled.
 
 ## M36 update (2026-11-06)
 - Backup/restore/verify implemented + tested (SQLite & PG roundtrip, refuse-non-empty, drift detection, unique-key preserved, API smoke on restored DB); DR doc with honest limitations.
@@ -25,3 +25,11 @@ production-ready until all items verified. Agent 1 scope status:
 - The exact-revision merged-app gate is still **BLOCKED** (exit 2, no app started) because no owner-approved manifest/module/host/tenant contract is available. PR #1 and #3 remain open; PR #3 actual-host tests remain 0/8.
 - PR #1's six-job CI and its handover's 6/6 actual-host claim are candidate-branch evidence; the raw host test count was not independently retrievable here. No VI/TI route is mounted in Agent 1's current host.
 - Production authentication/authorization, tenant isolation/RLS, AMD-003 and migration approval, connected TI/VI, full prompt modules and verified deployment remain unmet. Overall weighted integrated Beta estimate: **29%**; tenant-isolation acceptance: **0%**. Scoring method and evidence are in `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`.
+
+## M49 release gate update (2026-11-06) — **NOT BETA-ACCEPTED / NOT PRODUCTION-READY**
+
+- Current Agent 1 code baseline is `e1122bd3aed644af8607bd0873f1863a2a2edf94` on `arena/961971ed-cicc`, PR #4. Local evidence: API **309/309**, PostgreSQL-selected **42/42**, Web **40/40**, typecheck/build **PASS**. GitHub PR run [42252536511](https://github.com/oldman-088/cicc/actions/runs/42252536511) and push run [42252527313](https://github.com/oldman-088/cicc/actions/runs/42252527313) each passed API, PostgreSQL-selected, and Web/typecheck/build jobs.
+- The M49 disposable production-BFF smoke also passed in both hosted runs. It proves only the tested Agent 1 branch behavior: direct unauthenticated API reads deny, the server-side BFF serves the read-only gateway status without browser credentials, cross-site GET/POST are denied, and no TI/VI handler is mounted. It does not prove production identity, tenant isolation, or a live intelligence path.
+- The exact-revision merged-app gate remains **BLOCKED** until an owner approves the pinned application/source/module/host/tenant/auth/DB/audit/trace manifest and executable isolated host harness. PR #3 actual-host suite remains 0/8; PR #1's 6/6 candidate host-test claim is not mounted-app acceptance. Migration 0043 remains unapplied/unapproved despite the PR body discrepancy.
+- M49 is a gateway status-display milestone only. Overall integrated Beta remains **29%** (approximate, not an acceptance result); tenant-isolation acceptance remains **0%**. Do not release or describe the product as Beta-accepted/production-ready.
+- Detailed Master Prompt status: `docs/M49_MASTER_PROMPT_REQUIREMENT_STATUS.md`; cross-agent/host/migration evidence: `docs/M49_CROSS_AGENT_INTEGRATION_REVIEW.md`; current full-product score and blockers: `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`.
