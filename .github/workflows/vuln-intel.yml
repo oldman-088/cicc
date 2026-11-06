@@ -234,7 +234,10 @@ jobs:
           if-no-files-found: error
 
       - name: Differential cross-check against the real implementations
-        run: python -m pytest tests/test_version_ordering_runtime_oracle.py -m oracle -q
+        # -s so the test's ::error:: workflow commands reach the runner unbuffered and
+        # become check annotations. A disagreement that is only visible in a log is a
+        # disagreement somebody has to reproduce by hand to read.
+        run: python -m pytest tests/test_version_ordering_runtime_oracle.py -m oracle -q -s
 
       - name: Full suite in the runtime-oracle environment
         run: python -m pytest -q

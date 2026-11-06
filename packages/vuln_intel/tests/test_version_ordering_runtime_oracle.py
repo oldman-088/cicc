@@ -71,6 +71,16 @@ def _diff(scheme: VersionScheme, pairs: list) -> list[str]:
             problems.append(f"{left!r} vs {right!r}: we returned None, runtime said {expected}")
         elif actual != expected:
             problems.append(f"{left!r} vs {right!r}: we said {actual}, runtime said {expected}")
+    if problems:
+        # Emit GitHub workflow commands so each disagreement becomes a check annotation.
+        # Without this the only copy of the evidence is the job log, and a failure that
+        # says "N disagreements" without naming any of them is a failure someone has to
+        # reproduce by hand. Annotations are readable from the API, so the evidence
+        # travels even when the log does not.
+        for problem in problems[:20]:
+            print(f"::error title={scheme.value} disagreement::{problem}")
+        if len(problems) > 20:
+            print(f"::warning::{len(problems) - 20} further disagreement(s) not annotated")
     return problems
 
 
