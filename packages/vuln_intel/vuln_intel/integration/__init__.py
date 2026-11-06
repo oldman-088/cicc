@@ -24,11 +24,13 @@ from .mapping import (
     to_store_payload,
 )
 from .service import IngestionPolicy, IngestionService
+from .sqlite_store import SCHEMA_VERSION, SQLiteVulnerabilityStore
 from .store import InMemoryVulnerabilityStore, RecordingAudit, RefusingStore
 
 __all__ = [
     "ENRICHMENT_KEY",
     "ENTITY_KIND",
+    "SCHEMA_VERSION",
     "AuditPort",
     "ImportReport",
     "InMemoryVulnerabilityStore",
@@ -37,6 +39,7 @@ __all__ = [
     "RecordOutcome",
     "RecordingAudit",
     "RefusingStore",
+    "SQLiteVulnerabilityStore",
     "UpsertOutcome",
     "UpsertResult",
     "VulnerabilityStore",

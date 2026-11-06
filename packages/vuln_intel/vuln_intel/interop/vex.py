@@ -44,7 +44,7 @@ from typing import Any
 
 from ..affected import Verdict
 from ..assessment import AssessmentReport
-from ..schema import Severity
+from ..schema import SEVERITY_ORDER, Severity
 from ..watchlist import PackageMatch
 
 __all__ = [
@@ -68,14 +68,9 @@ _ALLOWED_STATES = frozenset(
 #: as "CVSSv40" when present.
 _CVSS_METHOD = {"3.0": "CVSSv30", "3.1": "CVSSv31", "4.0": "CVSSv40"}
 
-_SEVERITY_ORDER = {
-    Severity.CRITICAL: 0,
-    Severity.HIGH: 1,
-    Severity.MEDIUM: 2,
-    Severity.LOW: 3,
-    Severity.NONE: 4,
-    Severity.UNKNOWN: 5,
-}
+#: Shared with the API and the store; see ``schema.SEVERITY_ORDER``. It used to be a
+#: private copy here, which is how the store ended up sorting severities by name.
+_SEVERITY_ORDER = SEVERITY_ORDER
 
 
 def vex_state_for(verdict: Verdict, *, kev: bool | None = None) -> str:

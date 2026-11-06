@@ -128,6 +128,32 @@ def strictest_status(values: Iterable[RecordStatus | None]) -> RecordStatus | No
     return min(present, key=lambda s: _STATUS_PRECEDENCE.index(s))
 
 
+#: Canonical severity order, most severe first.
+#:
+#: Lexicographic order on the severity *name* is wrong and quietly so:
+#: ``sorted(["critical","high","low","medium"])`` puts **low before medium**, so a
+#: listing sorted by severity showed the least urgent findings in the middle. Nothing
+#: depended on the order being right, so nothing failed.
+#:
+#: ``UNKNOWN`` sorts last deliberately. It means "the source did not state a severity",
+#: which is not a small risk — but it is also not a claim of severity, and putting it
+#: first would rank unrated records above confirmed criticals.
+SEVERITY_ORDER: dict[Severity, int] = {}  # populated below, after Severity is defined
+
+
+def severity_rank(value: Severity | str | None) -> int:
+    """Sort key for severity, most severe = 0. Unrecognised values sort last."""
+    if isinstance(value, Severity):
+        return SEVERITY_ORDER.get(value, len(SEVERITY_ORDER))
+    if isinstance(value, str):
+        try:
+            return SEVERITY_ORDER[Severity(value.strip().lower())]
+        except (ValueError, KeyError):
+            return len(SEVERITY_ORDER)
+    return len(SEVERITY_ORDER)
+
+
+
 class Severity(str, Enum):
     """CVSS v3 qualitative rating. ``UNKNOWN`` means "not stated by the source"."""
 
@@ -137,6 +163,18 @@ class Severity(str, Enum):
     HIGH = "high"
     CRITICAL = "critical"
     UNKNOWN = "unknown"
+
+
+SEVERITY_ORDER.update(
+    {
+        Severity.CRITICAL: 0,
+        Severity.HIGH: 1,
+        Severity.MEDIUM: 2,
+        Severity.LOW: 3,
+        Severity.NONE: 4,
+        Severity.UNKNOWN: 5,
+    }
+)
 
 
 def utcnow() -> datetime:

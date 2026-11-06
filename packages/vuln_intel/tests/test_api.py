@@ -8,6 +8,8 @@ implementable by a host framework without re-deriving the rules.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from vuln_intel.errors import ValidationError
@@ -24,6 +26,7 @@ from vuln_intel.integration.api import (
 )
 from vuln_intel.integration.service import IngestionPolicy, IngestionService
 from vuln_intel.integration.store import InMemoryVulnerabilityStore
+from vuln_intel.schema import Severity, severity_rank
 
 from . import fixtures as fx
 from .conftest import FakeTransport, no_wait, response
@@ -627,3 +630,87 @@ class TestFullRecordRoundTrip:
         assert shaped["severity"] == "high"
         assert shaped["sources"] == ["nvd"]
         assert shaped["cvss"]["base_score"] == 7.0
+
+class TestSeverityOrderingIsSeverityOrder:
+    """`order="severity"` used to sort by the severity *name*, not by severity.
+
+    Lexicographic order on {"critical","high","low","medium","none","unknown"} puts
+    "low" before "medium". A listing sorted by severity therefore showed the least
+    urgent findings above the medium ones — not crashing, not visible in a spot check
+    of two rows, and nothing asserted the order so nothing failed.
+
+    These tests pin the order itself and pin that the API and the store agree on it.
+    """
+
+    _SEVERITIES = (
+        ("CVE-2026-0101", "low"),
+        ("CVE-2026-0102", "critical"),
+        ("CVE-2026-0103", "medium"),
+        ("CVE-2026-0104", "high"),
+        ("CVE-2026-0105", "none"),
+        ("CVE-2026-0106", "unknown"),
+    )
+
+    def _seeded(self):
+        store = InMemoryVulnerabilityStore(allow_fixture=True)
+        moment = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        for cve, severity in self._SEVERITIES:
+            store.upsert(
+                tenant_id="tenant-a",
+                cve=cve,
+                entity={},
+                details={"severity": severity, "kev": False},
+                enrichment=None,
+                provenance={"source": "nvd"},
+                collected_at=moment,
+                dry_run=False,
+            )
+        return store
+
+    def test_ascending_is_most_severe_first(self):
+        rows, _ = self._seeded().list(tenant_id="tenant-a", limit=10, order="severity")
+        assert [row["details"]["severity"] for row in rows] == [
+            "critical", "high", "medium", "low", "none", "unknown",
+        ]
+
+    def test_descending_is_the_exact_reverse(self):
+        rows, _ = self._seeded().list(tenant_id="tenant-a", limit=10, order="-severity")
+        assert [row["details"]["severity"] for row in rows] == [
+            "unknown", "none", "low", "medium", "high", "critical",
+        ]
+
+    def test_medium_never_sorts_below_low(self):
+        """The specific inversion that the bug produced."""
+        rows, _ = self._seeded().list(tenant_id="tenant-a", limit=10, order="severity")
+        severities = [row["details"]["severity"] for row in rows]
+        assert severities.index("medium") < severities.index("low")
+
+    def test_the_api_exposes_the_same_order_as_the_store(self):
+        """One order, not two: the service and the listing must not disagree."""
+        rows, _ = self._seeded().list(tenant_id="tenant-a", limit=10, order="severity")
+        store_order = [row["details"]["severity"] for row in rows]
+        canonical = [s.value for s in sorted(Severity, key=severity_rank)]
+        assert store_order == canonical
+
+    def test_paging_by_severity_does_not_repeat_or_skip(self):
+        """A tie-break is required or equal severities make the cursor ambiguous."""
+        store = self._seeded()
+        seen: list[str] = []
+        cursor = None
+        for _ in range(10):
+            rows, cursor = store.list(
+                tenant_id="tenant-a", limit=2, cursor=cursor, order="severity"
+            )
+            seen.extend(row["cve"] for row in rows)
+            if cursor is None:
+                break
+        assert len(seen) == len(set(seen)) == len(self._SEVERITIES)
+
+    def test_unknown_severity_is_ranked_last_not_first(self):
+        assert severity_rank("unknown") == max(severity_rank(s) for s in Severity)
+        assert severity_rank("critical") == 0
+
+    def test_a_bogus_severity_sorts_after_every_known_one(self):
+        assert severity_rank("bogus") > severity_rank("unknown")
+        assert severity_rank(None) > severity_rank("unknown")
+

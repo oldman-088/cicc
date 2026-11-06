@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
+from ..schema import severity_rank
 from .contracts import UpsertOutcome, UpsertResult
 from .mapping import ENRICHMENT_KEY, assert_persistable, event_types
 
@@ -112,8 +113,16 @@ class InMemoryVulnerabilityStore:
                 if bool(_field(row, "kev"))
             ]
 
-        def severity_key(row: _Row) -> str:
-            return str(_field(row, "severity") or "")
+        def severity_key(row: _Row) -> tuple[int, str]:
+            """Sort by canonical severity rank, not by the severity *name*.
+
+            Sorting the name put ``low`` before ``medium`` — lexicographic order on
+            "critical"/"high"/"low"/"medium"/"none"/"unknown" is not severity order.
+            The tuple keeps a stable tie-break so paging is deterministic; without it
+            the cursor could not identify a position among equal-severity rows.
+            """
+            raw = _field(row, "severity")
+            return (severity_rank(raw if isinstance(raw, str) else None), str(raw or ""))
 
         reverse = order.startswith("-")
         rows.sort(
@@ -123,7 +132,7 @@ class InMemoryVulnerabilityStore:
         # The cursor is the last key emitted, not an offset: an offset shifts when
         # rows are inserted mid-listing, which would skip or repeat records.
         if cursor:
-            keys = [item[0] if order.endswith("cve") else severity_key(item[1]) for item in rows]
+            keys = [item[0] for item in rows]
             try:
                 start = keys.index(cursor) + 1
             except ValueError:
@@ -134,7 +143,11 @@ class InMemoryVulnerabilityStore:
         next_cursor = None
         if len(rows) > limit and page:
             last = page[-1]
-            next_cursor = last[0] if order.endswith("cve") else severity_key(last[1])
+            # The cursor is always the CVE. For a severity order that is still a
+            # unique, stable key, because (tenant, cve) is unique — whereas the
+            # severity rank is not, and a cursor on a non-unique key either repeats
+            # or skips rows at a page boundary.
+            next_cursor = last[0]
         out: list[Mapping[str, Any]] = []
         for cve, row in page:
             out.append(
