@@ -19,7 +19,7 @@
     "DAG",
     "sweep"
    ],
-   "tests": "API 241/241; PG 41/41; web 35/35; contract 31/31; e2e 24/24; sandbox trials 23/23 + 32/32"
+   "tests": "API 244/244; PG 41/41; web 35/35; contract 31/31; e2e 24/24; trials 23/23 + 32/32 + M40 23/23 (sandbox-labeled)"
   },
   "ops": {
    "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -43,7 +43,7 @@
   "never_touch_other_branches": true
  },
  "milestones_done": [
-  "M1..M37"
+  "M1..M38"
  ],
  "contracts": "{'version': 'v1.0', 'doc': 'docs/INTEGRATION_CONTRACTS.md', 'confirmation': 'requested on PR #4, pending Agents 2/3/4', 'adoption': 'Agents 2/3/4: PENDING explicit confirmation (no replies as of 2026-11-05 10:10 UTC; no agent PR references /api/v1/coordination yet); v1.0 proposed, additive, unchanged \u2014 docs/CONTRACT_ADOPTION.md'} | M29: amendment workflow live (AMD-001 pending owner accept)",
  "tenant_isolation": "decision doc only (docs/TENANT_ISOLATION_DECISION.md); awaiting owner; not production-ready",
@@ -104,7 +104,7 @@
  "backup_restore": "DONE M36: scripts/backup_restore.py tested vs SQLite+PG; docs/DISASTER_RECOVERY.md",
  "agent_model": {
   "agent1": "coordination+ops (this branch, PR #4)",
-  "agent2": "TI primary \u2014 AVAILABLE (owner confirmed 2026-11-06), PR #3 @23715c9",
+  "agent2": "TI primary \u2014 AVAILABLE; PR #3 head 4f1776f (confirmed via GitHub API 2026-11-06T07:19Z)",
   "agent3_replacement": "VI primary, PR #1 @84fca76 / PR #8 @222fdfc",
   "agent4": "frontend primary, PR #2 @747a86c (PR #7 backup inactive)",
   "inactive": [
@@ -112,5 +112,6 @@
    "Agent 6",
    "Backup Agent 4"
   ]
- }
+ },
+ "ti_integration": "PR #3 @4f1776f read-only adapter verified (M40 trial); NOT mounted in production (PR unmerged); data EXPERIMENTAL_DEMO_DATA_ONLY"
 }
