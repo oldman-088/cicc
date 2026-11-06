@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type FormEvent } from "react";
 import type { Locale } from "../application/localization";
 import { useCiccLocale } from "../application/CiccApplication";
 import {
+  createCoordinationTask,
   integrationEndpoints,
   parseCoordinationAgents,
   parseCoordinationEvents,
@@ -11,6 +12,9 @@ import {
   parseCoordinationMetrics,
   parseCoordinationTaskTrace,
   parseCoordinationTasks,
+  parseCoordinationWriteCapabilities,
+  routeCoordinationTask,
+  IntegrationApiError,
   type CoordinationAgent,
   type CoordinationEvent,
   type CoordinationHealth,
@@ -18,12 +22,15 @@ import {
   type CoordinationMetrics,
   type CoordinationTask,
   type CoordinationTaskTrace,
+  type CoordinationWriteCapabilities,
+  type CreateCoordinationTaskResult,
+  type RouteCoordinationTaskResult,
 } from "../../lib/integration-api";
 import { ResourcePanel } from "../integrations/ResourcePanel";
-import { useIntegrationResource } from "../integrations/useIntegrationResource";
+import { useIntegrationResource, type ResourceState } from "../integrations/useIntegrationResource";
 import styles from "./CoordinationWorkspace.module.css";
 
-type Messages = {
+type BaseMessages = {
   eyebrow: string;
   title: string;
   intro: string;
@@ -122,12 +129,58 @@ type Messages = {
   taskIdempotencyKey: string;
 };
 
-const copy: Record<Locale, Messages> = {
+type WorkflowMessages = {
+  taskCreation: string;
+  taskCreationSummary: string;
+  taskCreationDisabled: string;
+  taskKindLabel: string;
+  taskTitleLabel: string;
+  taskPriorityLabel: string;
+  taskPayloadLabel: string;
+  taskPayloadHint: string;
+  taskPayloadInvalid: string;
+  taskKindHint: string;
+  taskRequiresApproval: string;
+  taskCreateSubmit: string;
+  taskCreating: string;
+  taskCreated: string;
+  taskCreatedDuplicate: string;
+  taskCreatedState: string;
+  taskCreateError: string;
+  taskCreateUncertain: string;
+  taskRouting: string;
+  taskRouteButton: string;
+  taskRoutingDisabled: string;
+  taskRoutingProgress: string;
+  taskRoutingError: string;
+  taskRoutingUncertain: string;
+  taskRouted: string;
+  taskRouteNoAgent: string;
+  taskRouteVia: string;
+  taskRouteRule: string;
+  taskRouteScore: string;
+  taskRouteCandidates: string;
+  taskRouteReasons: string;
+  taskRoutingUnreported: string;
+  taskResult: string;
+  taskResultEmpty: string;
+  taskProgress: string;
+  taskAttempts: string;
+  pageNavigation: string;
+  pageSize: string;
+  previousPage: string;
+  nextPage: string;
+  page: string;
+};
+
+type Messages = BaseMessages & WorkflowMessages;
+
+const copy: Record<Locale, BaseMessages> = {
   en: {
     eyebrow: "CICC / COORDINATION",
     title: "Agent Coordination",
-    intro: "Read-only agent, task, metric, and webhook-event views from the configured coordination provider.",
-    readOnly: "READ ONLY",
+    intro: "Provider-backed agent, task, metric, and webhook-event views. Task creation and routing are available only when their separate server-side gates are enabled.",
+    readOnly: "READ + GATED WRITES",
     scopeWarning: "Trusted single-tenant scope: these provider records have no tenant isolation, and this frontend does not authenticate users. Do not expose this deployment to untrusted users or multiple tenants.",
     metrics: "Coordination metrics",
     agents: "Registered agents",
@@ -227,8 +280,8 @@ const copy: Record<Locale, Messages> = {
   ar: {
     eyebrow: "CICC / التنسيق",
     title: "تنسيق الوكلاء",
-    intro: "عرض للقراءة فقط للوكلاء والمهام والمقاييس وأحداث الويب هوك من مزوّد التنسيق المضبوط.",
-    readOnly: "للقراءة فقط",
+    intro: "عرض سجلات الوكلاء والمهام والمقاييس وأحداث الويب هوك من مزوّد التنسيق. لا يتاح إنشاء المهام وتوجيهها إلا عند تفعيل بوابتيهما المنفصلتين على الخادم.",
+    readOnly: "قراءة + كتابة مقيّدة",
     scopeWarning: "نطاق موثوق لمستأجر واحد: لا تتضمن سجلات المزوّد عزل المستأجرين، ولا تصادق هذه الواجهة على المستخدمين. لا تعرض هذا النشر لمستخدمين غير موثوقين أو لعدة مستأجرين.",
     metrics: "مقاييس التنسيق",
     agents: "الوكلاء المسجّلون",
@@ -328,8 +381,8 @@ const copy: Record<Locale, Messages> = {
   fa: {
     eyebrow: "CICC / هماهنگی",
     title: "هماهنگی عامل‌ها",
-    intro: "نمای فقط‌خواندنی عامل‌ها، وظایف، معیارها و رویدادهای وب‌هوک از منبع هماهنگی پیکربندی‌شده.",
-    readOnly: "فقط‌خواندنی",
+    intro: "نمای رکوردهای عامل‌ها، وظایف، معیارها و رویدادهای وب‌هوک از منبع هماهنگی. ایجاد و مسیریابی وظیفه فقط با فعال‌بودن دروازه‌های جداگانهٔ سرور در دسترس است.",
+    readOnly: "خواندن + نوشتن کنترل‌شده",
     scopeWarning: "محدودهٔ استقرار مورداعتماد و تک‌مستاجری: رکوردهای منبع جداسازی مستأجر ندارند و این رابط کاربران را احراز هویت نمی‌کند. این استقرار را در معرض کاربران نامطمئن یا چند مستأجر قرار ندهید.",
     metrics: "معیارهای هماهنگی",
     agents: "عامل‌های ثبت‌شده",
@@ -425,6 +478,138 @@ const copy: Record<Locale, Messages> = {
     traceEmptyDeliveries: "تلاشی برای تحویل بازگردانده نشد.",
     traceEmptyApprovals: "رکوردی از تأیید بازگردانده نشد.",
     taskIdempotencyKey: "کلید جلوگیری از تکرار",
+  },
+};
+
+const workflowCopy: Record<Locale, WorkflowMessages> = {
+  en: {
+    taskCreation: "Create a coordination task",
+    taskCreationSummary: "Task submission uses a fixed server-side API route. Creation and routing are separately gated; this frontend does not authenticate users.",
+    taskCreationDisabled: "Task creation is disabled for this deployment. No task was submitted. Enable the server-side create gate only behind trusted single-tenant access controls.",
+    taskKindLabel: "Task kind",
+    taskTitleLabel: "Task title",
+    taskPriorityLabel: "Priority (1–10)",
+    taskPayloadLabel: "Task payload (JSON object)",
+    taskPayloadHint: "Provide only fields accepted by your coordination policy. Routing rules may read labels or required capabilities.",
+    taskPayloadInvalid: "Enter a valid JSON object for the task payload.",
+    taskKindHint: "Use a kind supported by the configured coordination provider (lowercase letters, digits, and underscores).",
+    taskRequiresApproval: "Require approval before work proceeds",
+    taskCreateSubmit: "Create task",
+    taskCreating: "Submitting task…",
+    taskCreated: "The provider accepted the task creation request.",
+    taskCreatedDuplicate: "The provider reported that this request matched an existing task.",
+    taskCreatedState: "Provider-reported state",
+    taskCreateError: "The server rejected the task request. Check the fields and the provider policy.",
+    taskCreateUncertain: "The response could not confirm whether the task was created. Refresh the task list and trace before retrying to avoid duplicate work.",
+    taskRouting: "Routing decision",
+    taskRouteButton: "Route task",
+    taskRoutingDisabled: "Task routing is not enabled for this deployment. The route action remains unavailable unless its separate server-side gate is enabled.",
+    taskRoutingProgress: "Requesting route…",
+    taskRoutingError: "The server rejected the routing request. Refresh the task and check provider policy.",
+    taskRoutingUncertain: "The routing request could not be confirmed. Refresh this task and its trace before retrying.",
+    taskRouted: "Routing response received.",
+    taskRouteNoAgent: "The provider returned no assigned agent.",
+    taskRouteVia: "Routing method",
+    taskRouteRule: "Matched rule",
+    taskRouteScore: "Score",
+    taskRouteCandidates: "Eligible candidates",
+    taskRouteReasons: "Routing reasons",
+    taskRoutingUnreported: "The provider has not returned a routing explanation.",
+    taskResult: "Task result reported by provider",
+    taskResultEmpty: "The provider returned an empty result.",
+    taskProgress: "Reported progress",
+    taskAttempts: "Attempts reported",
+    pageNavigation: "Task result pages",
+    pageSize: "Tasks per page",
+    previousPage: "Previous page",
+    nextPage: "Next page",
+    page: "Page",
+  },
+  ar: {
+    taskCreation: "إنشاء مهمة تنسيق",
+    taskCreationSummary: "يستخدم إرسال المهام مسار API ثابتًا على الخادم. إنشاء المهام وتوجيهها مقيّدان كلٌّ على حدة؛ ولا تصادق هذه الواجهة على المستخدمين.",
+    taskCreationDisabled: "إنشاء المهام غير مفعّل لهذا النشر. لم تُرسل أي مهمة. لا تفعّل بوابة الإنشاء على الخادم إلا خلف ضوابط وصول موثوقة لمستأجر واحد.",
+    taskKindLabel: "نوع المهمة",
+    taskTitleLabel: "عنوان المهمة",
+    taskPriorityLabel: "الأولوية (١–١٠)",
+    taskPayloadLabel: "حمولة المهمة (كائن JSON)",
+    taskPayloadHint: "أدخل الحقول التي تقبلها سياسة التنسيق فقط. قد تستخدم قواعد التوجيه التسميات أو الإمكانات المطلوبة.",
+    taskPayloadInvalid: "أدخل كائن JSON صالحًا لحمولة المهمة.",
+    taskKindHint: "استخدم نوعًا يدعمه مزوّد التنسيق المضبوط (أحرف لاتينية صغيرة وأرقام وشرطات سفلية).",
+    taskRequiresApproval: "طلب موافقة قبل متابعة العمل",
+    taskCreateSubmit: "إنشاء مهمة",
+    taskCreating: "جارٍ إرسال المهمة…",
+    taskCreated: "أكد المزوّد قبول طلب إنشاء المهمة.",
+    taskCreatedDuplicate: "أفاد المزوّد بأن الطلب يطابق مهمة موجودة.",
+    taskCreatedState: "الحالة كما أبلغ عنها المزوّد",
+    taskCreateError: "رفض الخادم طلب المهمة. تحقّق من الحقول وسياسة المزوّد.",
+    taskCreateUncertain: "لم تؤكد الاستجابة ما إذا أُنشئت المهمة. حدّث قائمة المهام وسجلّ التتبع قبل إعادة المحاولة لتجنّب العمل المكرر.",
+    taskRouting: "قرار التوجيه",
+    taskRouteButton: "توجيه المهمة",
+    taskRoutingDisabled: "توجيه المهام غير مفعّل لهذا النشر. يظل الإجراء متاحًا فقط عند تفعيل بوابته المنفصلة على الخادم.",
+    taskRoutingProgress: "جارٍ طلب التوجيه…",
+    taskRoutingError: "رفض الخادم طلب التوجيه. حدّث المهمة وتحقق من سياسة المزوّد.",
+    taskRoutingUncertain: "تعذّر تأكيد طلب التوجيه. حدّث المهمة وسجلّ التتبع قبل إعادة المحاولة.",
+    taskRouted: "تم استلام استجابة التوجيه.",
+    taskRouteNoAgent: "لم يُرجع المزوّد وكيلًا معيّنًا.",
+    taskRouteVia: "طريقة التوجيه",
+    taskRouteRule: "القاعدة المطابقة",
+    taskRouteScore: "الدرجة",
+    taskRouteCandidates: "المرشحون المؤهلون",
+    taskRouteReasons: "أسباب التوجيه",
+    taskRoutingUnreported: "لم يُرجع المزوّد تفسيرًا للتوجيه.",
+    taskResult: "نتيجة المهمة كما أبلغ عنها المزوّد",
+    taskResultEmpty: "أعاد المزوّد نتيجة فارغة.",
+    taskProgress: "التقدم المبلّغ عنه",
+    taskAttempts: "المحاولات المبلّغ عنها",
+    pageNavigation: "صفحات نتائج المهام",
+    pageSize: "المهام في الصفحة",
+    previousPage: "الصفحة السابقة",
+    nextPage: "الصفحة التالية",
+    page: "الصفحة",
+  },
+  fa: {
+    taskCreation: "ایجاد وظیفهٔ هماهنگی",
+    taskCreationSummary: "ارسال وظیفه از یک مسیر ثابت API در سرور استفاده می‌کند. ایجاد و مسیردهی جداگانه کنترل می‌شوند؛ این رابط کاربران را احراز هویت نمی‌کند.",
+    taskCreationDisabled: "ایجاد وظیفه در این استقرار فعال نیست. هیچ وظیفه‌ای ارسال نشد. دروازهٔ ایجاد را فقط پشت کنترل دسترسی معتبر تک‌مستاجری فعال کنید.",
+    taskKindLabel: "نوع وظیفه",
+    taskTitleLabel: "عنوان وظیفه",
+    taskPriorityLabel: "اولویت (۱–۱۰)",
+    taskPayloadLabel: "بار وظیفه (شیء JSON)",
+    taskPayloadHint: "فقط فیلدهای پذیرفته‌شده توسط سیاست هماهنگی را وارد کنید. قواعد مسیریابی ممکن است برچسب‌ها یا قابلیت‌های لازم را بخوانند.",
+    taskPayloadInvalid: "برای بار وظیفه یک شیء JSON معتبر وارد کنید.",
+    taskKindHint: "از نوعی پشتیبانی‌شده توسط ارائه‌دهندهٔ هماهنگی پیکربندی‌شده استفاده کنید (حروف کوچک لاتین، رقم و زیرخط).",
+    taskRequiresApproval: "پیش از ادامهٔ کار نیازمند تأیید باشد",
+    taskCreateSubmit: "ایجاد وظیفه",
+    taskCreating: "در حال ارسال وظیفه…",
+    taskCreated: "ارائه‌دهنده درخواست ایجاد وظیفه را پذیرفت.",
+    taskCreatedDuplicate: "ارائه‌دهنده گزارش کرد این درخواست با وظیفه‌ای موجود تطبیق دارد.",
+    taskCreatedState: "وضعیت گزارش‌شده از ارائه‌دهنده",
+    taskCreateError: "سرور درخواست وظیفه را نپذیرفت. فیلدها و سیاست ارائه‌دهنده را بررسی کنید.",
+    taskCreateUncertain: "پاسخ ایجاد وظیفه را تأیید نکرد. برای جلوگیری از کار تکراری، پیش از تلاش دوباره فهرست وظایف و ردگیری را تازه کنید.",
+    taskRouting: "تصمیم مسیریابی",
+    taskRouteButton: "مسیردهی وظیفه",
+    taskRoutingDisabled: "مسیردهی وظیفه در این استقرار فعال نیست. این اقدام فقط با فعال‌سازی دروازهٔ جداگانهٔ سرور در دسترس خواهد بود.",
+    taskRoutingProgress: "در حال درخواست مسیریابی…",
+    taskRoutingError: "سرور درخواست مسیریابی را نپذیرفت. وظیفه را تازه کنید و سیاست ارائه‌دهنده را بررسی کنید.",
+    taskRoutingUncertain: "درخواست مسیریابی تأیید نشد. پیش از تلاش دوباره وظیفه و ردگیری آن را تازه کنید.",
+    taskRouted: "پاسخ مسیریابی دریافت شد.",
+    taskRouteNoAgent: "ارائه‌دهنده هیچ عامل تخصیص‌یافته‌ای برنگرداند.",
+    taskRouteVia: "روش مسیریابی",
+    taskRouteRule: "قاعدهٔ منطبق",
+    taskRouteScore: "امتیاز",
+    taskRouteCandidates: "نامزدهای واجد شرایط",
+    taskRouteReasons: "دلایل مسیریابی",
+    taskRoutingUnreported: "ارائه‌دهنده توضیحی برای مسیریابی برنگردانده است.",
+    taskResult: "نتیجهٔ وظیفه گزارش‌شده از ارائه‌دهنده",
+    taskResultEmpty: "ارائه‌دهنده نتیجهٔ خالی برگرداند.",
+    taskProgress: "پیشرفت گزارش‌شده",
+    taskAttempts: "تلاش‌های گزارش‌شده",
+    pageNavigation: "صفحه‌های نتایج وظیفه",
+    pageSize: "وظیفه در هر صفحه",
+    previousPage: "صفحهٔ قبل",
+    nextPage: "صفحهٔ بعد",
+    page: "صفحه",
   },
 };
 
@@ -714,71 +899,434 @@ function TaskTraceDisclosure({ taskId, locale, messages }: { taskId: string; loc
   );
 }
 
+function TaskCreationPanel({
+  state,
+  onRefresh,
+  messages,
+  kindOptions,
+  onTaskCreated,
+}: {
+  state: ResourceState<CoordinationWriteCapabilities>;
+  onRefresh: () => void;
+  messages: Messages;
+  kindOptions: string[];
+  onTaskCreated: (result: CreateCoordinationTaskResult) => void;
+}) {
+  return (
+    <ResourcePanel title={messages.taskCreation} state={state} onRefresh={onRefresh}>
+      {(capabilities) => capabilities.task_creation_enabled ? (
+        <TaskCreateForm messages={messages} kindOptions={kindOptions} onTaskCreated={onTaskCreated} />
+      ) : (
+        <div className={styles.taskCreateContent}>
+          <p className={styles.scopeNote}>{messages.taskCreationSummary}</p>
+          <p className={styles.inlineNote}>{messages.taskCreationDisabled}</p>
+        </div>
+      )}
+    </ResourcePanel>
+  );
+}
+
+function TaskCreateForm({
+  messages,
+  kindOptions,
+  onTaskCreated,
+}: {
+  messages: Messages;
+  kindOptions: string[];
+  onTaskCreated: (result: CreateCoordinationTaskResult) => void;
+}) {
+  const id = useId().replaceAll(":", "");
+  const [kind, setKind] = useState("");
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState("5");
+  const [payload, setPayload] = useState("{}");
+  const [requiresApproval, setRequiresApproval] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [payloadInvalid, setPayloadInvalid] = useState(false);
+  const [failure, setFailure] = useState<IntegrationApiError | null>(null);
+  const [created, setCreated] = useState<CreateCoordinationTaskResult | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFailure(null);
+    setCreated(null);
+
+    let decodedPayload: unknown;
+    try {
+      decodedPayload = JSON.parse(payload) as unknown;
+    } catch {
+      setPayloadInvalid(true);
+      return;
+    }
+    if (typeof decodedPayload !== "object" || decodedPayload === null || Array.isArray(decodedPayload)) {
+      setPayloadInvalid(true);
+      return;
+    }
+    setPayloadInvalid(false);
+    setSubmitting(true);
+    try {
+      const result = await createCoordinationTask({
+        kind: kind.trim(),
+        title: title.trim(),
+        priority: Number(priority),
+        payload: decodedPayload as Record<string, unknown>,
+        requires_approval: requiresApproval,
+      });
+      setCreated(result);
+      onTaskCreated(result);
+    } catch (cause) {
+      setFailure(cause instanceof IntegrationApiError ? cause : new IntegrationApiError("unavailable"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className={styles.taskCreateContent}>
+      <p className={styles.scopeNote}>{messages.taskCreationSummary}</p>
+      <form className={styles.taskForm} onSubmit={(event) => void submit(event)}>
+        <label htmlFor={`${id}-kind`}>
+          <span>{messages.taskKindLabel}</span>
+          <input
+            id={`${id}-kind`}
+            type="text"
+            dir="ltr"
+            required
+            minLength={1}
+            maxLength={64}
+            pattern="[a-z0-9_]{1,64}"
+            list={`${id}-kind-options`}
+            aria-describedby={`${id}-kind-hint`}
+            value={kind}
+            onChange={(event) => setKind(event.target.value)}
+            autoComplete="off"
+          />
+        </label>
+        <datalist id={`${id}-kind-options`}>
+          {kindOptions.map((option) => <option key={option} value={option} />)}
+        </datalist>
+        <small id={`${id}-kind-hint`}>{messages.taskKindHint}</small>
+        <label htmlFor={`${id}-title`}>
+          <span>{messages.taskTitleLabel}</span>
+          <input
+            id={`${id}-title`}
+            type="text"
+            dir="auto"
+            required
+            maxLength={500}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </label>
+        <label htmlFor={`${id}-priority`}>
+          <span>{messages.taskPriorityLabel}</span>
+          <input
+            id={`${id}-priority`}
+            type="number"
+            dir="ltr"
+            min={1}
+            max={10}
+            step={1}
+            required
+            value={priority}
+            onChange={(event) => setPriority(event.target.value)}
+          />
+        </label>
+        <label htmlFor={`${id}-payload`}>
+          <span>{messages.taskPayloadLabel}</span>
+          <textarea
+            id={`${id}-payload`}
+            dir="ltr"
+            rows={5}
+            maxLength={64_000}
+            spellCheck={false}
+            aria-invalid={payloadInvalid}
+            aria-describedby={`${id}-payload-hint${payloadInvalid ? ` ${id}-payload-error` : ""}`}
+            value={payload}
+            onChange={(event) => {
+              setPayload(event.target.value);
+              setPayloadInvalid(false);
+            }}
+          />
+        </label>
+        <small id={`${id}-payload-hint`}>{messages.taskPayloadHint}</small>
+        {payloadInvalid && <span id={`${id}-payload-error`} className={styles.fieldError} role="alert">{messages.taskPayloadInvalid}</span>}
+        <label className={styles.checkboxLabel} htmlFor={`${id}-approval`}>
+          <input
+            id={`${id}-approval`}
+            type="checkbox"
+            checked={requiresApproval}
+            onChange={(event) => setRequiresApproval(event.target.checked)}
+          />
+          <span>{messages.taskRequiresApproval}</span>
+        </label>
+        <button className={styles.traceButton} type="submit" disabled={submitting}>
+          {submitting ? messages.taskCreating : messages.taskCreateSubmit}
+        </button>
+      </form>
+      {failure && (
+        <p className={styles.errorNote} role="alert">
+          {failure.kind === "unavailable" || failure.kind === "invalid_response"
+            ? messages.taskCreateUncertain
+            : messages.taskCreateError}
+        </p>
+      )}
+      {created && (
+        <div className={styles.taskCreateSuccess} role="status" aria-live="polite">
+          <p>{messages.taskCreated}</p>
+          {created.duplicate && <p>{messages.taskCreatedDuplicate}</p>}
+          <dl className={styles.smallMeta}>
+            <div><dt>{messages.taskId}</dt><dd><code><bdi dir="ltr">{created.task_id}</bdi></code></dd></div>
+            <div><dt>{messages.kind}</dt><dd><bdi dir="ltr">{created.kind}</bdi></dd></div>
+            <div><dt>{messages.taskCreatedState}</dt><dd><bdi dir="ltr">{created.state}</bdi></dd></div>
+            <div><dt>{messages.taskIdempotencyKey}</dt><dd>{created.idempotency_key ? <code><bdi dir="ltr">{created.idempotency_key}</bdi></code> : messages.noValue}</dd></div>
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaskRouteAction({
+  taskId,
+  canRoute,
+  routingEnabled,
+  capabilityReady,
+  messages,
+  onRouted,
+}: {
+  taskId: string;
+  canRoute: boolean;
+  routingEnabled: boolean;
+  capabilityReady: boolean;
+  messages: Messages;
+  onRouted: (result: RouteCoordinationTaskResult) => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [failure, setFailure] = useState<IntegrationApiError | null>(null);
+  const [result, setResult] = useState<RouteCoordinationTaskResult | null>(null);
+
+  async function routeTask() {
+    setFailure(null);
+    setSubmitting(true);
+    try {
+      const routed = await routeCoordinationTask(taskId);
+      setResult(routed);
+      onRouted(routed);
+    } catch (cause) {
+      setFailure(cause instanceof IntegrationApiError ? cause : new IntegrationApiError("unavailable"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if ((!canRoute || !capabilityReady) && !result && !failure) return null;
+  return (
+    <div className={styles.taskAction}>
+      {canRoute && capabilityReady && !routingEnabled && <p className={styles.inlineNote}>{messages.taskRoutingDisabled}</p>}
+      {canRoute && capabilityReady && routingEnabled && (
+        <button className={styles.traceButton} type="button" disabled={submitting} onClick={() => void routeTask()}>
+          {submitting ? messages.taskRoutingProgress : messages.taskRouteButton}
+        </button>
+      )}
+      {failure && (
+        <p className={styles.errorNote} role="alert">
+          {failure.kind === "unavailable" || failure.kind === "invalid_response"
+            ? messages.taskRoutingUncertain
+            : messages.taskRoutingError}
+        </p>
+      )}
+      {result && (
+        <div className={styles.taskCreateSuccess} role="status" aria-live="polite">
+          <p>{messages.taskRouted} <bdi dir="ltr">{result.state}</bdi></p>
+          <p>{result.agent ? <bdi dir="ltr">{result.agent}</bdi> : messages.taskRouteNoAgent}</p>
+          <ul className={styles.healthReasons}>
+            {result.explanation.reasons.map((reason, index) => <li key={`${index}-${reason}`} dir="auto">{reason}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TaskContent({
   tasks,
   locale,
   messages,
+  routingEnabled,
+  routingCapabilityReady,
+  onTaskRouted,
 }: {
   tasks: CoordinationTask[];
   locale: Locale;
   messages: Messages;
+  routingEnabled: boolean;
+  routingCapabilityReady: boolean;
+  onTaskRouted: (result: RouteCoordinationTaskResult) => void;
 }) {
   const [stateFilter, setStateFilter] = useState("ALL");
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
   const id = useId().replaceAll(":", "");
   const normalizedQuery = query.trim().toLocaleLowerCase(locale);
   const filteredTasks = tasks.filter((task) => {
     if (stateFilter !== "ALL" && task.state !== stateFilter) return false;
     if (!normalizedQuery) return true;
-    return [task.task_id, task.title, task.kind, task.agent, task.repo, task.branch_ref]
-      .some((value) => value?.toLocaleLowerCase(locale).includes(normalizedQuery));
+    const searchable = [
+      task.task_id,
+      task.title,
+      task.kind,
+      task.state,
+      task.agent,
+      task.repo,
+      task.branch_ref,
+      task.result,
+      task.routing_explanation?.via,
+      task.routing_explanation?.rule,
+      ...(task.routing_explanation?.reasons ?? []),
+    ];
+    return searchable.some((value) => value?.toLocaleLowerCase(locale).includes(normalizedQuery));
   });
+  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleTasks = filteredTasks.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  const rangeStart = filteredTasks.length === 0 ? 0 : currentPage * pageSize + 1;
+  const rangeEnd = Math.min((currentPage + 1) * pageSize, filteredTasks.length);
 
   return (
     <div>
       <div className={styles.filterBar}>
         <label htmlFor={`${id}-state`}>
           <span>{messages.filterState}</span>
-          <select id={`${id}-state`} dir="ltr" value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}>
+          <select
+            id={`${id}-state`}
+            dir="ltr"
+            value={stateFilter}
+            onChange={(event) => {
+              setStateFilter(event.target.value);
+              setPage(0);
+            }}
+          >
             <option value="ALL">{messages.allStates}</option>
             {taskStates.map((state) => <option key={state} value={state}>{state}</option>)}
           </select>
         </label>
         <label htmlFor={`${id}-query`}>
           <span>{messages.searchLoaded}</span>
-          <input id={`${id}-query`} dir="auto" type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input
+            id={`${id}-query`}
+            dir="auto"
+            type="search"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setPage(0);
+            }}
+          />
         </label>
       </div>
-      <p className={styles.scopeNote}>{messages.loadedScope} <bdi dir="ltr">{formatNumber(filteredTasks.length, locale)} / {formatNumber(tasks.length, locale)}</bdi> {messages.taskRecords}</p>
+      <p className={styles.scopeNote}>
+        {messages.loadedScope} <bdi dir="ltr">{formatNumber(filteredTasks.length, locale)} / {formatNumber(tasks.length, locale)}</bdi> {messages.taskRecords}
+      </p>
       {filteredTasks.length === 0 ? <p className={styles.inlineNote}>{messages.noMatches}</p> : (
-        <ul className={styles.taskList}>
-          {filteredTasks.map((task) => (
-            <li key={task.task_id} className={styles.recordCard}>
-              <details>
-                <summary>
-                  <span className={styles.taskTitle}>{task.title ? <bdi dir="auto">{task.title}</bdi> : <bdi dir="ltr">{task.task_id}</bdi>}</span>
-                  <span className={styles.badges}>
-                    <span className={styles.statusTag}><bdi dir="ltr">{task.state}</bdi></span>
-                    {task.dead_letter && <span className={`${styles.statusTag} ${styles.warningTag}`}>{messages.deadLetter}</span>}
-                  </span>
-                </summary>
-                <dl className={styles.smallMeta}>
-                  <div><dt>{messages.taskId}</dt><dd><code><bdi dir="ltr">{task.task_id}</bdi></code></dd></div>
-                  <div><dt>{messages.kind}</dt><dd><bdi dir="ltr">{task.kind}</bdi></dd></div>
-                  <div><dt>{messages.state}</dt><dd><bdi dir="ltr">{task.state}</bdi></dd></div>
-                  <div><dt>{messages.priority}</dt><dd>{formatNumber(task.priority, locale)}</dd></div>
-                  <div><dt>{messages.assignedAgent}</dt><dd>{task.agent ? <bdi dir="ltr">{task.agent}</bdi> : messages.noAgent}</dd></div>
-                  <div><dt>{messages.repository}</dt><dd>{task.repo ? <bdi dir="ltr">{task.repo}</bdi> : messages.noValue}</dd></div>
-                  <div><dt>{messages.branch}</dt><dd>{task.branch_ref ? <bdi dir="ltr">{task.branch_ref}</bdi> : messages.noValue}</dd></div>
-                  <div><dt>{messages.created}</dt><dd>{formatTimestamp(task.created_at, locale, messages.noTimestamp)}</dd></div>
-                  <div><dt>{messages.updated}</dt><dd>{formatTimestamp(task.updated_at, locale, messages.noTimestamp)}</dd></div>
-                  <div><dt>{messages.taskIdempotencyKey}</dt><dd>{task.idempotency_key ? <code><bdi dir="ltr">{task.idempotency_key}</bdi></code> : messages.noValue}</dd></div>
-                </dl>
-                <TaskTraceDisclosure taskId={task.task_id} locale={locale} messages={messages} />
-              </details>
-            </li>
-          ))}
-        </ul>
+        <>
+          <nav className={styles.pageControls} aria-label={messages.pageNavigation}>
+            <label htmlFor={`${id}-page-size`}>
+              <span>{messages.pageSize}</span>
+              <select
+                id={`${id}-page-size`}
+                dir="ltr"
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value));
+                  setPage(0);
+                }}
+              >
+                {[10, 25, 50].map((size) => <option key={size} value={size}>{formatNumber(size, locale)}</option>)}
+              </select>
+            </label>
+            <span className={styles.pageIndicator} aria-live="polite">
+              {messages.page} <bdi dir="ltr">{formatNumber(currentPage + 1, locale)} / {formatNumber(pageCount, locale)}</bdi>
+              <span className={styles.pageRange}><bdi dir="ltr">{formatNumber(rangeStart, locale)}–{formatNumber(rangeEnd, locale)} / {formatNumber(filteredTasks.length, locale)}</bdi></span>
+            </span>
+            <div className={styles.pageButtons}>
+              <button type="button" className={styles.traceButton} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
+                {messages.previousPage}
+              </button>
+              <button type="button" className={styles.traceButton} disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>
+                {messages.nextPage}
+              </button>
+            </div>
+          </nav>
+          <ul className={styles.taskList}>
+            {visibleTasks.map((task) => (
+              <li key={task.task_id} className={styles.recordCard}>
+                <details>
+                  <summary>
+                    <span className={styles.taskTitle}>{task.title ? <bdi dir="auto">{task.title}</bdi> : <bdi dir="ltr">{task.task_id}</bdi>}</span>
+                    <span className={styles.badges}>
+                      <span className={styles.statusTag}><bdi dir="ltr">{task.state}</bdi></span>
+                      {task.dead_letter && <span className={`${styles.statusTag} ${styles.warningTag}`}>{messages.deadLetter}</span>}
+                    </span>
+                  </summary>
+                  <dl className={styles.smallMeta}>
+                    <div><dt>{messages.taskId}</dt><dd><code><bdi dir="ltr">{task.task_id}</bdi></code></dd></div>
+                    <div><dt>{messages.kind}</dt><dd><bdi dir="ltr">{task.kind}</bdi></dd></div>
+                    <div><dt>{messages.state}</dt><dd><bdi dir="ltr">{task.state}</bdi></dd></div>
+                    <div><dt>{messages.priority}</dt><dd>{formatNumber(task.priority, locale)}</dd></div>
+                    <div><dt>{messages.assignedAgent}</dt><dd>{task.agent ? <bdi dir="ltr">{task.agent}</bdi> : messages.noAgent}</dd></div>
+                    <div><dt>{messages.repository}</dt><dd>{task.repo ? <bdi dir="ltr">{task.repo}</bdi> : messages.noValue}</dd></div>
+                    <div><dt>{messages.branch}</dt><dd>{task.branch_ref ? <bdi dir="ltr">{task.branch_ref}</bdi> : messages.noValue}</dd></div>
+                    <div><dt>{messages.created}</dt><dd>{formatTimestamp(task.created_at, locale, messages.noTimestamp)}</dd></div>
+                    <div><dt>{messages.updated}</dt><dd>{formatTimestamp(task.updated_at, locale, messages.noTimestamp)}</dd></div>
+                    {task.attempts !== null && <div><dt>{messages.taskAttempts}</dt><dd>{formatNumber(task.attempts, locale)}</dd></div>}
+                    <div><dt>{messages.taskIdempotencyKey}</dt><dd>{task.idempotency_key ? <code><bdi dir="ltr">{task.idempotency_key}</bdi></code> : messages.noValue}</dd></div>
+                  </dl>
+                  {task.progress !== null && (
+                    <div className={styles.taskProgress}>
+                      <div><span>{messages.taskProgress}</span><bdi dir="ltr">{formatNumber(task.progress, locale)}%</bdi></div>
+                      <progress aria-label={messages.taskProgress} aria-valuetext={`${formatNumber(task.progress, locale)}%`} value={task.progress} max={100} />
+                    </div>
+                  )}
+                  <TaskRouteAction
+                    taskId={task.task_id}
+                    canRoute={task.state === "CREATED"}
+                    routingEnabled={routingEnabled}
+                    capabilityReady={routingCapabilityReady}
+                    messages={messages}
+                    onRouted={onTaskRouted}
+                  />
+                  <section className={styles.taskDetailSection} aria-label={messages.taskRouting}>
+                    <h3>{messages.taskRouting}</h3>
+                    {task.routing_explanation ? (
+                      <>
+                        <dl className={styles.smallMeta}>
+                          <div><dt>{messages.taskRouteVia}</dt><dd><bdi dir="ltr">{task.routing_explanation.via}</bdi></dd></div>
+                          {task.routing_explanation.rule && <div><dt>{messages.taskRouteRule}</dt><dd><bdi dir="auto">{task.routing_explanation.rule}</bdi></dd></div>}
+                          {task.routing_explanation.score !== null && <div><dt>{messages.taskRouteScore}</dt><dd>{formatNumber(task.routing_explanation.score, locale)}</dd></div>}
+                          {task.routing_explanation.candidates !== null && <div><dt>{messages.taskRouteCandidates}</dt><dd>{formatNumber(task.routing_explanation.candidates, locale)}</dd></div>}
+                        </dl>
+                        {task.routing_explanation.reasons.length > 0 && (
+                          <ul className={styles.healthReasons}>
+                            {task.routing_explanation.reasons.map((reason, index) => <li key={`${index}-${reason}`} dir="auto">{reason}</li>)}
+                          </ul>
+                        )}
+                      </>
+                    ) : <p className={styles.inlineNote}>{messages.taskRoutingUnreported}</p>}
+                  </section>
+                  {task.result !== null && (
+                    <section className={styles.taskDetailSection} aria-label={messages.taskResult}>
+                      <h3>{messages.taskResult}</h3>
+                      <pre className={styles.taskResult} dir="auto">{task.result || messages.taskResultEmpty}</pre>
+                    </section>
+                  )}
+                  <TaskTraceDisclosure taskId={task.task_id} locale={locale} messages={messages} />
+                </details>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
@@ -808,13 +1356,38 @@ function EventContent({ events, locale, messages }: { events: CoordinationEvent[
 
 export function CoordinationWorkspace() {
   const locale = useCiccLocale()?.locale ?? "en";
-  const text = copy[locale];
+  const text: Messages = { ...copy[locale], ...workflowCopy[locale] };
   const id = useId().replaceAll(":", "");
+  const [taskListKey, setTaskListKey] = useState(0);
   const health = useIntegrationResource(integrationEndpoints.coordinationHealth, parseCoordinationHealth);
   const metrics = useIntegrationResource(integrationEndpoints.coordinationMetrics, parseCoordinationMetrics);
   const agents = useIntegrationResource(integrationEndpoints.coordinationAgents, parseCoordinationAgents);
   const tasks = useIntegrationResource(integrationEndpoints.coordinationTasks, parseCoordinationTasks);
   const events = useIntegrationResource(integrationEndpoints.coordinationEvents, parseCoordinationEvents);
+  const writeCapabilities = useIntegrationResource(
+    integrationEndpoints.coordinationWriteCapabilities,
+    parseCoordinationWriteCapabilities,
+  );
+  const routingCapabilityReady = writeCapabilities.state.status === "ready";
+  const routingEnabled = routingCapabilityReady &&
+    writeCapabilities.state.data?.task_routing_enabled === true;
+  const taskKindOptions = Object.keys(metrics.state.data?.by_kind ?? {}).sort();
+
+  function refreshCoordinationData() {
+    tasks.refresh();
+    metrics.refresh();
+    agents.refresh();
+    health.refresh();
+  }
+
+  function handleTaskCreated(result: CreateCoordinationTaskResult) {
+    if (result.task_id) setTaskListKey((value) => value + 1);
+    refreshCoordinationData();
+  }
+
+  function handleTaskRouted(result: RouteCoordinationTaskResult) {
+    if (result.task_id) refreshCoordinationData();
+  }
 
   return (
     <div className={styles.page} lang={locale} dir={locale === "en" ? "ltr" : "rtl"}>
@@ -854,6 +1427,16 @@ export function CoordinationWorkspace() {
         </ResourcePanel>
 
         <div className={styles.widePanel}>
+          <TaskCreationPanel
+            state={writeCapabilities.state}
+            onRefresh={writeCapabilities.refresh}
+            messages={text}
+            kindOptions={taskKindOptions}
+            onTaskCreated={handleTaskCreated}
+          />
+        </div>
+
+        <div className={styles.widePanel}>
           <ResourcePanel
             title={text.tasks}
             state={tasks.state}
@@ -861,7 +1444,17 @@ export function CoordinationWorkspace() {
             isEmpty={(data) => data.tasks.length === 0}
             emptyMessage={text.emptyTasks}
           >
-            {(data) => <TaskContent tasks={data.tasks} locale={locale} messages={text} />}
+            {(data) => (
+              <TaskContent
+                key={taskListKey}
+                tasks={data.tasks}
+                locale={locale}
+                messages={text}
+                routingEnabled={routingEnabled}
+                routingCapabilityReady={routingCapabilityReady}
+                onTaskRouted={handleTaskRouted}
+              />
+            )}
           </ResourcePanel>
         </div>
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GET, HEAD } from "./route";
+import { GET, HEAD, POST } from "./route";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -11,6 +11,31 @@ function get(path: string[], query = "", headers?: HeadersInit) {
     new Request(`http://cicc.test/api/integrations/${path.join("/")}${query}`, { headers }),
     { params: Promise.resolve({ path }) },
   );
+}
+
+function post(path: string[], body?: unknown, headers?: HeadersInit) {
+  const requestHeaders = new Headers(headers);
+  if (body !== undefined && !requestHeaders.has("content-type")) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
+  if (!requestHeaders.has("origin")) requestHeaders.set("Origin", "http://cicc.test");
+  if (!requestHeaders.has("sec-fetch-site")) requestHeaders.set("Sec-Fetch-Site", "same-origin");
+  return POST(
+    new Request(`http://cicc.test/api/integrations/${path.join("/")}`, {
+      method: "POST",
+      headers: requestHeaders,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+    { params: Promise.resolve({ path }) },
+  );
+}
+
+function configureTaskWrite(routing = false) {
+  vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/internal/");
+  vi.stubEnv("WEB_BFF_WRITE_TOKEN", "server-write-secret");
+  vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+  vi.stubEnv("WEB_BFF_ALLOW_COORD_WRITE", "1");
+  vi.stubEnv("WEB_BFF_ALLOW_COORD_ROUTING", routing ? "1" : "0");
 }
 
 describe("server-side integration adapter", () => {
@@ -148,6 +173,126 @@ describe("server-side integration adapter", () => {
     const response = await get(["ops", "overview"]);
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: { code: "invalid_upstream_response" } });
+  });
+
+  it("reports write capability flags without exposing secrets or contacting the provider", async () => {
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test");
+    vi.stubEnv("WEB_BFF_WRITE_TOKEN", "server-write-secret");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const disabled = await get(["coordination", "write-capabilities"]);
+    expect(disabled.status).toBe(200);
+    expect(await disabled.json()).toEqual({ task_creation_enabled: false, task_routing_enabled: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    vi.stubEnv("WEB_BFF_ALLOW_COORD_WRITE", "1");
+    vi.stubEnv("WEB_BFF_ALLOW_COORD_ROUTING", "1");
+    const enabled = await get(["coordination", "write-capabilities"]);
+    expect(await enabled.json()).toEqual({ task_creation_enabled: true, task_routing_enabled: true });
+    expect(enabled.headers.get("cache-control")).toContain("no-store");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a task only through the fixed, gated route with a server-side token and correlation key", async () => {
+    configureTaskWrite();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      task_id: "api-task-7",
+      kind: "review",
+      state: "CREATED",
+      duplicate: false,
+    }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await post(["coordination", "tasks"], {
+      kind: "review",
+      title: "Review the release",
+      priority: 4,
+      payload: { labels: ["integration"] },
+      requires_approval: false,
+    }, {
+      Authorization: "Bearer browser-controlled-token",
+      Cookie: "session=browser-cookie",
+      "x-cicc-tenant-id": "untrusted-tenant",
+    });
+    const result = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(result).toEqual({ task_id: "api-task-7", kind: "review", state: "CREATED", duplicate: false });
+    const correlationKey = response.headers.get("x-cicc-idempotency-key");
+    expect(correlationKey).toMatch(/^bff-[0-9a-f-]{36}$/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe("https://api.example.test/internal/api/v1/coordination/tasks");
+    expect(init.method).toBe("POST");
+    expect([...new Headers(init.headers).keys()].sort()).toEqual(["accept", "authorization", "content-type"]);
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer server-write-secret");
+    const forwarded = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(forwarded).toMatchObject({ kind: "review", priority: 4, title: "Review the release", payload: { labels: ["integration"] } });
+    expect(forwarded.idempotency_key).toBe(correlationKey);
+    expect("task_id" in forwarded).toBe(false);
+  });
+
+  it("fails closed for create and route writes unless their separate server flags are enabled", async () => {
+    vi.stubEnv("API_INTERNAL_URL", "https://api.example.test");
+    vi.stubEnv("WEB_BFF_WRITE_TOKEN", "server-write-secret");
+    vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const createResponse = await post(["coordination", "tasks"], { kind: "review" });
+    const routeResponse = await post(["coordination", "tasks", "task-7", "route"]);
+    expect(createResponse.status).toBe(503);
+    expect(routeResponse.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("routes one validated task path through the separately gated source-confirmed action", async () => {
+    configureTaskWrite(true);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      task_id: "task-42",
+      agent: "agent_one",
+      state: "QUEUED",
+      explanation: { via: "score", score: 92, candidates: 1, reasons: ["specialization match"] },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await post(["coordination", "tasks", "task-42", "route"], undefined, {
+      Authorization: "Bearer browser-controlled-token",
+      Cookie: "session=browser-cookie",
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ task_id: "task-42", agent: "agent_one", state: "QUEUED" });
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe("https://api.example.test/internal/api/v1/coordination/tasks/task-42/route");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+    expect([...new Headers(init.headers).keys()].sort()).toEqual(["accept", "authorization"]);
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer server-write-secret");
+  });
+
+  it("rejects cross-origin, unsafe task IDs, browser-supplied idempotency, and extra write fields", async () => {
+    configureTaskWrite(true);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const crossSite = await post(["coordination", "tasks"], { kind: "review" }, {
+      Origin: "https://attacker.example",
+      "Sec-Fetch-Site": "cross-site",
+    });
+    expect(crossSite.status).toBe(403);
+
+    const unsafeTaskId = await post(["coordination", "tasks", "../ops", "route"]);
+    expect(unsafeTaskId.status).toBe(400);
+
+    const clientKey = await post(["coordination", "tasks"], { kind: "review", idempotency_key: "client-key" });
+    expect(clientKey.status).toBe(422);
+    const overlongPullRequestRef = await post(["coordination", "tasks"], { kind: "review", pr_ref: "x".repeat(101) });
+    expect(overlongPullRequestRef.status).toBe(422);
+    const extraWrite = await post(["coordination", "tasks"], { kind: "review", route: true });
+    expect(extraWrite.status).toBe(422);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects HEAD rather than implicitly proxying it through GET", () => {

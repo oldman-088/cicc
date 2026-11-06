@@ -11,7 +11,11 @@ function jsonResponse(body: unknown) {
   });
 }
 
-function stubProvider() {
+function stubProvider(options: {
+  taskCreationEnabled?: boolean;
+  taskRoutingEnabled?: boolean;
+  tasks?: Array<Record<string, unknown>>;
+} = {}) {
   // Synthetic unit-test contract data only; this fixture is never used as a UI fallback.
   const responses: Record<string, unknown> = {
     health: {
@@ -58,35 +62,6 @@ function stubProvider() {
       completed: 3,
       failed: 0,
     }] },
-    tasks: { tasks: [
-      {
-        task_id: "task-running",
-        kind: "ci_failed",
-        state: "RUNNING",
-        priority: 5,
-        agent: "agent_a",
-        title: "Current build check",
-        repo: "oldman-088/cicc",
-        branch_ref: "feature/read-only",
-        idempotency_key: "bff-fixture-key-1",
-        created_at: "2026-11-05T09:00:00Z",
-        updated_at: "2026-11-05T09:30:00Z",
-        dead_letter: false,
-      },
-      {
-        task_id: "task-queued",
-        kind: "pr_opened",
-        state: "QUEUED",
-        priority: 4,
-        agent: null,
-        title: "Queued review",
-        repo: null,
-        branch_ref: null,
-        created_at: null,
-        updated_at: null,
-        dead_letter: false,
-      },
-    ] },
     events: { events: [{
       delivery_id: "delivery-1",
       event: "pull_request",
@@ -108,9 +83,96 @@ function stubProvider() {
       approvals: [],
     },
   };
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, _options?: RequestInit) => {
+  const taskRecords = options.tasks ?? [
+    {
+      task_id: "task-running",
+      kind: "ci_failed",
+      state: "RUNNING",
+      priority: 5,
+      agent: "agent_a",
+      title: "Current build check",
+      repo: "oldman-088/cicc",
+      branch_ref: "feature/read-only",
+      idempotency_key: "bff-fixture-key-1",
+      created_at: "2026-11-05T09:00:00Z",
+      updated_at: "2026-11-05T09:30:00Z",
+      dead_letter: false,
+      attempts: 2,
+      progress: 40,
+      result: "Provider-reported build result",
+      routing_explanation: { via: "score", score: 91, candidates: 1, reasons: ["specialization match"] },
+    },
+    {
+      task_id: "task-queued",
+      kind: "pr_opened",
+      state: "QUEUED",
+      priority: 4,
+      agent: null,
+      title: "Queued review",
+      repo: null,
+      branch_ref: null,
+      created_at: null,
+      updated_at: null,
+      dead_letter: false,
+      attempts: 0,
+      progress: 0,
+      result: null,
+      routing_explanation: null,
+    },
+  ];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, requestOptions?: RequestInit) => {
     const url = String(input);
+    const method = requestOptions?.method ?? "GET";
+    if (url.endsWith("/coordination/write-capabilities")) {
+      return jsonResponse({
+        task_creation_enabled: options.taskCreationEnabled ?? false,
+        task_routing_enabled: options.taskRoutingEnabled ?? false,
+      });
+    }
     if (url.includes("/coordination/task-trace?")) return jsonResponse(responses.trace);
+    if (method === "POST" && url.endsWith("/coordination/tasks")) {
+      const inputBody = JSON.parse(String(requestOptions?.body ?? "{}")) as Record<string, unknown>;
+      const createdTask = {
+        task_id: "task-created",
+        kind: inputBody.kind,
+        state: "CREATED",
+        priority: inputBody.priority,
+        agent: null,
+        title: inputBody.title,
+        repo: null,
+        branch_ref: null,
+        created_at: "2026-11-06T10:00:00Z",
+        updated_at: "2026-11-06T10:00:00Z",
+        dead_letter: false,
+        attempts: 0,
+        progress: 0,
+        result: null,
+        routing_explanation: null,
+      };
+      taskRecords.unshift(createdTask);
+      return new Response(JSON.stringify({ task_id: "task-created", kind: inputBody.kind, state: "CREATED", duplicate: false }), {
+        status: 201,
+        headers: { "Content-Type": "application/json", "X-CICC-Idempotency-Key": "bff-unit-test-key" },
+      });
+    }
+    const routeMatch = url.match(/\/coordination\/tasks\/([^/]+)\/route$/);
+    if (method === "POST" && routeMatch) {
+      const taskId = decodeURIComponent(routeMatch[1] ?? "");
+      const task = taskRecords.find((item) => item.task_id === taskId);
+      if (!task) return new Response("", { status: 404 });
+      Object.assign(task, {
+        state: "QUEUED",
+        agent: "agent_a",
+        routing_explanation: { via: "score", score: 88, candidates: 1, reasons: ["specialization match"] },
+      });
+      return jsonResponse({
+        task_id: taskId,
+        agent: "agent_a",
+        state: "QUEUED",
+        explanation: task.routing_explanation,
+      });
+    }
+    if (url.endsWith("/coordination/tasks")) return jsonResponse({ tasks: taskRecords });
     const key = Object.keys(responses).find((candidate) => url.endsWith(`/coordination/${candidate}`));
     return key ? jsonResponse(responses[key]) : new Response("", { status: 404 });
   });
@@ -124,7 +186,7 @@ afterEach(() => {
 });
 
 describe("Agent Coordination workspace", () => {
-  it("shows source-backed records, filters only the returned tasks, and stays read-only", async () => {
+  it("shows provider-backed records, filters only returned tasks, and keeps writes disabled by default", async () => {
     const fetchMock = stubProvider();
     render(<CoordinationWorkspace />);
 
@@ -139,6 +201,7 @@ describe("Agent Coordination workspace", () => {
     expect(screen.getByText("Current build check")).toBeInTheDocument();
     expect(screen.getByText("Queued review")).toBeInTheDocument();
     expect(screen.getByText(/Trusted single-tenant scope/)).toBeInTheDocument();
+    expect(screen.getByText(/Task creation is disabled for this deployment/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("combobox", { name: "Filter loaded tasks by state" }), {
       target: { value: "RUNNING" },
@@ -151,12 +214,120 @@ describe("Agent Coordination workspace", () => {
     });
     expect(screen.getByText("No returned task records match the selected filters.")).toBeInTheDocument();
 
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
     for (const [url, options] of fetchMock.mock.calls) {
       expect(String(url)).toMatch(/^\/api\/integrations\/coordination\//);
       expect(options?.method).toBe("GET");
       expect(options?.headers).not.toHaveProperty("Authorization");
     }
+  });
+
+  it("presents API-reported routing decisions, progress, attempts, and results without inference", async () => {
+    stubProvider();
+    render(<CoordinationWorkspace />);
+
+    fireEvent.click(await screen.findByText("Current build check"));
+    expect(screen.getAllByRole("heading", { name: "Routing decision" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("specialization match")).toBeInTheDocument();
+    expect(screen.getByText("Provider-reported build result")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Reported progress")[0]).toHaveAttribute("value", "40");
+    expect(screen.getAllByText("Attempts reported")[0].nextElementSibling).toHaveTextContent("2");
+  });
+
+  it("creates a task only when the server capability is enabled and refreshes source-backed views", async () => {
+    const fetchMock = stubProvider({ taskCreationEnabled: true });
+    render(<CoordinationWorkspace />);
+
+    expect(await screen.findByRole("heading", { name: "Create a coordination task" })).toBeInTheDocument();
+    expect(screen.queryByText(/Task creation is disabled for this deployment/)).not.toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText("Task kind"), { target: { value: "manual_review" } });
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Review release candidate" } });
+    const payloadField = screen.getByLabelText("Task payload (JSON object)");
+    fireEvent.change(payloadField, { target: { value: "not-json" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+    expect(await screen.findByText("Enter a valid JSON object for the task payload.")).toBeInTheDocument();
+    expect(payloadField).toHaveAttribute("aria-invalid", "true");
+    const describedBy = payloadField.getAttribute("aria-describedby")?.split(" ") ?? [];
+    expect(describedBy).toHaveLength(2);
+    expect(describedBy.every((id) => document.getElementById(id))).toBe(true);
+
+    fireEvent.change(payloadField, { target: { value: JSON.stringify({ labels: ["integration"] }) } });
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    expect(await screen.findByText("The provider accepted the task creation request.")).toBeInTheDocument();
+    expect(payloadField).toHaveAttribute("aria-invalid", "false");
+    expect(await screen.findByText("Review release candidate")).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(([, options]) => options?.method === "POST");
+    expect(createCall).toBeDefined();
+    expect(createCall?.[1]?.headers).not.toHaveProperty("Authorization");
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      kind: "manual_review",
+      title: "Review release candidate",
+      payload: { labels: ["integration"] },
+    });
+  });
+
+  it("paginates and resets to the first page after a task search", async () => {
+    const tasks = Array.from({ length: 12 }, (_, index) => ({
+      task_id: `page-task-${index + 1}`,
+      kind: "review",
+      state: "COMPLETED",
+      priority: 5,
+      agent: "agent_a",
+      title: `Paged task ${index + 1}`,
+      repo: null,
+      branch_ref: null,
+      created_at: null,
+      updated_at: null,
+      dead_letter: false,
+      attempts: 1,
+      progress: 100,
+      result: null,
+      routing_explanation: null,
+    }));
+    stubProvider({ tasks });
+    render(<CoordinationWorkspace />);
+
+    expect(await screen.findByText("Paged task 1")).toBeInTheDocument();
+    expect(screen.queryByText("Paged task 11")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.getByText("Paged task 11")).toBeInTheDocument();
+    expect(screen.queryByText("Paged task 1")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search the returned task records" }), {
+      target: { value: "page-task-2" },
+    });
+    expect(screen.getByText("Paged task 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+  });
+
+  it("routes a newly created task only when the separate routing capability is enabled", async () => {
+    const tasks = [{
+      task_id: "task-to-route",
+      kind: "review",
+      state: "CREATED",
+      priority: 5,
+      agent: null,
+      title: "New task awaiting routing",
+      repo: null,
+      branch_ref: null,
+      created_at: null,
+      updated_at: null,
+      dead_letter: false,
+      attempts: 0,
+      progress: 0,
+      result: null,
+      routing_explanation: null,
+    }];
+    const fetchMock = stubProvider({ taskRoutingEnabled: true, tasks });
+    render(<CoordinationWorkspace />);
+
+    fireEvent.click(await screen.findByText("New task awaiting routing"));
+    fireEvent.click(await screen.findByRole("button", { name: "Route task" }));
+    expect(await screen.findByText("Routing response received.")).toBeInTheDocument();
+    expect(screen.getAllByText("agent_a").length).toBeGreaterThan(1);
+    expect(fetchMock.mock.calls.some(([url, options]) =>
+      String(url) === "/api/integrations/coordination/tasks/task-to-route/route" && options?.method === "POST",
+    )).toBe(true);
   });
 
   it("loads task trace only on analyst request and distinguishes delivered/prepared records", async () => {

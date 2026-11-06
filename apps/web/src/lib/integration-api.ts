@@ -114,6 +114,14 @@ export type CoordinationAgent = {
   failed_tasks: number;
 };
 
+export type CoordinationRoutingExplanation = {
+  via: string;
+  rule: string | null;
+  score: number | null;
+  candidates: number | null;
+  reasons: string[];
+};
+
 export type CoordinationTask = {
   task_id: string;
   kind: string;
@@ -127,6 +135,38 @@ export type CoordinationTask = {
   updated_at: string | null;
   idempotency_key: string | null;
   dead_letter: boolean;
+  attempts: number | null;
+  progress: number | null;
+  result: string | null;
+  routing_explanation: CoordinationRoutingExplanation | null;
+};
+
+export type CoordinationWriteCapabilities = {
+  task_creation_enabled: boolean;
+  task_routing_enabled: boolean;
+};
+
+export type CreateCoordinationTaskInput = {
+  kind: string;
+  title: string;
+  priority: number;
+  payload: Record<string, unknown>;
+  requires_approval: boolean;
+};
+
+export type CreateCoordinationTaskResult = {
+  task_id: string;
+  kind: string;
+  state: string;
+  duplicate: boolean;
+  idempotency_key: string | null;
+};
+
+export type RouteCoordinationTaskResult = {
+  task_id: string;
+  agent: string | null;
+  state: string;
+  explanation: CoordinationRoutingExplanation;
 };
 
 export type CoordinationMetrics = {
@@ -220,6 +260,9 @@ export const integrationEndpoints = {
   coordinationAgents: "/api/integrations/coordination/agents",
   coordinationHealth: "/api/integrations/coordination/health",
   coordinationTasks: "/api/integrations/coordination/tasks",
+  coordinationWriteCapabilities: "/api/integrations/coordination/write-capabilities",
+  coordinationTaskRoute: (taskId: string) =>
+    `/api/integrations/coordination/tasks/${encodeURIComponent(taskId)}/route`,
   coordinationTaskTrace: (taskId: string) =>
     `/api/integrations/coordination/task-trace?task_id=${encodeURIComponent(taskId)}`,
   coordinationMetrics: "/api/integrations/coordination/metrics",
@@ -290,6 +333,17 @@ function optionalBoolean(value: unknown, label: string, fallback: boolean): bool
 function optionalNumber(value: unknown, label: string): number | null {
   if (value === undefined || value === null) return null;
   return finiteNonNegative(value, label);
+}
+
+function optionalInteger(value: unknown, label: string): number | null {
+  if (value === undefined || value === null) return null;
+  return nonNegativeInteger(value, label);
+}
+
+function optionalProgress(value: unknown, label: string): number | null {
+  const progress = optionalInteger(value, label);
+  if (progress !== null && progress > 100) return fail(`${label} must be between 0 and 100`);
+  return progress;
 }
 
 function parseComponent(value: unknown, index: number): OpsComponent {
@@ -440,6 +494,19 @@ export function parseCoordinationAgents(value: unknown): CoordinationAgents {
   return { agents: array(root.agents, "agents", parseCoordinationAgent) };
 }
 
+function parseCoordinationRoutingExplanation(value: unknown, label: string): CoordinationRoutingExplanation {
+  const item = object(value, label);
+  return {
+    via: nonEmptyString(item.via, `${label}.via`),
+    rule: nullableString(item.rule, `${label}.rule`),
+    score: optionalNumber(item.score, `${label}.score`),
+    candidates: optionalInteger(item.candidates, `${label}.candidates`),
+    reasons: item.reasons === undefined || item.reasons === null
+      ? []
+      : stringArray(item.reasons, `${label}.reasons`),
+  };
+}
+
 function parseCoordinationTask(value: unknown, index: number): CoordinationTask {
   const item = object(value, `tasks[${index}]`);
   return {
@@ -455,12 +522,46 @@ function parseCoordinationTask(value: unknown, index: number): CoordinationTask 
     updated_at: nullableString(item.updated_at, `tasks[${index}].updated_at`),
     idempotency_key: nullableString(item.idempotency_key, `tasks[${index}].idempotency_key`),
     dead_letter: optionalBoolean(item.dead_letter, `tasks[${index}].dead_letter`, false),
+    attempts: optionalInteger(item.attempts, `tasks[${index}].attempts`),
+    progress: optionalProgress(item.progress, `tasks[${index}].progress`),
+    result: nullableString(item.result, `tasks[${index}].result`),
+    routing_explanation: item.routing_explanation === undefined || item.routing_explanation === null
+      ? null
+      : parseCoordinationRoutingExplanation(item.routing_explanation, `tasks[${index}].routing_explanation`),
   };
 }
 
 export function parseCoordinationTasks(value: unknown): CoordinationTasks {
   const root = object(value, "tasks response");
   return { tasks: array(root.tasks, "tasks", parseCoordinationTask) };
+}
+
+export function parseCoordinationWriteCapabilities(value: unknown): CoordinationWriteCapabilities {
+  const root = object(value, "coordination write capabilities");
+  return {
+    task_creation_enabled: boolean(root.task_creation_enabled, "capabilities.task_creation_enabled"),
+    task_routing_enabled: boolean(root.task_routing_enabled, "capabilities.task_routing_enabled"),
+  };
+}
+
+export function parseCreateCoordinationTaskResult(value: unknown): Omit<CreateCoordinationTaskResult, "idempotency_key"> {
+  const root = object(value, "create task response");
+  return {
+    task_id: nonEmptyString(root.task_id, "create.task_id"),
+    kind: nonEmptyString(root.kind, "create.kind"),
+    state: nonEmptyString(root.state, "create.state"),
+    duplicate: boolean(root.duplicate, "create.duplicate"),
+  };
+}
+
+export function parseRouteCoordinationTaskResult(value: unknown): RouteCoordinationTaskResult {
+  const root = object(value, "route task response");
+  return {
+    task_id: nonEmptyString(root.task_id, "route.task_id"),
+    agent: nullableString(root.agent, "route.agent"),
+    state: nonEmptyString(root.state, "route.state"),
+    explanation: parseCoordinationRoutingExplanation(root.explanation, "route.explanation"),
+  };
 }
 
 function numberMap(value: unknown, label: string): Record<string, number> {
@@ -673,4 +774,92 @@ export async function readIntegrationResource<T>(
   } catch {
     throw new IntegrationApiError("invalid_response", response.status);
   }
+}
+
+async function integrationErrorFromResponse(response: Response): Promise<IntegrationApiError> {
+  let code: unknown;
+  try {
+    const body: unknown = await response.json();
+    const root = object(body, "error response");
+    const details = object(root.error, "error response.error");
+    code = details.code;
+  } catch {
+    code = undefined;
+  }
+  const retryAfter = response.headers.get("retry-after");
+  const retryAfterSeconds = retryAfter && /^\d{1,5}$/.test(retryAfter) ? Number(retryAfter) : undefined;
+  return new IntegrationApiError(errorKind(code, response.status), response.status, retryAfterSeconds);
+}
+
+async function postIntegrationJson<T>(
+  endpoint: string,
+  body: Record<string, unknown> | undefined,
+  decode: (value: unknown) => T,
+  signal?: AbortSignal,
+): Promise<{ value: T; response: Response }> {
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      cache: "no-store",
+      credentials: "same-origin",
+      signal,
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new IntegrationApiError("unavailable");
+  }
+
+  if (!response.ok) throw await integrationErrorFromResponse(response);
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!/^application\/json\b/i.test(contentType)) {
+    throw new IntegrationApiError("invalid_response", response.status);
+  }
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new IntegrationApiError("invalid_response", response.status);
+  }
+  try {
+    return { value: decode(raw), response };
+  } catch {
+    throw new IntegrationApiError("invalid_response", response.status);
+  }
+}
+
+export async function createCoordinationTask(
+  input: CreateCoordinationTaskInput,
+  signal?: AbortSignal,
+): Promise<CreateCoordinationTaskResult> {
+  const { value, response } = await postIntegrationJson(
+    integrationEndpoints.coordinationTasks,
+    input,
+    parseCreateCoordinationTaskResult,
+    signal,
+  );
+  const idempotencyKey = response.headers.get("x-cicc-idempotency-key");
+  if (idempotencyKey !== null && !/^[A-Za-z0-9_.:-]{1,300}$/.test(idempotencyKey)) {
+    throw new IntegrationApiError("invalid_response", response.status);
+  }
+  return { ...value, idempotency_key: idempotencyKey };
+}
+
+export async function routeCoordinationTask(
+  taskId: string,
+  signal?: AbortSignal,
+): Promise<RouteCoordinationTaskResult> {
+  const { value } = await postIntegrationJson(
+    integrationEndpoints.coordinationTaskRoute(taskId),
+    undefined,
+    parseRouteCoordinationTaskResult,
+    signal,
+  );
+  if (value.task_id !== taskId) throw new IntegrationApiError("invalid_response", 200);
+  return value;
 }
