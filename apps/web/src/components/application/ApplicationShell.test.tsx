@@ -38,7 +38,7 @@ describe("CICC application shell", () => {
       </ApplicationShell>,
     );
 
-    expect(screen.getByRole("link", { name: "CICC Cyber Intelligence Command Center" }))
+    expect(screen.getByRole("link", { name: "CICC" }))
       .toHaveAttribute("href", "/");
   });
 

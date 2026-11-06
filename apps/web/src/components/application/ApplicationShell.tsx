@@ -254,22 +254,22 @@ export function ApplicationShell({ locale, onLocaleChange, children }: Applicati
       </a>
 
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/" aria-label={`CICC ${messages.brandDescription}`}>
-          <span className={styles.brandMark} aria-hidden="true">
-            <svg viewBox="0 0 32 32" focusable="false">
-              <path d="M7 9.5 16 5l9 4.5v13L16 27l-9-4.5z" />
-              <path d="m7.5 10 8.5 4.5 8.5-4.5M16 14.5V26" />
-              <circle cx="7" cy="9.5" r="1.5" />
-              <circle cx="16" cy="5" r="1.5" />
-              <circle cx="25" cy="9.5" r="1.5" />
-              <circle cx="16" cy="14.5" r="1.5" />
-            </svg>
-          </span>
-          <span className={styles.brandCopy}>
+        <div className={styles.brand}>
+          <Link className={styles.brandLink} href="/">
+            <span className={styles.brandMark} aria-hidden="true">
+              <svg viewBox="0 0 32 32" focusable="false">
+                <path d="M7 9.5 16 5l9 4.5v13L16 27l-9-4.5z" />
+                <path d="m7.5 10 8.5 4.5 8.5-4.5M16 14.5V26" />
+                <circle cx="7" cy="9.5" r="1.5" />
+                <circle cx="16" cy="5" r="1.5" />
+                <circle cx="25" cy="9.5" r="1.5" />
+                <circle cx="16" cy="14.5" r="1.5" />
+              </svg>
+            </span>
             <span className={styles.brandName}><bdi dir="ltr">CICC</bdi></span>
-            <span className={styles.brandDescription}>{messages.brandDescription}</span>
-          </span>
-        </Link>
+          </Link>
+          <span className={styles.brandDescription}>{messages.brandDescription}</span>
+        </div>
 
         <nav className={styles.breadcrumb} aria-label={messages.breadcrumb}>
           <ol>

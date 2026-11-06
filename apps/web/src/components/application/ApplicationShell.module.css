@@ -44,6 +44,13 @@
 }
 
 .brand {
+  display: grid;
+  width: fit-content;
+  min-width: 0;
+  gap: 0.05rem;
+}
+
+.brandLink {
   display: flex;
   width: fit-content;
   min-width: 0;
@@ -80,12 +87,6 @@
   stroke-width: 0.5;
 }
 
-.brandCopy {
-  display: grid;
-  min-width: 0;
-  gap: 0.05rem;
-}
-
 .brandName {
   color: var(--cicc-text-strong);
   font-size: 0.88rem;
@@ -95,6 +96,8 @@
 }
 
 .brandDescription {
+  min-width: 0;
+  margin-inline-start: 3.05rem;
   overflow: hidden;
   color: var(--cicc-text-muted);
   font-size: 0.66rem;
