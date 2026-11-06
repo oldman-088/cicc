@@ -46,6 +46,17 @@ describe("unconfigured workspace modules", () => {
     expect(screen.getByText(/No provider is connected/)).toBeInTheDocument();
   });
 
+  it("keeps experimental threat relationship routes explicitly unmounted and disconnected", () => {
+    render(<UnconfiguredModulePage moduleId="threat-intelligence" />);
+
+    const disclosure = screen.getByText(/legacy Threat Intelligence dispatcher/);
+    expect(disclosure).toHaveTextContent(/standalone experimental relationship routes/);
+    expect(disclosure).toHaveTextContent(/not mounted in the CICC host/);
+    expect(disclosure).toHaveTextContent(/host-supplied authentication, tenant, storage, and audit dependencies/);
+    expect(disclosure).toHaveTextContent(/sandbox gateway trial uses the legacy dispatcher, not these routes/);
+    expect(disclosure).toHaveTextContent(/No actors, indicators, relationships, or live feed health are displayed/);
+  });
+
   it("sets RTL on the Farsi module shell and keeps module labels localized", () => {
     moduleLocale.value = "fa";
     const { container } = render(<UnconfiguredModulePage moduleId="system-health" />);

@@ -434,8 +434,9 @@ test("passes axe-core WCAG A/AA checks in the Arabic mobile layout", async ({ pa
 test("keeps threat and vulnerability workspaces explicitly disconnected and accessible", async ({ page }) => {
   await page.goto("/threat-intelligence");
   await expect(page.getByRole("heading", { name: "Threat Intelligence" })).toBeVisible();
-  await expect(page.getByText(/in-process dispatcher with explicitly experimental sample handlers/)).toBeVisible();
-  await expect(page.getByText(/sandbox gateway invocation/)).toBeVisible();
+  await expect(page.getByText(/standalone experimental relationship routes, but they are not mounted in the CICC host/)).toBeVisible();
+  await expect(page.getByText(/host-supplied authentication, tenant, storage, and audit dependencies/)).toBeVisible();
+  await expect(page.getByText(/sandbox gateway trial uses the legacy dispatcher, not these routes/)).toBeVisible();
   await expectNoWcagViolations(page);
 
   await page.goto("/vulnerability-intelligence");
@@ -451,6 +452,7 @@ const disconnectedModuleLocaleCases = [
     locale: "ar",
     threatTitle: "استخبارات التهديدات",
     threatStatus: "بيانات التهديدات غير متصلة",
+    threatDisclosure: /مسارات علاقات تجريبية مستقلة، لكنها غير مركّبة في مضيف CICC/,
     vulnerabilityTitle: "استخبارات الثغرات",
     vulnerabilityStatus: "اقتراح API للثغرات غير مركّب",
     vulnerabilityDisclosure: /عقد OpenAPI ما زال مقترحًا/,
@@ -459,6 +461,7 @@ const disconnectedModuleLocaleCases = [
     locale: "fa",
     threatTitle: "اطلاعات تهدید",
     threatStatus: "دادهٔ تهدید متصل نیست",
+    threatDisclosure: /مسیرهای آزمایشی مستقلی برای روابط.*روی میزبان CICC نصب نشده‌اند/,
     vulnerabilityTitle: "اطلاعات آسیب‌پذیری",
     vulnerabilityStatus: "پیشنهاد API آسیب‌پذیری نصب نشده است",
     vulnerabilityDisclosure: /قرارداد OpenAPI هنوز پیشنهادی است/,
@@ -472,6 +475,7 @@ for (const localeCase of disconnectedModuleLocaleCases) {
     await expect(page.locator(`[lang="${localeCase.locale}"][dir="rtl"]`).first()).toBeAttached();
     await expect(page.getByRole("heading", { name: localeCase.threatTitle })).toBeVisible();
     await expect(page.getByRole("heading", { name: localeCase.threatStatus })).toBeVisible();
+    await expect(page.getByText(localeCase.threatDisclosure)).toBeVisible();
     await expectNoWcagViolations(page);
 
     await page.goto("/vulnerability-intelligence");

@@ -30,7 +30,7 @@ const moduleMessages: Record<Locale, Record<UnconfiguredModuleId, ModuleCopy>> =
       title: "Threat Intelligence",
       description: "This workspace is reserved for evidence-led threat analysis and investigation workflows.",
       statusTitle: "Threat data is not connected",
-      statusDescription: "The Threat Intelligence package currently exposes an in-process dispatcher with explicitly experimental sample handlers. Agent 1 reports a sandbox gateway invocation, but this frontend has no approved, independently verified domain data endpoint. No actors, indicators, counts, or live feed health are displayed.",
+      statusDescription: "The legacy Threat Intelligence dispatcher has explicitly experimental sample handlers. PR #3 also adds standalone experimental relationship routes, but they are not mounted in the CICC host and require host-supplied authentication, tenant, storage, and audit dependencies. Agent 1's sandbox gateway trial uses the legacy dispatcher, not these routes. No actors, indicators, relationships, or live feed health are displayed.",
       plannedTitle: "Planned scope — not yet available",
       plannedAreas: [
         "Threat actor, campaign, malware, and technique exploration",
@@ -90,7 +90,7 @@ const moduleMessages: Record<Locale, Record<UnconfiguredModuleId, ModuleCopy>> =
       title: "استخبارات التهديدات",
       description: "مساحة مخصصة لتحليل التهديدات القائم على الأدلة وسير عمل التحقيق.",
       statusTitle: "بيانات التهديدات غير متصلة",
-      statusDescription: "توفّر حزمة استخبارات التهديدات حاليًا موزّعًا داخل العملية بمعالجات عينات تجريبية صراحةً. أفاد الوكيل 1 باستدعاء بوابة في بيئة اختبارية، لكن لا توجد لهذه الواجهة نقطة بيانات نطاق معتمدة ومتحقق منها بصورة مستقلة. لا تُعرض جهات أو مؤشرات أو أعداد أو صحة تغذية مباشرة.",
+      statusDescription: "يحتوي موزّع استخبارات التهديدات القديم على معالجات عينات تجريبية صراحةً. يضيف PR #3 أيضًا مسارات علاقات تجريبية مستقلة، لكنها غير مركّبة في مضيف CICC وتتطلب من المضيف توفير المصادقة والمستأجر والتخزين والتدقيق. تستخدم تجربة البوابة التي أبلغ عنها الوكيل 1 الموزّع القديم، لا هذه المسارات. لا تُعرض جهات أو مؤشرات أو علاقات أو صحة تغذية مباشرة.",
       plannedTitle: "نطاق مخطط — غير متاح بعد",
       plannedAreas: [
         "استكشاف الجهات والحملات والبرمجيات الخبيثة والأساليب",
@@ -150,7 +150,7 @@ const moduleMessages: Record<Locale, Record<UnconfiguredModuleId, ModuleCopy>> =
       title: "اطلاعات تهدید",
       description: "این فضا برای تحلیل مبتنی بر شواهد و گردش‌کارهای بررسی تهدید در نظر گرفته شده است.",
       statusTitle: "دادهٔ تهدید متصل نیست",
-      statusDescription: "بستهٔ اطلاعات تهدید اکنون یک dispatcher درون‌فرایندی با handlerهای نمونهٔ صریحاً آزمایشی ارائه می‌کند. عامل ۱ از فراخوانی دروازه در محیط آزمایشی گزارش داده است، اما این رابط نقطه‌پایان دادهٔ دامنهٔ مورد تأیید و مستقلاً راستی‌آزمایی‌شده ندارد. عامل، شاخص، تعداد یا سلامت زندهٔ خوراک نمایش داده نمی‌شود.",
+      statusDescription: "پخش‌کنندهٔ قدیمی اطلاعات تهدید، گرداننده‌های نمونهٔ صریحاً آزمایشی دارد. PR #3 مسیرهای آزمایشی مستقلی برای روابط نیز اضافه کرده است، اما این مسیرها روی میزبان CICC نصب نشده‌اند و به احراز هویت، تعیین مستأجر، ذخیره‌سازی و ثبت رویدادهایی نیاز دارند که میزبان باید فراهم کند. آزمون دروازه‌ای گزارش‌شده از سوی عامل ۱ از پخش‌کنندهٔ قدیمی استفاده می‌کند، نه این مسیرها. هیچ عامل، شاخص، رابطه یا وضعیت زندهٔ خوراک نمایش داده نمی‌شود.",
       plannedTitle: "دامنهٔ برنامه‌ریزی‌شده — هنوز در دسترس نیست",
       plannedAreas: [
         "کاوش عامل‌های تهدید، کارزارها، بدافزار و روش‌ها",
