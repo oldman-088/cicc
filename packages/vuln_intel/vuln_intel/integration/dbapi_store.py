@@ -135,7 +135,7 @@ CREATE INDEX IF NOT EXISTS ix_record_tenant_severity
     ON vulnerability_record (tenant_id, severity_rank, cve);
 CREATE INDEX IF NOT EXISTS ix_record_tenant_kev
     ON vulnerability_record (tenant_id, kev, cve);
-CREATE TABLE IF NOT EXISTS provenance_event (
+CREATE TABLE IF NOT EXISTS vulnerability_provenance_event (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id   TEXT NOT NULL,
     cve         TEXT NOT NULL,
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS provenance_event (
         REFERENCES vulnerability_record (tenant_id, cve) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS ix_provenance_tenant_cve
-    ON provenance_event (tenant_id, cve, id);
+    ON vulnerability_provenance_event (tenant_id, cve, id);
 """
 
 POSTGRES_SCHEMA = """
@@ -167,7 +167,7 @@ CREATE INDEX IF NOT EXISTS ix_record_tenant_severity
     ON vulnerability_record (tenant_id, severity_rank, cve);
 CREATE INDEX IF NOT EXISTS ix_record_tenant_kev
     ON vulnerability_record (tenant_id, kev, cve);
-CREATE TABLE IF NOT EXISTS provenance_event (
+CREATE TABLE IF NOT EXISTS vulnerability_provenance_event (
     id          BIGSERIAL PRIMARY KEY,
     tenant_id   UUID NOT NULL,
     cve         TEXT NOT NULL,
@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS provenance_event (
         REFERENCES vulnerability_record (tenant_id, cve) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS ix_provenance_tenant_cve
-    ON provenance_event (tenant_id, cve, id);
+    ON vulnerability_provenance_event (tenant_id, cve, id);
 """
 
 _ORDERS = {
@@ -404,7 +404,7 @@ class DBAPIVulnerabilityStore:
         with self.connection() as conn:
             cur = conn.cursor()
             cur.execute(
-                "SELECT event_type, payload FROM provenance_event "
+                "SELECT event_type, payload FROM vulnerability_provenance_event "
                 f"WHERE tenant_id = {p} AND cve = {p} ORDER BY id",
                 (tenant_id, cve),
             )
@@ -577,7 +577,7 @@ class DBAPIVulnerabilityStore:
         cur = conn.cursor()
         observed = provenance.get("observed_at")
         cur.execute(
-            "INSERT INTO provenance_event "
+            "INSERT INTO vulnerability_provenance_event "
             "(tenant_id, cve, event_type, source, observed_at, payload) "
             f"VALUES ({p}, {p}, {p}, {p}, {p}, {self._param(None)})",
             (

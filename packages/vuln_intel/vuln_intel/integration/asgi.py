@@ -258,6 +258,15 @@ class VulnerabilityAsgiApp:
             if method not in _METHODS:
                 raise ApiError("method_not_allowed", f"method {method} is not allowed")
 
+            # Authentication precedes routing. Routing first means an anonymous
+            # caller can tell an existing path from a missing one by the status code
+            # (401 vs 404), which enumerates the API surface to someone holding no
+            # credential at all. The host checks the token before it looks at the
+            # route too; matching that is the point of a mounted app.
+            tenant = self.resolve_tenant(scope)
+            if not tenant or not str(tenant).strip():
+                raise ApiError("unauthorized", "a resolved tenant is required")
+
             path = str(scope.get("path") or "/")
             parts = [segment for segment in path.split("/") if segment]
 
@@ -281,10 +290,6 @@ class VulnerabilityAsgiApp:
                     f"duplicate query parameter(s): {', '.join(duplicates)}",
                 )
             query: Mapping[str, str] = dict(pairs)
-
-            tenant = self.resolve_tenant(scope)
-            if not tenant or not str(tenant).strip():
-                raise ApiError("unauthorized", "a resolved tenant is required")
 
             if len(route) == 2:
                 return self.api.list(
