@@ -120,6 +120,10 @@ def load_persisted_stats(rows: list) -> None:
             merged.update({k: v for k, v in persisted.items() if v is not None})
             if cur is not None:
                 merged["consecutive_failures"] = cur.get("consecutive_failures", 0)
+                # volatile in-memory fields survive the merge
+                for k in ("mount_count", "previous_version", "last_stale"):
+                    if cur.get(k) is not None:
+                        merged[k] = cur[k]
                 if cur["invokes"] > persisted["invokes"]:
                     merged = cur
             _STATS[kind] = merged
@@ -135,6 +139,31 @@ class DomainError(Exception):
 
 class DomainInvalid(Exception):
     """Handler returned a response violating the result schema."""
+
+
+class DomainCircuitOpen(DomainError):
+    """M43: circuit breaker open after N consecutive failures — invokes are
+    rejected fast (no handler execution) until the cooldown elapses."""
+
+    code = "circuit_open"
+
+
+_CIRCUIT: dict[str, dict] = {}  # kind -> {open, opened_at}
+
+
+def circuit_failures_threshold() -> int:
+    return int(os.getenv("CICC_DOMAIN_CIRCUIT_FAILURES", "5"))
+
+
+def circuit_cooldown_s() -> float:
+    return float(os.getenv("CICC_DOMAIN_CIRCUIT_COOLDOWN_S", "30"))
+
+
+def circuit_state(kind: str) -> dict:
+    c = _CIRCUIT.get(kind, {})
+    open_now = bool(c.get("open")) and (time.time() - c.get("opened_at", 0)) < circuit_cooldown_s()
+    return {"open": open_now, "opened_at": c.get("opened_at"), "threshold": circuit_failures_threshold(),
+            "cooldown_s": circuit_cooldown_s()}
 
 
 def _now() -> str:
@@ -157,9 +186,11 @@ def register_domain(kind: str, handler, version: str, source_ref: str) -> dict:
         "kind": kind, "handler": handler, "version": version, "source_ref": source_ref,
         "mounted_at": _now(), "validated": True,
     }
+    prev = _REGISTRY.get(kind)
     _REGISTRY[kind] = entry
-    _STATS.setdefault(kind, {"invokes": 0, "successes": 0, "last_status": None,
-                             "last_error": None, "last_invoke_at": None})
+    st = _STATS.setdefault(kind, _empty_stat())
+    st["mount_count"] = st.get("mount_count", 0) + 1
+    st["previous_version"] = prev["version"] if prev else None
     return {k: v for k, v in entry.items() if k != "handler"}
 
 
@@ -206,10 +237,14 @@ def record_outcome(kind: str, ok: bool, error: str | None = None, stale: bool = 
         st["last_status"] = "ok"
         st["last_error"] = None
         st["last_stale"] = bool(stale)
+        if _CIRCUIT.get(kind, {}).get("open"):
+            _CIRCUIT[kind] = {"open": False, "opened_at": None}  # half-open success -> closed
     else:
         st["consecutive_failures"] = st.get("consecutive_failures", 0) + 1
         st["last_status"] = "error"
         st["last_error"] = (error or "error")[:200]  # sanitized, truncated
+        if st["consecutive_failures"] >= circuit_failures_threshold() and not _CIRCUIT.get(kind, {}).get("open"):
+            _CIRCUIT[kind] = {"open": True, "opened_at": time.time()}
 
 
 def domain_status(kind: str) -> str:
@@ -238,6 +273,9 @@ def all_statuses() -> dict[str, dict]:
             "consecutive_failures": st.get("consecutive_failures", 0),
             "last_stale": st.get("last_stale", False),
             "stale_after_s": stale_after_s(),
+            "circuit": circuit_state(kind),
+            "mount_count": st.get("mount_count", 0),
+            "previous_version": st.get("previous_version"),
             "last_invoke_at": st.get("last_invoke_at"),
             "last_error": st.get("last_error"),  # sanitized already
         }
@@ -274,6 +312,11 @@ def invoke(kind: str, payload: dict, task=None) -> dict:
     entry = _REGISTRY.get(kind)
     if entry is None:
         raise DomainNotMounted(f"no handler mounted for kind '{kind}'")
+    cs = circuit_state(kind)
+    if cs["open"]:
+        raise DomainCircuitOpen(
+            f"{kind}: circuit open after {circuit_failures_threshold()} consecutive failures "
+            f"(cooldown {circuit_cooldown_s()}s)")
     timeout_s = float(os.getenv("CICC_DOMAIN_INVOKE_TIMEOUT_S", "10"))
     retries = int(os.getenv("CICC_DOMAIN_INVOKE_RETRIES", "1"))
     attempts = 1 + max(0, retries)

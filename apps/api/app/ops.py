@@ -537,6 +537,9 @@ def evaluate_alerts() -> dict:
             .scalars()
             .all()
         )
+        # M43: externally managed rules (domain_status) are resolved by their own
+        # producer (record_domain_alert), never auto-resolved by this evaluator
+        open_alerts = [a for a in open_alerts if not a.rule.startswith("domain_")]
         firing_keys = {(r, c) for (r, c, _, _) in firing}
         esc_thr = int(os.getenv("OPS_ALERT_ESCALATE_OCCURRENCES", "10"))
         esc_after_s = float(os.getenv("OPS_ALERT_ESCALATE_AFTER_S", "3600"))
@@ -640,6 +643,46 @@ def evaluate_alerts() -> dict:
                 record_event("info", "alerts", f"alert resolved (recovery): {a.rule} {a.component_key or '-'}", s=s)
         s.commit()
         return {"firing": len(firing)}
+
+
+def record_domain_alert(kind: str, status: str, detail: str, s=None) -> None:
+    """M43: upsert a domain-health alert (rule=domain_status, component=kind).
+    status EXECUTION_VERIFIED resolves the open alert; FAILED/DEGRADED raises or
+    escalates it. Dedup by (rule, component_key) like evaluate_alerts."""
+    rule = "domain_status"
+    ck = kind
+    own = s is None
+    sess = s or SessionLocal()
+    try:
+        now = utcnow()
+        existing = sess.execute(
+            select(models.Alert).where(models.Alert.rule == rule,
+                                       models.Alert.component_key == ck,
+                                       models.Alert.status == "active")).scalar_one_or_none()
+        if status == "EXECUTION_VERIFIED":
+            if existing is not None:
+                existing.status = "resolved"
+                existing.resolved_at = now
+                record_event("info", "alerts", f"domain alert resolved kind={kind}", s=sess)
+        else:
+            sev = "critical" if status == "FAILED" else "warning"
+            msg = f"domain {kind} is {status}: {detail[:200]}"
+            if existing is None:
+                sess.add(models.Alert(rule=rule, component_key=ck, severity=sev, status="active",
+                                      message=msg, first_seen=now, last_seen=now, occurrences=1))
+                record_event("warning", "alerts", f"alert raised [{sev}] {rule} {ck}: {msg}", s=sess)
+            else:
+                existing.occurrences += 1
+                existing.last_seen = now
+                existing.message = msg
+                if sev == "critical" and existing.severity != "critical":
+                    existing.severity = "critical"
+                    existing.escalated = True
+        if own:
+            sess.commit()
+    finally:
+        if own:
+            sess.close()
 
 
 def build_alerts(state: str = "active", limit: int = 100) -> list[dict]:

@@ -373,8 +373,10 @@ def mount_domain(kind: str, body: MountIn,
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"domain_mount_failed ({type(e).__name__})")
     with ops.SessionLocal() as s:
+        prev_ver = domains._STATS.get(kind, {}).get("previous_version")
         ops.record_event("info", "coordination.domains",
-                         f"domain mounted kind={kind} version={body.version} by=api-write-token", s=s)
+                         f"domain mounted kind={kind} version={body.version}"
+                         f"{' (replaced ' + str(prev_ver) + ')' if prev_ver else ''} by=api-write-token", s=s)
         _persist_domain_stats(s)
         s.commit()
     return {"kind": kind, "mounted": True, "status": domains.domain_status(kind), **entry}
@@ -405,6 +407,8 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
     path stays limited to POST /tasks (owner-approved route)."""
     require_write_token(authorization)
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    if len(json.dumps(payload)) > 65536:  # M43: gateway payload cap (64 KiB)
+        raise HTTPException(status_code=413, detail="payload_too_large: domain invoke payload > 64 KiB")
     idempotency_key = body.get("idempotency_key") or None
     task_id = body.get("task_id") or f"dom-{kind}-{uuid.uuid4().hex[:12]}"
     claimed_tenant = body.get("tenant_id")  # M42: recorded as CLAIMED metadata only; enforcement is owner-reserved
@@ -432,16 +436,23 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
             s.commit()
             raise HTTPException(status_code=409, detail=f"domain_not_mounted: {kind}")
         try:
-            out = domains.invoke(kind, payload, task=t)  # M37: per-attempt timeout + retries, same idempotency key
+            out = domains.invoke(kind, payload, task=t)  # M37/M43: per-attempt timeout + retries, same idempotency key + circuit breaker
+        except domains.DomainCircuitOpen as e:
+            registry.record_event(s, task_id, "domain_circuit_open", str(e))
+            s.commit()
+            raise HTTPException(status_code=503, detail=str(e))
         except domains.DomainError as e:
             domains.record_outcome(kind, False, str(e))
             registry.record_event(s, task_id, "domain_error", str(e))
+            st_now = domains.domain_status(kind)
+            ops.record_domain_alert(kind, st_now, str(e), s=s)
             _persist_domain_stats(s)
             s.commit()
             raise HTTPException(status_code=502, detail=str(e))
         except domains.DomainInvalid as e:
             domains.record_outcome(kind, False, str(e))
             registry.record_event(s, task_id, "domain_invalid", str(e))
+            ops.record_domain_alert(kind, domains.domain_status(kind), str(e), s=s)
             _persist_domain_stats(s)
             s.commit()
             raise HTTPException(status_code=422, detail=str(e))
@@ -450,6 +461,7 @@ def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_depend
         domains.record_outcome(kind, True, stale=stale)
         ops.record_event("info", "coordination.domains",
                          f"domain invoke ok kind={kind} task={task_id} stale={stale} by=api-write-token", s=s)
+        ops.record_domain_alert(kind, "EXECUTION_VERIFIED", "recovered", s=s)
         if claimed_tenant is not None:
             registry.record_event(s, task_id, "claimed_tenant", f"tenant_id={claimed_tenant} (unverified claim)")
         if stale:
