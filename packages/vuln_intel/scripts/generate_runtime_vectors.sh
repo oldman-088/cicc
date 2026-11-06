@@ -94,6 +94,7 @@ read -r -d '' CORPUS <<'CORPUS_EOF' || true
 3.0.0.0
 5.x
 5.0.0.rc2
+1.x
 0.beta.1
 0.0.beta.1
 1.A
@@ -194,6 +195,74 @@ from datetime import datetime, timezone
 maven_path, rubygems_path, out_path = sys.argv[1:4]
 maven = json.load(open(maven_path))
 rubygems = json.load(open(rubygems_path))
+
+
+# ---- self-check -------------------------------------------------------------
+# The generator's output is the *evidence*, so it must be validated before anything
+# compares against it. A generator bug would otherwise be reported as a comparator
+# defect - which is exactly what happened on this job's first runs: annotations blamed
+# our RubyGems comparator for pairs whose values match neither implementation.
+#
+# These expectations come from the upstream test suites, independently of our
+# comparators. If one fails the script exits non-zero and no vector file is written.
+SELF_CHECK = {
+    "maven": [
+        ("1.0-beta-1", "1.0-SNAPSHOT", -1, "3.9.9 ComparableVersionTest.checkVersionsOrder"),
+        ("1.0-SNAPSHOT", "1.0", -1, "snapshot precedes the release"),
+        ("1-alpha-1", "1.0", -1, "3.9.9 checkVersionsOrder"),
+        ("2.0.1", "2.0.1-xyz", -1, "3.9.9 checkVersionsOrder"),
+        ("2.0-1", "2.0.1", -1, "3.9.9 checkVersionsOrder"),
+        ("1", "1.0", 0, "3.9.9 checkVersionsEqual"),
+        ("1alpha", "1-alpha", 0, "no separator between number and character"),
+        # Discriminating pairs: Maven and RubyGems answer these *differently*, so if the
+        # two buckets were ever crossed the self-check fails instead of blaming a
+        # comparator. Added after a CI run annotated gem-style pairs as "maven
+        # disagreement", which is only possible if the buckets were mixed up.
+        ("1.0.0.a", "1.a", 1, "Maven: 0 sorts above a string; RubyGems says equal"),
+        ("5.x", "5.0.0.rc2", -1, "Maven: x sorts below 0; RubyGems says 5.x is greater"),
+    ],
+    "rubygems": [
+        ("1.0.0.a", "1.a", 0, "leading zero-run is stripped before the first letter"),
+        ("0.beta.1", "0.0.beta.1", 0, "same rule, with several leading zeros"),
+        ("1.0.0", "1", 0, "trailing zeros are stripped"),
+        ("5.0.0.rc2", "5.x", -1, "'rc' sorts before 'x'"),
+        ("1.x", "1.0.0.a", 1, "'x' sorts after 'a', so 1.x is the greater"),
+        ("1", "1.0.0.a", 1, "a prerelease sorts below its release"),
+        # Counterparts of the discriminating maven pairs above.
+        ("5.x", "5.0.0.rc2", 1, "RubyGems: 'x' sorts after 'rc'"),
+    ],
+}
+
+def _lookup(pairs, left, right):
+    for a, b, value in pairs:
+        if a == left and b == right:
+            return value
+    return None
+
+problems = []
+for family, checks in SELF_CHECK.items():
+    pairs = maven["pairs"] if family == "maven" else rubygems["pairs"]
+    for left, right, expected, why in checks:
+        got = _lookup(pairs, left, right)
+        if got is None:
+            problems.append(f"{family}: self-check pair {left!r} vs {right!r} absent from the corpus")
+        elif got != expected:
+            problems.append(
+                f"{family}: {left!r} vs {right!r} -> generator said {got}, "
+                f"upstream says {expected} ({why})"
+            )
+
+if problems:
+    print("::error title=runtime-vector self-check::The generated vectors are wrong, "
+          "so any disagreement they report is not evidence against our comparators.")
+    for problem in problems:
+        print(f"::error title=runtime-vector self-check::{problem}")
+    print(f"\nself-check FAILED ({len(problems)} problem(s)); no vector file written.", file=sys.stderr)
+    for problem in problems:
+        print(f"  {problem}", file=sys.stderr)
+    raise SystemExit(1)
+
+print(f"self-check passed: {sum(len(v) for v in SELF_CHECK.values())} known upstream facts")
 
 def version(cmd):
     try:
