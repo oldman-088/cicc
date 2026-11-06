@@ -69,3 +69,15 @@ def test_timezone_equivalence_and_empty_assessment():
     result = assess_observations([record(1, evidence=[ev(1,'fixture',shifted)])], start=utc)
     assert result.observations[0].timestamp == utc
     assert assess_observations([]).relationship_count == 0
+
+
+def test_explicit_collection_age_boundary_future_and_provenance():
+    from apps.threat_intelligence.intelligence_assessment import collection_freshness
+    collected = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    item = assess_observations([record(1, evidence=[ev(1, 'fixture', collected)])]).observations[0]
+    assert collection_freshness(item, as_of=collected+timedelta(days=1), max_age=timedelta(days=1)).status == 'within_window'
+    report = collection_freshness(item, as_of=collected+timedelta(days=1, seconds=1), max_age=timedelta(days=1))
+    assert report.status == 'outside_window' and report.observation.provenance == 'fixture feed'
+    assert collection_freshness(item, as_of=collected-timedelta(seconds=1), max_age=timedelta(days=1)).status == 'future_collection_time'
+    with pytest.raises(ValueError): collection_freshness(item, as_of=collected, max_age=timedelta(0))
+    with pytest.raises(ValueError): collection_freshness(item, as_of=collected.replace(tzinfo=None), max_age=timedelta(days=1))

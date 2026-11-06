@@ -69,14 +69,17 @@ class PostgresRelationshipStore:
     A failed audit insert rolls the transaction back. Credentials and free-form
     intelligence payloads are deliberately excluded from audit events.
     """
-    def __init__(self, engine: Engine, *, max_traversal_edges: int = 10000, enforce_rls: bool = True):
+    def __init__(self, engine: Engine, *, max_traversal_edges: int = 10000, enforce_rls: bool = True, tenant_binding: str = "transaction_guc"):
         if engine.dialect.name != 'postgresql':
             raise ValueError('PostgreSQL is required')
         if max_traversal_edges < 1:
             raise ValueError('max_traversal_edges must be positive')
+        if tenant_binding not in ('transaction_guc', 'session_role') or (tenant_binding == 'session_role' and not enforce_rls):
+            raise ValueError('invalid tenant binding configuration')
         self.db = engine
         self.max_traversal_edges = max_traversal_edges
         self.enforce_rls = enforce_rls
+        self.tenant_binding = tenant_binding
 
     @contextmanager
     def _transaction(self, ctx: AuditContext, *, snapshot: bool = False):
@@ -86,19 +89,39 @@ class PostgresRelationshipStore:
             if self.enforce_rls:
                 # Fail closed on bypass roles and missing/disabled/FORCE RLS tables.
                 # This does not verify policy text or the role membership graph.
-                safe_role = conn.execute(text("SELECT NOT rolsuper AND NOT rolbypassrls FROM pg_roles WHERE rolname = current_user")).scalar_one()
+                safe_role = conn.execute(text("SELECT bool_and(NOT rolsuper AND NOT rolbypassrls) FROM pg_roles WHERE rolname IN (current_user, session_user)")).scalar_one()
                 protected = conn.execute(text("""SELECT count(*) FROM pg_class
                     WHERE oid IN (to_regclass('ti_relationship_entity'), to_regclass('ti_relationship_record'),
                                   to_regclass('ti_relationship_idempotency'), to_regclass('ti_relationship_audit'))
                       AND relrowsecurity AND relforcerowsecurity""")).scalar_one()
                 if not safe_role or protected != 4:
                     raise RuntimeError("RLS database role or policies are not safely configured")
-                # Reject poisoned pooled sessions instead of restoring their tenant
-                # after SET LOCAL expires. This is not protection against arbitrary SQL.
-                inherited = conn.execute(text("SELECT current_setting('cicc.tenant_id', true)")).scalar_one()
-                if inherited:
-                    raise RuntimeError("Unexpected pre-existing database tenant context")
-                conn.execute(text("SELECT set_config('cicc.tenant_id', :tenant, true)"), {"tenant": ctx.tenant_id})
+                if self.tenant_binding == 'session_role':
+                    # Exact policy allowlist: refuse missing, changed or extra permissive
+                    # policies. Function ownership/body and privileges still require host review.
+                    policies = conn.execute(text("""SELECT p.polname, p.polcmd, p.polpermissive,
+                        p.polroles, pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid)
+                        FROM pg_policy p WHERE p.polrelid IN (to_regclass('ti_relationship_entity'),
+                        to_regclass('ti_relationship_record'), to_regclass('ti_relationship_idempotency'),
+                        to_regclass('ti_relationship_audit'))""")).all()
+                    names = {'ti_entity_tenant', 'ti_record_tenant', 'ti_idempotency_tenant', 'ti_audit_tenant'}
+                    expression = '((tenant_id)::text = ti_security.authenticated_tenant())'
+                    if len(policies) != 4 or {p[0] for p in policies} != names or any(
+                        p[1] != '*' or not p[2] or p[3] != [0] or p[4] != expression or p[5] != expression
+                        for p in policies
+                    ):
+                        raise RuntimeError("Role-bound RLS policies do not match the proposal")
+                    # The RLS proposal derives the tenant from PostgreSQL session_user,
+                    # not a caller-controlled variable; require the app identity to match.
+                    bound = conn.execute(text("SELECT ti_security.authenticated_tenant()")).scalar_one_or_none()
+                    if not bound or bound != ctx.tenant_id:
+                        raise RuntimeError("Database login is not bound to the authenticated tenant")
+                else:
+                    # A GUC is mutable by arbitrary SQL; this legacy mode is not an auth boundary.
+                    inherited = conn.execute(text("SELECT current_setting('cicc.tenant_id', true)")).scalar_one()
+                    if inherited:
+                        raise RuntimeError("Unexpected pre-existing database tenant context")
+                    conn.execute(text("SELECT set_config('cicc.tenant_id', :tenant, true)"), {"tenant": ctx.tenant_id})
             yield conn
 
     @staticmethod

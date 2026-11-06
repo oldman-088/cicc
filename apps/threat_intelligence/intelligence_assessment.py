@@ -7,8 +7,8 @@ resolution is inferred from these counts. No live-source integration is implied.
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
-from typing import Iterable
+from datetime import datetime, timezone, timedelta
+from typing import Iterable, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -96,3 +96,31 @@ def assess_observations(records: Iterable[RelationshipRecord], *, start: datetim
         observations=evidence, conflicts=conflicts,
         explanation=('Counts describe supplied declarations and observations, not truth, independent corroboration, '
                      'source reliability, a calculated score, or conflict resolution.'))
+
+
+class CollectionFreshness(BaseModel):
+    """Relative age of collected evidence, not event occurrence or source health."""
+    model_config = ConfigDict(extra='forbid', frozen=True)
+    observation: EvidenceObservation
+    as_of: datetime
+    max_age_seconds: float
+    age_seconds: float
+    status: Literal['within_window', 'outside_window', 'future_collection_time']
+
+
+def collection_freshness(observation: EvidenceObservation, *, as_of: datetime,
+                         max_age: timedelta) -> CollectionFreshness:
+    """Compare recorded collection time with an explicit as-of and horizon.
+
+    No default TTL, source freshness inference, event-time assumption or score
+    adjustment is applied. Future timestamps are flagged rather than clamped.
+    """
+    as_of = _utc(as_of)
+    collected = _utc(observation.timestamp)
+    if not isinstance(max_age, timedelta) or max_age.total_seconds() <= 0:
+        raise ValueError('max_age must be a positive timedelta')
+    age = (as_of - collected).total_seconds()
+    horizon = max_age.total_seconds()
+    state = 'future_collection_time' if age < 0 else ('within_window' if age <= horizon else 'outside_window')
+    return CollectionFreshness(observation=observation, as_of=as_of, max_age_seconds=horizon,
+                               age_seconds=age, status=state)

@@ -78,3 +78,12 @@ def test_actual_gateway_audit_failure_rolls_back(host):
         assert host.create(host.tenant_a, data, key).status >= 500
     assert host.find_by_idempotency_key(host.tenant_a, key) is None
     assert host.create(host.tenant_a, data, key).status == 201
+
+
+def test_actual_host_pool_reuse_keeps_tenant_isolation(host):
+    """Harness must exercise real pool reuse, not fabricate connection evidence."""
+    result = host.verify_pool_reuse_isolation()
+    assert result.reused_backend_observed is True
+    assert result.same_tenant_access_preserved is True
+    assert result.cross_tenant_access_denied is True
+    assert result.transaction_rollback_isolated is True

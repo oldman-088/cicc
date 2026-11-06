@@ -73,3 +73,11 @@ def test_decimal_calculation_does_not_depend_on_ambient_precision():
         ctx.prec = 3
         result = calculate_confidence(r, [rating(1, '0.6', '0.5'), rating(2, '0.4', '1')])
     assert result.calculated_score == Decimal('0.466667')
+
+
+def test_confidence_boundary_values_and_half_even_rounding():
+    date = datetime(2026,1,1,tzinfo=timezone.utc)
+    r = record(1, evidence=[ev(1,'a',date), ev(2,'b',date)])
+    assert calculate_confidence(r, [rating(1, '0', '1'), rating(2, '1', '1')]).calculated_score == Decimal('0.500000')
+    assert calculate_confidence(r, [rating(1, '0', '0'), rating(2, '1', '1')]).calculated_score == Decimal('1.000000')
+    assert calculate_confidence(r, [rating(1, '0', '1'), rating(2, '0.000001', '1')]).calculated_score == Decimal('0.000000')
