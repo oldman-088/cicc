@@ -233,6 +233,7 @@ jobs:
     # generated corpus. Fix the comparator or the corpus; do not add continue-on-error
     # back. If it ever has to go advisory again, the reason belongs in this comment with
     # the same three conditions listed.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
