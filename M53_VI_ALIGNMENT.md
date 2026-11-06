@@ -17,3 +17,5 @@ Read original `/home/user/cicc/README.md`, **ULTIMATE MASTER PROMPT v1.0**, comm
 - Focused ingestion/CVSS/frontend: **28 passed**; read seam including synthetic operator/disposable PG: **3 passed**. Fixtures are labeled and do not establish security.
 
 PR #1 `b5c89798fc495b189199a8ee0a3280af815bf212` now explicitly rejects unsupported SPDX tag-value, adds raw byte digest/limits and duplicate/nonfinite JSON rejection. Its `complete` is `not skipped`, not evidence of full coverage. Canonical parser and shared verifier remain owner decisions. Follow-ups filed on PRs #1, #4, #6, #7, #2; no owner approvals inferred.
+
+Hosted PR #3 guard [run 42221985723](https://github.com/oldman-088/cicc/actions/runs/42221985723) succeeded at implementation commit `868295f8a8760be991018d0839057776626cf297`. Its guarded job requires at least 102 engine cases and zero skips/failures, with the live case deselected; hosted log download was unavailable in this sandbox, so the exact hosted executed count was not independently read. The earlier local 102/0/1 result remains separately documented. Subsequent documentation-only commit is not the tested implementation head.
