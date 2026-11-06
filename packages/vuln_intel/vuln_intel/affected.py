@@ -309,11 +309,37 @@ def _describe(
     return f"{lower} {upper}"
 
 
+def name_candidates(ecosystem: str | None, name: str) -> frozenset[str]:
+    """Return the acceptable spellings of ``name`` in ``ecosystem``.
+
+    Maven is the one ecosystem where sources disagree on how to write a package:
+    a purl (and OSV, and GHSA) says ``group:artifact``, while NVD and many
+    advisory feeds give the bare ``artifact``. Both name the same thing, and no
+    normalisation can turn one into the other, so a comparison that insists on
+    one spelling silently reports "no match" for a package that *is* affected.
+    That is the failure mode a vulnerability scanner must never have, so both
+    spellings are accepted here.
+
+    A bare advisory name matching a group-qualified package can over-report when
+    two groups publish the same artifact name. That direction is deliberate:
+    the extra match is visible to an analyst, whereas the miss is invisible.
+    """
+    canonical = _normalize_name(name)
+    if normalize_ecosystem(ecosystem) != "maven" or ":" not in canonical:
+        return frozenset((canonical,))
+    _group, _, artifact = canonical.partition(":")
+    if not artifact:
+        return frozenset((canonical,))
+    return frozenset((canonical, artifact))
+
+
 def _match_package(pkg: AffectedPackage, ecosystem: str, name: str) -> bool:
     pkg_eco = normalize_ecosystem(pkg.ecosystem)
     if pkg_eco is None or pkg_eco != ecosystem:
         return False
-    return _normalize_name(pkg.name) == _normalize_name(name)
+    return bool(
+        name_candidates(ecosystem, pkg.name) & name_candidates(ecosystem, name)
+    )
 
 
 def _normalize_name(name: str) -> str:

@@ -23,8 +23,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
+from urllib.parse import unquote
 
-from .affected import AffectedAssessment, Verdict, assess_affected, normalize_ecosystem
+from .affected import (
+    AffectedAssessment,
+    Verdict,
+    assess_affected,
+    name_candidates,
+    normalize_ecosystem,
+)
 from .schema import NormalizedVulnerability, RecordStatus
 
 __all__ = [
@@ -84,10 +91,24 @@ def dependency_from_purl(purl: str, *, asset: str | None = None) -> Dependency |
         return None
     rest = rest.split("#", 1)[0].split("?", 1)[0]
     name_part, _, version = rest.rpartition("@")
+    # purl path segments are percent-encoded, so an npm scope arrives as
+    # `%40scope/pkg` while every advisory spells it `@scope/pkg`. Decoding is
+    # what the purl spec asks for; without it the name never matches.
+    name_part, version = unquote(name_part), unquote(version)
     if not name_part:
         name_part, version = rest, ""
     if not name_part or not version:
         return None
+    # A purl names a Maven artefact as `group/artifact`; every advisory we ingest
+    # (OSV, GHSA, CTIS) calls the same thing `group:artifact`. Keeping the slash meant
+    # a purl-built inventory could never match a Maven advisory: the comparison is on
+    # the name, and no normalisation turns `/` into `:` — so the match failed and the
+    # verdict came back UNKNOWN, which reads as "cannot tell" when the answer was "yes".
+    # The purl itself is preserved verbatim for export.
+    if type_part.lower() == "maven" and "/" in name_part:
+        group, _, artifact = name_part.partition("/")
+        if group and artifact:
+            name_part = f"{group}:{artifact}"
     ecosystem = {
         "npm": "npm",
         "pypi": "pypi",
@@ -118,7 +139,10 @@ class Inventory:
     def __post_init__(self) -> None:
         index: dict[tuple[str, str], list[Dependency]] = {}
         for dep in self.dependencies:
-            index.setdefault((dep.canonical_ecosystem, dep.canonical_name), []).append(dep)
+            # Every acceptable spelling of the dependency is indexed, so a lookup
+            # written as either `group:artifact` or `artifact` finds it.
+            for spelling in name_candidates(dep.canonical_ecosystem, dep.canonical_name):
+                index.setdefault((dep.canonical_ecosystem, spelling), []).append(dep)
         object.__setattr__(self, "_index", index)
 
     @classmethod
@@ -129,8 +153,20 @@ class Inventory:
         return cls(dependencies=tuple(d for d in parsed if d is not None))
 
     def for_package(self, ecosystem: str, name: str) -> tuple[Dependency, ...]:
-        key = (normalize_ecosystem(ecosystem) or ecosystem.lower(), _normalize_name(name))
-        return tuple(getattr(self, "_index", {}).get(key, ()))
+        """Installed dependencies answering to ``name``, in any accepted spelling.
+
+        A qualified lookup (``group:artifact``) must find a dependency stored
+        under the bare artefact and the other way round, or the advisory and the
+        SBOM disagree on spelling and the package is never examined.
+        """
+        eco = normalize_ecosystem(ecosystem) or ecosystem.lower()
+        index = getattr(self, "_index", {})
+        found: list[Dependency] = []
+        for spelling in name_candidates(eco, name):
+            for dep in index.get((eco, spelling), ()):
+                if dep not in found:
+                    found.append(dep)
+        return tuple(found)
 
     def __len__(self) -> int:
         return len(self.dependencies)
@@ -252,8 +288,11 @@ def _purl_matches(purl: str | None, ecosystem: str, name: str) -> bool:
     parsed = dependency_from_purl(purl)
     if parsed is None:
         return False
-    return (
-        parsed.canonical_ecosystem == ecosystem and parsed.canonical_name == _normalize_name(name)
+    if parsed.canonical_ecosystem != ecosystem:
+        return False
+    return bool(
+        name_candidates(ecosystem, parsed.canonical_name)
+        & name_candidates(ecosystem, name)
     )
 
 
@@ -345,16 +384,29 @@ class Watchlist:
     packages: set[tuple[str, str]] = field(default_factory=set)
 
     def add(self, ecosystem: str, name: str) -> None:
+        """Track ``name`` under every spelling it is known by.
+
+        Both sides of a later ``covers()`` question then agree regardless of
+        whether the caller says ``group:artifact`` or the bare artefact.
+        """
         eco = normalize_ecosystem(ecosystem) or ecosystem.strip().lower()
-        self.packages.add((eco, _normalize_name(name)))
+        for spelling in name_candidates(eco, name):
+            self.packages.add((eco, spelling))
 
     def add_inventory(self, inventory: Inventory) -> None:
         for dependency in inventory.dependencies:
             self.add(dependency.canonical_ecosystem, dependency.canonical_name)
 
     def covers(self, ecosystem: str, name: str) -> bool:
+        """Whether this watchlist holds ``name``, in any accepted spelling.
+
+        A watchlist built from an SBOM stores the purl spelling
+        (``group:artifact``); an advisory asked about by its bare artefact name
+        must still be answered "yes", or the sensible-looking "not on our
+        watchlist" quietly skips a package we do have installed.
+        """
         eco = normalize_ecosystem(ecosystem) or ecosystem.strip().lower()
-        return (eco, _normalize_name(name)) in self.packages
+        return any((eco, spelling) in self.packages for spelling in name_candidates(eco, name))
 
     def as_osv_queries(self, inventory: Inventory) -> list[dict[str, object]]:
         """Build OSV ``/v1/query`` bodies, de-duplicated by package.
