@@ -100,5 +100,6 @@ def contract_v1() -> dict:
         },
         "provenance": "every transition writes an audit event (actor, action, detail) visible via /events and /tasks/{id}/events; tasks carry correlation_id",
         "retry": "failed tasks are retried via POST /retry (retries counter) or sweep requeue; 409 on illegal transitions; clients should back off on 429",
+                "adoption_stages": "PROPOSED -> ACCEPTED -> IMPLEMENTED -> MOUNTED -> CONSUMED -> EXECUTED -> END_TO_END_VERIFIED (Agent 1 registry; CONSUMED = a consumer actively calls the endpoint, END_TO_END_VERIFIED = cross-domain sandbox/live trial green)",
         "lease_recovery": "M28: POST /sweep re-queues ASSIGNED/DELIVERING/ACKNOWLEDGED tasks whose delivery lease elapsed (timeout_s or CICC_COORD_LEASE_S, default 600s) — worker crash/abandon recovery; reported in sweep response field recovered_abandoned; additive transition (QUEUED reachable from those states)",
     }

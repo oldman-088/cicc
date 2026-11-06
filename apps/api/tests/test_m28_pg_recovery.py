@@ -328,3 +328,19 @@ def test_pg_webhook_duplicate_races_task_create_same_event(pg_app, monkeypatch):
     assert len(rows) == 1
     ev = pg_app.get(f"/api/v1/coordination/tasks/{rows[0].task_id}/events", headers=R).json()["events"]
     assert sum(1 for e in ev if e["kind"] == "created") == 1
+
+
+def test_pg_concurrent_create_same_task_id_no_key(pg_app):
+    """M34: 8 threads create the SAME task_id without idempotency_key — the
+    unique constraint + replay path must yield exactly one row, all 200/201,
+    no 500, one created event."""
+    body = {"task_id": "m34-same", "kind": "m34", "payload": {}}
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        rs = list(ex.map(lambda _: pg_app.post("/api/v1/coordination/tasks", json=body, headers=W), range(8)))
+    assert all(r.status_code in (200, 201) for r in rs), [r.status_code for r in rs]
+    with ops.SessionLocal() as s:
+        rows = s.execute(select(models.CoordinationTask).where(
+            models.CoordinationTask.task_id == "m34-same")).scalars().all()
+    assert len(rows) == 1
+    ev = pg_app.get("/api/v1/coordination/tasks/m34-same/events", headers=R).json()["events"]
+    assert sum(1 for e in ev if e["kind"] == "created") == 1
