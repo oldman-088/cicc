@@ -14,7 +14,7 @@ import {
   type JsonObject,
 } from "./decoder";
 
-/** Candidate fields documented by Agent 1 PR #4 M44; not an approved host DTO. */
+/** Candidate fields documented by Agent 1 PR #4 M45; not an approved host DTO. */
 export const DOMAIN_LIFECYCLE_STATES = [
   "NOT_MOUNTED",
   "MOUNTED",
@@ -48,7 +48,10 @@ export type DomainLifecycleEvidenceCandidate = {
   stale_after_s: number | null;
   last_invoke_at: string | null;
   last_error: string | null;
+  /** M45 process-local last successful invoke; absent on older M44 responses. */
+  last_success_at?: string | null;
   circuit?: DomainCircuitCandidate;
+  /** Process-local counts only; `mounts_total` is a separate persisted metric. */
   mount_count?: number;
   previous_version?: string | null;
 };
@@ -76,16 +79,19 @@ export type DomainLifecycleStatusCandidate = {
 
 export type DomainLatencyCandidate = {
   count: number;
-  avg_s: number;
+  /** Null until the first invoke has produced a latency sample. */
+  avg_s: number | null;
   max_s: number;
-  last_s: number;
+  /** Null until the first invoke has produced a latency sample. */
+  last_s: number | null;
 };
 
 export type DomainMetricsCandidate = {
   invokes: number;
   successes: number;
   failures: number;
-  success_rate: number;
+  /** Null before any invokes; do not coerce missing measurements to 0%. */
+  success_rate: number | null;
   timeouts: number;
   retries: number;
   stale_count: number;
@@ -93,12 +99,28 @@ export type DomainMetricsCandidate = {
   latency: DomainLatencyCandidate;
   circuit: Required<Pick<DomainCircuitCandidate, "open" | "opened_at" | "threshold" | "cooldown_s" | "opens" | "closes">>;
   mount_count: number;
+  /** Persisted mount-event count from the operations audit stream (M45). */
+  mounts_total?: number;
+  /** Process-local last-success timestamp (M45). */
+  last_success_at?: string | null;
   status: DomainLifecycleState;
 };
 
 export type DomainMetricsResponseCandidate = {
   domains: Record<string, DomainMetricsCandidate>;
   labels: readonly ["kind"];
+  note: string;
+};
+
+/** Documented M42 read shape; still only a PR #4 candidate, not host-verified. */
+export type DomainDiagnosticsCandidate = {
+  status: "ok" | "degraded";
+  db_ok: boolean;
+  version: string;
+  uptime_s: number;
+  mounted_domains: DomainDescriptorCandidate[];
+  domain_statuses: Record<string, DomainLifecycleEvidenceCandidate>;
+  stale_after_s: number;
   note: string;
 };
 
@@ -146,15 +168,15 @@ export type DomainGatewayErrorCodeCandidate =
  * shared contract is approved.
  */
 export type DomainGatewayErrorEnvelopeStatus = "unresolved";
-export type DomainDiagnosticsContractStatus = "not-defined";
+export type DomainDiagnosticsContractStatus = "documented-candidate-not-approved";
 
 export const DOMAIN_LIFECYCLE_FRONTEND_GATE = {
   approval: "pending",
   principalAndTenantScope: "pending",
   errorEnvelope: "unresolved",
-  diagnosticsDto: "not-defined",
+  diagnosticsDto: "documented-candidate-not-approved",
   getSideEffectPolicy: "pending",
-  mountHistoryPersistence: "process-local-or-unknown",
+  mountHistoryPersistence: "mounts_total-persisted; mount_count-and-previous_version-process-local",
 } as const;
 
 function parseLifecycleState(value: unknown, path: string): DomainLifecycleState {
@@ -202,6 +224,7 @@ export function parseDomainLifecycleEvidenceCandidate(value: unknown, path = "ev
   if (input.circuit !== undefined) result.circuit = parseCircuit(input.circuit, `${path}.circuit`);
   if (input.mount_count !== undefined) result.mount_count = contractNonNegativeInteger(input.mount_count, `${path}.mount_count`);
   if (input.previous_version !== undefined) result.previous_version = contractNullableString(input.previous_version, `${path}.previous_version`);
+  if (input.last_success_at !== undefined) result.last_success_at = contractNullableTimestamp(input.last_success_at, `${path}.last_success_at`);
   return result;
 }
 
@@ -246,21 +269,21 @@ function parseLatency(value: unknown, path: string): DomainLatencyCandidate {
   const input = contractObject(value, path);
   return {
     count: contractNonNegativeInteger(input.count, `${path}.count`),
-    avg_s: contractNonNegativeNumber(input.avg_s, `${path}.avg_s`),
+    avg_s: input.avg_s === null ? null : contractNonNegativeNumber(input.avg_s, `${path}.avg_s`),
     max_s: contractNonNegativeNumber(input.max_s, `${path}.max_s`),
-    last_s: contractNonNegativeNumber(input.last_s, `${path}.last_s`),
+    last_s: input.last_s === null ? null : contractNonNegativeNumber(input.last_s, `${path}.last_s`),
   };
 }
 
 function parseMetricsDomain(value: unknown, path: string): DomainMetricsCandidate {
   const input = contractObject(value, path);
-  const rate = contractNonNegativeNumber(input.success_rate, `${path}.success_rate`);
-  if (rate > 1) throw new Error(`Contract payload at ${path}.success_rate must be between 0 and 1`);
+  const rate = input.success_rate === null ? null : contractNonNegativeNumber(input.success_rate, `${path}.success_rate`);
+  if (rate !== null && rate > 1) throw new Error(`Contract payload at ${path}.success_rate must be between 0 and 1`);
   const circuit = parseCircuit(input.circuit, `${path}.circuit`);
   if (circuit.opens === undefined || circuit.closes === undefined) {
     throw new Error(`Contract payload at ${path}.circuit must include opens and closes`);
   }
-  return {
+  const result: DomainMetricsCandidate = {
     invokes: contractNonNegativeInteger(input.invokes, `${path}.invokes`),
     successes: contractNonNegativeInteger(input.successes, `${path}.successes`),
     failures: contractNonNegativeInteger(input.failures, `${path}.failures`),
@@ -274,6 +297,9 @@ function parseMetricsDomain(value: unknown, path: string): DomainMetricsCandidat
     mount_count: contractNonNegativeInteger(input.mount_count, `${path}.mount_count`),
     status: parseLifecycleState(input.status, `${path}.status`),
   };
+  if (input.mounts_total !== undefined) result.mounts_total = contractNonNegativeInteger(input.mounts_total, `${path}.mounts_total`);
+  if (input.last_success_at !== undefined) result.last_success_at = contractNullableTimestamp(input.last_success_at, `${path}.last_success_at`);
+  return result;
 }
 
 export function parseDomainMetricsCandidate(value: unknown): DomainMetricsResponseCandidate {
@@ -287,6 +313,29 @@ export function parseDomainMetricsCandidate(value: unknown): DomainMetricsRespon
     throw new Error("Contract payload at domain-metrics.labels must contain only the bounded 'kind' label");
   }
   return { domains, labels: ["kind"], note: contractString(input.note, "domain-metrics.note") };
+}
+
+/** Decode the documented diagnostics shape without implying an approved host mount. */
+export function parseDomainDiagnosticsCandidate(value: unknown): DomainDiagnosticsCandidate {
+  const input = contractObject(value, "domain-diagnostics");
+  const statusesInput = contractObject(input.domain_statuses, "domain-diagnostics.domain_statuses");
+  const domainStatuses = Object.fromEntries(
+    Object.entries(statusesInput).map(([kind, evidence]) => [
+      kind,
+      parseDomainLifecycleEvidenceCandidate(evidence, `domain-diagnostics.domain_statuses.${kind}`),
+    ]),
+  );
+  const uptime = contractNonNegativeNumber(input.uptime_s, "domain-diagnostics.uptime_s");
+  return {
+    status: contractEnum(input.status, ["ok", "degraded"] as const, "domain-diagnostics.status"),
+    db_ok: contractBoolean(input.db_ok, "domain-diagnostics.db_ok"),
+    version: contractNonEmptyString(input.version, "domain-diagnostics.version"),
+    uptime_s: uptime,
+    mounted_domains: contractArray(input.mounted_domains, "domain-diagnostics.mounted_domains", parseDomainDescriptor),
+    domain_statuses: domainStatuses,
+    stale_after_s: contractNonNegativeNumber(input.stale_after_s, "domain-diagnostics.stale_after_s"),
+    note: contractString(input.note, "domain-diagnostics.note"),
+  };
 }
 
 export function parseDomainFreshnessCandidate(value: unknown): DomainFreshnessCandidate {
@@ -316,16 +365,15 @@ export function parseDomainProvenanceCandidate(value: unknown): DomainProvenance
   return result;
 }
 
-/**
- * The M44 candidate does not define a diagnostics DTO or a stable error JSON
- * envelope. These are not parser inputs until the owning contract is approved.
- */
+/** M45 documents diagnostics and last-success fields; ownership gates remain open. */
 export const agent1DomainUnresolvedSurfaces = {
-  diagnostics: "not-defined",
+  diagnostics: "documented-candidate-not-approved-or-wired",
   perRouteErrorEnvelope: "unresolved",
   ownerApproval: "pending",
   principalTenantScope: "pending",
   getSideEffectPolicy: "pending",
-  mountCountPersistence: "volatile-not-persisted",
-  previousVersionPersistence: "volatile-not-persisted",
+  mountCountPersistence: "process-local",
+  mountsTotalPersistence: "persisted-audit-event-count",
+  lastSuccessPersistence: "process-local",
+  previousVersionPersistence: "process-local",
 } as const;

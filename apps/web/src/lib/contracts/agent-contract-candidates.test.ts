@@ -3,6 +3,7 @@ import {
   parseDomainLifecycleListCandidate,
   parseDomainLifecycleStatusCandidate,
   parseDomainMetricsCandidate,
+  parseDomainDiagnosticsCandidate,
   parseDomainProvenanceCandidate,
   agent1DomainUnresolvedSurfaces,
 } from "./agent1-domains";
@@ -41,6 +42,7 @@ const domainEvidence = {
   circuit: { open: false, opened_at: null, threshold: 5, cooldown_s: 30, opens: 0, closes: 0 },
   mount_count: 0,
   previous_version: null,
+  last_success_at: null,
 };
 
 const relationshipRecord = {
@@ -91,7 +93,7 @@ const vulnerabilityRecord = {
 };
 
 describe("M45 read-only contract candidate decoders", () => {
-  it("validates the documented M44 lifecycle and metrics candidates without enabling a route", () => {
+  it("validates documented M45 lifecycle, metrics, and diagnostics candidates without enabling a route", () => {
     const lifecycle = parseDomainLifecycleListCandidate({
       domains: [{ kind: "threat_intel", version: null, source_ref: null, mounted_at: null, status: "NOT_MOUNTED" }],
       statuses: { threat_intel: domainEvidence },
@@ -99,6 +101,7 @@ describe("M45 read-only contract candidate decoders", () => {
       note: "Documented contract candidate, not a host response",
     });
     expect(lifecycle.statuses.threat_intel.mount_count).toBe(0);
+    expect(lifecycle.statuses.threat_intel.last_success_at).toBeNull();
     expect(parseDomainLifecycleStatusCandidate({ kind: "threat_intel", status: "NOT_MOUNTED", evidence: domainEvidence }).evidence.circuit?.open).toBe(false);
 
     const metrics = parseDomainMetricsCandidate({
@@ -108,15 +111,40 @@ describe("M45 read-only contract candidate decoders", () => {
           stale_count: 0, skew_count: 0,
           latency: { count: 4, avg_s: 0.5, max_s: 1.2, last_s: 0.3 },
           circuit: { open: false, opened_at: null, threshold: 5, cooldown_s: 30, opens: 0, closes: 1 },
-          mount_count: 1, status: "DEGRADED",
+          mount_count: 1, mounts_total: 3, last_success_at: "2026-11-06T09:00:00Z", status: "DEGRADED",
+        },
+        vulnerability_intel: {
+          invokes: 0, successes: 0, failures: 0, success_rate: null, timeouts: 0, retries: 0,
+          stale_count: 0, skew_count: 0,
+          latency: { count: 0, avg_s: null, max_s: 0, last_s: null },
+          circuit: { open: false, opened_at: null, threshold: 5, cooldown_s: 30, opens: 0, closes: 0 },
+          mount_count: 0, mounts_total: 0, last_success_at: null, status: "NOT_MOUNTED",
         },
       },
       labels: ["kind"],
       note: "kind-bounded labels only",
     });
     expect(metrics.domains.threat_intel.success_rate).toBe(0.75);
+    expect(metrics.domains.threat_intel.mounts_total).toBe(3);
+    expect(metrics.domains.vulnerability_intel.success_rate).toBeNull();
+    expect(metrics.domains.vulnerability_intel.latency.avg_s).toBeNull();
+    expect(metrics.domains.vulnerability_intel.latency.last_s).toBeNull();
+
+    const diagnostics = parseDomainDiagnosticsCandidate({
+      status: "ok", db_ok: true, version: "0.1.0", uptime_s: 12,
+      mounted_domains: [], domain_statuses: { threat_intel: domainEvidence }, stale_after_s: 3600,
+      note: "Documented candidate only; not host-verified",
+    });
+    expect(diagnostics.domain_statuses.threat_intel.last_success_at).toBeNull();
+    expect(() => parseDomainDiagnosticsCandidate({ ...diagnostics, status: "unknown" })).toThrow(/domain-diagnostics.status/);
     expect(() => parseDomainMetricsCandidate({ domains: {}, labels: ["kind", "tenant_id"], note: "bad" })).toThrow(/bounded 'kind' label/);
-    expect(agent1DomainUnresolvedSurfaces).toMatchObject({ diagnostics: "not-defined", perRouteErrorEnvelope: "unresolved", ownerApproval: "pending" });
+    expect(agent1DomainUnresolvedSurfaces).toMatchObject({
+      diagnostics: "documented-candidate-not-approved-or-wired",
+      perRouteErrorEnvelope: "unresolved",
+      ownerApproval: "pending",
+      mountsTotalPersistence: "persisted-audit-event-count",
+      lastSuccessPersistence: "process-local",
+    });
   });
 
   it("preserves provenance, collection freshness, and circuit/mount fields as evidence, not durability claims", () => {
