@@ -295,6 +295,13 @@ def plan_remediation(
         evidence.append("severity: critical")
     if record.conflict_notes:
         warnings.extend(record.conflict_notes[:2])
+        if len(record.conflict_notes) > 2:
+            # Otherwise a remediation plan lists two disagreements and silently omits
+            # the rest, which is exactly the completeness claim a plan must not make.
+            warnings.append(
+                f"{len(record.conflict_notes) - 2} further source disagreement(s) not "
+                "shown here; see the record's conflicts"
+            )
     if not record.sources:
         warnings.append("record carries no source provenance: treat with suspicion")
 

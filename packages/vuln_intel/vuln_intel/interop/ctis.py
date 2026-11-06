@@ -59,6 +59,10 @@ _SOLUTION_TYPE = {
 #: record should not produce an unvalidatable document.
 _MAX_TECHNIQUES = 20
 _MAX_SCORES = 32
+#: Not a schema bound: a record with hundreds of references is a sign of an upstream
+#: parsing problem, and no consumer reads them. Capped *and recorded* so it is a
+#: declared loss rather than an invisible one.
+_MAX_REFERENCES = 50
 
 
 @dataclass(frozen=True)
@@ -158,8 +162,25 @@ def _vulnerability_block(record: NormalizedVulnerability) -> dict[str, Any]:
     return {key: value for key, value in block.items() if value not in (None, [], ())}
 
 
-def _scores(record: NormalizedVulnerability) -> list[dict[str, Any]]:
-    """Every score the record carries, in CTIS's flat, sourced form.
+def _score_rank(score: Any) -> tuple[int, float]:
+    """Keep the assessments that matter when the cap is reached.
+
+    Ordering by score rather than by position means a truncation removes the least
+    severe duplicate rather than whichever happened to be appended last.
+    """
+    try:
+        base = float(getattr(score, "base_score", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        base = 0.0
+    return (int(getattr(score, "assessed", False)), base)
+
+
+def _scores(record: NormalizedVulnerability) -> tuple[list[dict[str, Any]], tuple[str, ...]]:
+    """Every score the record carries, in CTIS's flat, sourced form, plus losses.
+
+    Returns losses rather than reporting them out of band: an earlier draft appended
+    to a module-level list, which carries one record's truncation into the next
+    record's warnings and is not safe under concurrency.
 
     CTIS treats ``epss`` and ``ssvc`` as score *systems*, which is more expressive
     than a nested object: each value keeps its own source and date. We emit one entry
@@ -167,7 +188,17 @@ def _scores(record: NormalizedVulnerability) -> list[dict[str, Any]]:
     v3.1 and a vendor's v4.0 stays visible downstream.
     """
     scores: list[dict[str, Any]] = []
-    for score in record.cvss[:_MAX_SCORES]:
+    warnings: list[str] = []
+    dropped = len(record.cvss) - _MAX_SCORES
+    if dropped > 0:
+        # CTIS bounds the sequence; silently slicing would make a fourth CVSS
+        # assessment look like one nobody published, which is a different and worse
+        # claim than "we could not carry it".
+        warnings.append(
+            f"cvss: {dropped} of {len(record.cvss)} scoring assessments dropped to fit "
+            f"the CTIS limit of {_MAX_SCORES}; the highest-scoring ones are kept"
+        )
+    for score in sorted(record.cvss, key=_score_rank, reverse=True)[:_MAX_SCORES]:
         if not score.assessed:
             continue
         entry: dict[str, Any] = {"system": "cvss", "version": score.version}
@@ -205,16 +236,38 @@ def _scores(record: NormalizedVulnerability) -> list[dict[str, Any]]:
             # A range label is honest about that ("track..attend").
             ssvc["label"] = f"{assessment.floor.value}..{assessment.ceiling.value}"
         scores.append(ssvc)
-    return scores[:_MAX_SCORES]
+    trimmed = scores[:_MAX_SCORES]
+    if len(trimmed) < len(scores):
+        # The cap applies to the whole sequence, not only the CVSS entries.
+        warnings.append(
+            f"scores: {len(scores) - len(trimmed)} entr(ies) beyond the CTIS limit of "
+            f"{_MAX_SCORES} not exported"
+        )
+    return trimmed, tuple(warnings)
 
 
-def _techniques(record: NormalizedVulnerability, mapping: Any) -> list[str]:
+def _techniques(
+    record: NormalizedVulnerability, mapping: Any
+) -> tuple[list[str], tuple[str, ...]]:
+    """Technique ids for this CVE, plus a loss note when the CTIS cap bites.
+
+    A dropped technique is not a cosmetic omission: an ATT&CK technique that vanishes
+    between our record and the downstream finding is coverage a responder believes
+    they do not have.
+    """
     if mapping is None:
-        return []
+        return [], ()
     found = mapping.by_cve.get(str(record.cve)) if hasattr(mapping, "by_cve") else None
     if not found:
-        return []
-    return [t.technique_id for t in found][:_MAX_TECHNIQUES]
+        return [], ()
+    ids = [t.technique_id for t in found]
+    kept = ids[:_MAX_TECHNIQUES]
+    if len(kept) < len(ids):
+        return kept, (
+            f"attack: {len(ids) - len(kept)} of {len(ids)} technique(s) dropped to fit "
+            f"the CTIS limit of {_MAX_TECHNIQUES}",
+        )
+    return kept, ()
 
 
 def to_ctis_finding(
@@ -252,11 +305,13 @@ def to_ctis_finding(
         finding["title"] = f"{record.cve}: {record.summary}"[:512]
         finding["description"] = record.summary
 
-    scores = _scores(record)
+    scores, score_warnings = _scores(record)
+    warnings.extend(score_warnings)
     if scores:
         finding["scores"] = scores
 
-    techniques = _techniques(record, attack_mapping)
+    techniques, technique_warnings = _techniques(record, attack_mapping)
+    warnings.extend(technique_warnings)
     if techniques:
         finding["attack_technique_ids"] = techniques
 
@@ -271,13 +326,18 @@ def to_ctis_finding(
                 "consumer must know to interpret"
             )
     if record.references:
-        references: list[str] = []
-        for reference in record.references[:50]:
+        collected: list[str] = []
+        for reference in record.references:
             url = reference if isinstance(reference, str) else getattr(reference, "url", None)
             if url:
-                references.append(str(url))
-        if references:
-            finding["references"] = references
+                collected.append(str(url))
+        if len(collected) > _MAX_REFERENCES:
+            warnings.append(
+                f"references: {len(collected) - _MAX_REFERENCES} of {len(collected)} "
+                f"dropped to fit the CTIS limit of {_MAX_REFERENCES}"
+            )
+        if collected[:_MAX_REFERENCES]:
+            finding["references"] = collected[:_MAX_REFERENCES]
 
     if remediation is not None:
         block: dict[str, Any] = {

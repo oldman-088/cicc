@@ -581,9 +581,15 @@ def score_vulnerability(
         )
 
     if record.conflict_notes:
-        warnings.append(
-            "source disagreements present: " + "; ".join(record.conflict_notes[:3])
-        )
+        # Capped for readability, but counted: three notes out of five shown without a
+        # count reads as "there are three disagreements" when there are five, and the
+        # ranking that follows is the thing an analyst acts on.
+        shown = "; ".join(record.conflict_notes[:3])
+        # Named distinctly from the function's own `total` (the score), which mypy
+        # correctly refused to let this shadow into an int.
+        note_count = len(record.conflict_notes)
+        more = f" (+{note_count - 3} more)" if note_count > 3 else ""
+        warnings.append(f"source disagreements present: {shown}{more}")
 
     # -- SSVC: turn the combined evidence into an action, not just a number -----
     ssvc_note, exposure_nudge = _ssvc_points(record, policy, context)

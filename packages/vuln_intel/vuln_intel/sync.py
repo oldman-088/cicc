@@ -476,6 +476,21 @@ class IncrementalSync:
         )
 
 
+
+def _summarise_warnings(warnings: Sequence[str]) -> str | None:
+    """First three warnings, with the remainder counted.
+
+    A health row that shows three problems out of nine and says nothing about the
+    other six is a report claiming a completeness it does not have.
+    """
+    if not warnings:
+        return None
+    shown = "; ".join(warnings[:3])
+    if len(warnings) > 3:
+        return f"{shown} (+{len(warnings) - 3} more)"
+    return shown
+
+
 def to_source_state(
     outcome: SyncOutcome, *, kind: SourceKind, now: datetime | None = None
 ) -> SourceState:
@@ -501,6 +516,8 @@ def to_source_state(
         # ``completed_at`` alone, so this pair reports both facts and the gap between
         # them is the outage duration.
         last_attempt=outcome.checkpoint.attempted_at,
-        error="; ".join(outcome.warnings[:3]) or None,
+        # Capped so a health row stays readable, with the remainder counted: an
+        # operator reading three warnings must not conclude there were three.
+        error=_summarise_warnings(outcome.warnings),
         records=len(outcome.records),
     )

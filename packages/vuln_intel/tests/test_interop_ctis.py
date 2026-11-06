@@ -305,3 +305,116 @@ class TestSsvcLabelHonesty:
         cvss = next(s for s in scores if s["system"] == "cvss")
         assert cvss["source"] == "nvd"
         assert cvss["value"] == 9.8
+
+
+class TestCappedSequencesAreRecordedNotSilentlyDropped:
+    """CTIS bounds several sequences, and the adapter used to slice them bare.
+
+    A CVSS assessment that disappears because a list was truncated is
+    indistinguishable, downstream, from one the source never published. Both are
+    absent; only one of them is true. The same applies to ATT&CK techniques — a
+    technique that vanishes is coverage a responder believes they do not have.
+    """
+
+    @staticmethod
+    def _record(n_scores=0, n_refs=0, n_techniques=0):
+        from vuln_intel.schema import (
+            CveId,
+            CvssScore,
+            NormalizedVulnerability,
+            Origin,
+            Reference,
+            Severity,
+        )
+        from vuln_intel.threat_intel import AttackTechnique, CveTechniqueMap
+
+        record = NormalizedVulnerability(
+            cve=CveId.parse("CVE-2026-5001"),
+            origin=Origin.FIXTURE,
+            cvss=tuple(
+                CvssScore(
+                    version="3.1", base_score=5.0 + i / 10, severity=Severity.MEDIUM,
+                    vector="", source=f"source-{i}",
+                )
+                for i in range(n_scores)
+            ),
+            references=tuple(
+                Reference(url=f"https://example.test/{i}", kind="advisory")
+                for i in range(n_refs)
+            ),
+        )
+        mapping = None
+        if n_techniques:
+            mapping = CveTechniqueMap(
+                source="mitre-ctid/mappings-explorer", version="test", attack_version=None,
+                created=None,
+                by_cve={
+                    "CVE-2026-5001": tuple(
+                        AttackTechnique(
+                            technique_id=f"T{1000 + i}", name=f"tech {i}",
+                            mapping_type="exploitation_technique",
+                        )
+                        for i in range(n_techniques)
+                    )
+                },
+            )
+        return record, mapping
+
+    def test_scores_within_the_cap_produce_no_warning(self):
+        from vuln_intel.interop.ctis import to_ctis_finding
+
+        record, _ = self._record(n_scores=3)
+        conversion = to_ctis_finding(record)
+        assert not any("cvss" in warning for warning in conversion.warnings)
+
+    def test_excess_cvss_scores_are_counted_in_the_warnings(self):
+        from vuln_intel.interop.ctis import _MAX_SCORES, to_ctis_finding
+
+        record, _ = self._record(n_scores=_MAX_SCORES + 4)
+        conversion = to_ctis_finding(record)
+        cvss_entries = [s for s in conversion.finding["scores"] if s["system"] == "cvss"]
+        assert len(cvss_entries) == _MAX_SCORES
+        assert any("4 of" in warning and "dropped" in warning for warning in conversion.warnings), (
+            f"truncation was silent; warnings={conversion.warnings}"
+        )
+
+    def test_the_highest_scores_survive_the_cap(self):
+        """Position is arbitrary; severity is not. Keep what matters."""
+        from vuln_intel.interop.ctis import _MAX_SCORES, to_ctis_finding
+
+        record, _ = self._record(n_scores=_MAX_SCORES + 4)
+        conversion = to_ctis_finding(record)
+        kept = sorted(s["value"] for s in conversion.finding["scores"] if s["system"] == "cvss")
+        dropped_scores = sorted(5.0 + i / 10 for i in range(_MAX_SCORES + 4))[:4]
+        assert min(kept) > max(dropped_scores), (
+            "the cap dropped higher scores than it kept"
+        )
+
+    def test_excess_references_are_counted(self):
+        from vuln_intel.interop.ctis import _MAX_REFERENCES, to_ctis_finding
+
+        record, _ = self._record(n_refs=_MAX_REFERENCES + 7)
+        conversion = to_ctis_finding(record)
+        assert len(conversion.finding["references"]) == _MAX_REFERENCES
+        assert any("references" in warning and "7 of" in warning for warning in conversion.warnings)
+
+    def test_excess_techniques_are_counted(self):
+        from vuln_intel.interop.ctis import _MAX_TECHNIQUES, to_ctis_finding
+
+        record, mapping = self._record(n_techniques=_MAX_TECHNIQUES + 3)
+        conversion = to_ctis_finding(record, attack_mapping=mapping)
+        assert len(conversion.finding["attack_technique_ids"]) == _MAX_TECHNIQUES
+        assert any("technique" in warning and "3 of" in warning for warning in conversion.warnings)
+
+    def test_one_records_truncation_does_not_leak_into_anothers_warnings(self):
+        """A module-level accumulator carried the last record's loss into the next."""
+        from vuln_intel.interop.ctis import _MAX_SCORES, to_ctis_finding
+
+        big, _ = self._record(n_scores=_MAX_SCORES + 2)
+        small, _ = self._record(n_scores=2)
+        first = to_ctis_finding(big)
+        second = to_ctis_finding(small)
+        assert any("dropped" in warning for warning in first.warnings)
+        assert not any("dropped" in warning for warning in second.warnings), (
+            f"the previous record's truncation leaked: {second.warnings}"
+        )

@@ -309,8 +309,13 @@ def nvd_collector(
             except SourceError:
                 raise
         if not records and misses:
+            # The count is stated and the list is capped: five names is enough to
+            # recognise the mistake, but "1 of 40 shown" is what tells an operator
+            # their input was wrong rather than their connector.
+            shown = ", ".join(misses[:5])
+            omitted = f" (and {len(misses) - 5} more)" if len(misses) > 5 else ""
             raise SourceNotFound(
-                "none of the requested CVEs are known to NVD: " + ", ".join(misses[:5]),
+                f"none of the requested CVEs are known to NVD: {shown}{omitted}",
                 source="nvd",
             )
         return records

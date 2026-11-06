@@ -131,3 +131,132 @@ class TestRetractedAdvisoriesAreNotPresentedAsActionable:
         payload = to_ctis_report([finding], generated_at=report.run_at)
         assert "rejected" in vex_detail
         assert "false_positive" in str(payload), "CTIS should still call it a false positive"
+
+
+class TestCrossFormatConsistency:
+    """One record, four exports. They must not contradict each other silently.
+
+    The VEX/CTIS contradiction fixed earlier was found by reading the adapters, not by
+    a test — the four adapters had four separate test suites and nothing compared them.
+    These do not require the formats to *agree* (they cannot: CTIS has no VEX state,
+    VEX has no false_positive), they require every disagreement to be one a consumer
+    can see and explain.
+    """
+
+    @staticmethod
+    def _record(*, status=None, kev=None, score=9.8):
+        from vuln_intel.schema import (
+            AffectedPackage,
+            CveId,
+            CvssScore,
+            NormalizedVulnerability,
+            Origin,
+            Severity,
+        )
+
+        return NormalizedVulnerability(
+            cve=CveId.parse("CVE-2026-4001"),
+            origin=Origin.FIXTURE,
+            summary="cross-format check",
+            affected=(
+                AffectedPackage(ecosystem="npm", name="acme-core", introduced="0", fixed="2.0.0"),
+            ),
+            cvss=(
+                CvssScore(
+                    version="3.1", base_score=score, severity=Severity.CRITICAL,
+                    vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", source="nvd",
+                ),
+            ),
+            kev=kev,
+            record_status=status,
+            references=tuple(
+                __import__("vuln_intel.schema", fromlist=["Reference"]).Reference(
+                    url=f"https://example.test/adv/{i}", kind="advisory"
+                )
+                for i in range(3)
+            ),
+        )
+
+    @staticmethod
+    def _report(record):
+        from datetime import datetime, timezone
+
+        from vuln_intel.assessment import workflow_for
+        from vuln_intel.watchlist import Dependency, Inventory
+
+        inventory = Inventory(
+            dependencies=(Dependency(ecosystem="npm", name="acme-core", version="1.0.0"),)
+        )
+        return workflow_for(
+            records=[record], inventory=inventory,
+            now=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+    def _all_exports(self, record):
+        from vuln_intel.interop.ctis import to_ctis_finding
+        from vuln_intel.interop.openvex import to_openvex
+        from vuln_intel.interop.sarif import to_sarif
+        from vuln_intel.interop.vex import to_vex
+
+        report = self._report(record)
+        return report, {
+            "vex": to_vex(report, generated_at=report.run_at),
+            "openvex": to_openvex(report, generated_at=report.run_at),
+            "sarif": to_sarif(report),
+            "ctis": to_ctis_finding(record),
+        }
+
+    def test_every_export_names_the_same_cve(self):
+        _report, exports = self._all_exports(self._record())
+        vex_cves = {v["id"] for v in exports["vex"].document["vulnerabilities"]}
+        openvex_cves = {s["vulnerability"]["name"] for s in exports["openvex"].document["statements"]}
+        sarif_cves = {r["ruleId"] for r in exports["sarif"]["runs"][0]["results"]}
+        ctis = exports["ctis"].finding
+        assert vex_cves == openvex_cves == sarif_cves == {"CVE-2026-4001"}
+        assert ctis["title"].startswith("CVE-2026-4001")
+
+    def test_a_retracted_record_is_flagged_by_every_export_that_can_flag_it(self):
+        from vuln_intel.schema import RecordStatus
+
+        _, exports = self._all_exports(self._record(status=RecordStatus.REJECTED))
+        detail = exports["vex"].document["vulnerabilities"][0]["analysis"]["detail"]
+        assert "advisory standing: rejected" in detail
+        assert "CVE-2026-4001" in exports["vex"].retracted
+        assert "advisory standing: rejected" in (
+            exports["openvex"].document["statements"][0]["status_notes"]
+        )
+        assert exports["sarif"]["runs"][0]["results"][0]["level"] == "warning"
+        assert exports["ctis"].finding["status"] == "false_positive"
+
+    def test_no_export_claims_not_affected_for_an_affected_record(self):
+        """The one conversion that must never happen anywhere, in any format."""
+        _, exports = self._all_exports(self._record())
+        for vulnerability in exports["vex"].document["vulnerabilities"]:
+            assert vulnerability.get("analysis", {}).get("state") != "not_affected"
+        for statement in exports["openvex"].document["statements"]:
+            assert statement["status"] != "not_affected"
+        for result in exports["sarif"]["runs"][0]["results"]:
+            assert result["level"] != "none"
+
+    def test_standing_is_carried_across_the_whole_status_matrix(self):
+        """Checked as a matrix so a new adapter cannot quietly opt out.
+
+        Added after the fact: the four adapters had four test suites and no test
+        compared them, which is how one record came to be `exploitable` in VEX and
+        `false_positive` in CTIS with every suite green.
+        """
+        from vuln_intel.schema import RecordStatus
+
+        for status in (None, RecordStatus.PUBLISHED, RecordStatus.DISPUTED, RecordStatus.REJECTED):
+            report, exports = self._all_exports(self._record(status=status, kev=True))
+            assert report.exposure.matches, f"no match for status={status}"
+            match = report.exposure.matches[0]
+            assert match.record_status is status
+            # The verdict is never rewritten by standing.
+            assert match.assessment.verdict.value == "affected"
+            # ...and every format that can carry the standing, does.
+            vex_detail = exports["vex"].document["vulnerabilities"][0]["analysis"]["detail"]
+            if status is None:
+                assert "advisory standing" not in vex_detail
+            else:
+                assert f"advisory standing: {status.value}" in vex_detail
