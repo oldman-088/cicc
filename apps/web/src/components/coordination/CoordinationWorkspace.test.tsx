@@ -11,9 +11,24 @@ function jsonResponse(body: unknown) {
   });
 }
 
+type CoordinationReadCategory = "health" | "metrics" | "agents" | "tasks" | "events" | "write-capabilities";
+
+function providerFailure(status: number) {
+  const code = status === 401 ? "unauthorized"
+    : status === 403 ? "forbidden"
+      : status === 404 ? "not_found"
+        : status === 429 ? "rate_limited"
+          : status >= 500 ? "upstream_unavailable" : "invalid_request";
+  return new Response(JSON.stringify({ error: { code } }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 function stubProvider(options: {
   taskCreationEnabled?: boolean;
   tasks?: Array<Record<string, unknown>>;
+  failReads?: Partial<Record<CoordinationReadCategory, number>>;
 } = {}) {
   // Synthetic unit-test contract data only; this fixture is never used as a UI fallback.
   const responses: Record<string, unknown> = {
@@ -123,6 +138,8 @@ function stubProvider(options: {
     const url = String(input);
     const method = requestOptions?.method ?? "GET";
     if (url.endsWith("/coordination/write-capabilities")) {
+      const status = options.failReads?.["write-capabilities"];
+      if (status) return providerFailure(status);
       return jsonResponse({
         task_creation_enabled: options.taskCreationEnabled ?? false,
       });
@@ -153,12 +170,39 @@ function stubProvider(options: {
         headers: { "Content-Type": "application/json", "X-CICC-Idempotency-Key": "bff-unit-test-key" },
       });
     }
-    if (url.endsWith("/coordination/tasks")) return jsonResponse({ tasks: taskRecords });
+    if (url.endsWith("/coordination/tasks")) {
+      const status = options.failReads?.tasks;
+      if (status) return providerFailure(status);
+      return jsonResponse({ tasks: taskRecords });
+    }
     const key = Object.keys(responses).find((candidate) => url.endsWith(`/coordination/${candidate}`));
-    return key ? jsonResponse(responses[key]) : new Response("", { status: 404 });
+    if (!key) return new Response("", { status: 404 });
+    if (key !== "trace") {
+      const status = options.failReads?.[key as CoordinationReadCategory];
+      if (status) return providerFailure(status);
+    }
+    return jsonResponse(responses[key]);
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+const coordinationReadPaths = [
+  "/api/integrations/coordination/agents",
+  "/api/integrations/coordination/events",
+  "/api/integrations/coordination/health",
+  "/api/integrations/coordination/metrics",
+  "/api/integrations/coordination/tasks",
+  "/api/integrations/coordination/write-capabilities",
+].sort();
+
+function expectCoordinationReadCategories(
+  fetchMock: ReturnType<typeof stubProvider>,
+  calls = fetchMock.mock.calls,
+) {
+  const paths = calls.map(([input]) => new URL(String(input), "http://localhost").pathname);
+  expect([...new Set(paths)].sort()).toEqual(coordinationReadPaths);
+  expect(calls.every(([, options]) => (options?.method ?? "GET") === "GET")).toBe(true);
 }
 
 afterEach(() => {
@@ -196,6 +240,7 @@ describe("Agent Coordination workspace", () => {
     expect(screen.getByText("No returned task records match the selected filters.")).toBeInTheDocument();
 
     expect(fetchMock).toHaveBeenCalledTimes(6);
+    expectCoordinationReadCategories(fetchMock);
     for (const [url, options] of fetchMock.mock.calls) {
       expect(String(url)).toMatch(/^\/api\/integrations\/coordination\//);
       expect(options?.method).toBe("GET");
@@ -214,6 +259,12 @@ describe("Agent Coordination workspace", () => {
     fireEvent.click(refreshButton);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(12));
     await waitFor(() => expect(refreshButton).toBeEnabled());
+    expectCoordinationReadCategories(fetchMock, fetchMock.mock.calls.slice(6));
+
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(18));
+    await waitFor(() => expect(refreshButton).toBeEnabled());
+    expectCoordinationReadCategories(fetchMock, fetchMock.mock.calls.slice(12));
 
     for (const [url, options] of fetchMock.mock.calls) {
       expect(String(url)).toMatch(/^\/api\/integrations\/coordination\//);
@@ -366,6 +417,36 @@ describe("Agent Coordination workspace", () => {
     render(<CoordinationWorkspace />);
     expect(await screen.findByText("The provider did not authorize this read request.")).toBeInTheDocument();
     expect(await screen.findByText("Tasks total")).toBeInTheDocument();
+  });
+
+  it.each([
+    "health",
+    "metrics",
+    "agents",
+    "tasks",
+    "events",
+    "write-capabilities",
+  ] as const)("keeps a %s read failure local while the other Coordination resources render", async (failedCategory) => {
+    const fetchMock = stubProvider({ failReads: { [failedCategory]: 503 } });
+    render(<CoordinationWorkspace />);
+
+    expect(await screen.findByText("The provider could not be reached or returned an upstream error.")).toBeInTheDocument();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expectCoordinationReadCategories(fetchMock);
+
+    const successfulContent: Record<CoordinationReadCategory, string> = {
+      health: "No broker configured: deliveries are prepared, not broker-delivered",
+      metrics: "Tasks total",
+      agents: "Build checks",
+      tasks: "Current build check",
+      events: "delivery-1",
+      "write-capabilities": "Task creation is disabled for this deployment.",
+    };
+    for (const category of Object.keys(successfulContent) as CoordinationReadCategory[]) {
+      if (category === failedCategory) continue;
+      expect(screen.getByText((content) => content.includes(successfulContent[category]))).toBeInTheDocument();
+    }
   });
 
   it("shows an explicit empty state when the provider returns no health components", async () => {

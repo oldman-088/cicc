@@ -264,6 +264,59 @@ test("refreshes all Coordination panels with GET requests only", async ({ page }
   expect(refreshRequests.every((request) => request.method === "GET")).toBe(true);
 });
 
+test("keeps global refresh busy until the slowest concurrent read settles", async ({ page }) => {
+  let holdNextMetricsResponse = false;
+  let releaseMetrics!: () => void;
+  let markMetricsStarted!: () => void;
+  const metricsGate = new Promise<void>((resolve) => { releaseMetrics = resolve; });
+  const metricsStarted = new Promise<void>((resolve) => { markMetricsStarted = resolve; });
+  const requests: { path: string; method: string }[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/integrations/coordination/")) {
+      requests.push({ path, method: request.method() });
+    }
+  });
+  await mockWorkspace(page, {
+    beforeMetricsResponse: async () => {
+      if (!holdNextMetricsResponse) return;
+      holdNextMetricsResponse = false;
+      markMetricsStarted();
+      await metricsGate;
+    },
+  });
+  await page.goto("/coordination");
+
+  const refreshButton = page.getByRole("button", { name: "Refresh all provider data" });
+  await expect(refreshButton).toBeEnabled();
+  const beforeRefresh = requests.length;
+  holdNextMetricsResponse = true;
+  await refreshButton.click();
+  await metricsStarted;
+
+  await expect(page.getByText("Refreshing; showing the last successful response while this request is pending.")).toBeVisible();
+  await expect.poll(() => page.locator('[aria-live="polite"][aria-busy="true"]').count()).toBe(1);
+  await expect(refreshButton).toBeDisabled();
+  await expect(refreshButton).toHaveAttribute("aria-busy", "true");
+  await expect.poll(() => requests.slice(beforeRefresh).length).toBe(6);
+
+  const expectedPaths = [
+    "/api/integrations/coordination/health",
+    "/api/integrations/coordination/metrics",
+    "/api/integrations/coordination/agents",
+    "/api/integrations/coordination/tasks",
+    "/api/integrations/coordination/events",
+    "/api/integrations/coordination/write-capabilities",
+  ].sort();
+  const refreshRequests = requests.slice(beforeRefresh);
+  expect(refreshRequests.map((request) => request.path).sort()).toEqual(expectedPaths);
+  expect(refreshRequests.every((request) => request.method === "GET")).toBe(true);
+
+  releaseMetrics();
+  await expect(refreshButton).toBeEnabled();
+  await expect(refreshButton).toHaveAttribute("aria-busy", "false");
+});
+
 test("surfaces permission denial locally without hiding independent coordination data", async ({ page }) => {
   await mockWorkspace(page, { healthStatus: 403 });
   await page.goto("/coordination");
