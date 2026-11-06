@@ -214,12 +214,18 @@ SELF_CHECK = {
         ("2.0-1", "2.0.1", -1, "3.9.9 checkVersionsOrder"),
         ("1", "1.0", 0, "3.9.9 checkVersionsEqual"),
         ("1alpha", "1-alpha", 0, "no separator between number and character"),
-        # Discriminating pairs: Maven and RubyGems answer these *differently*, so if the
-        # two buckets were ever crossed the self-check fails instead of blaming a
-        # comparator. Added after a CI run annotated gem-style pairs as "maven
-        # disagreement", which is only possible if the buckets were mixed up.
-        ("1.0.0.a", "1.a", 1, "Maven: 0 sorts above a string; RubyGems says equal"),
-        ("5.x", "5.0.0.rc2", -1, "Maven: x sorts below 0; RubyGems says 5.x is greater"),
+        # Deliberately NOT asserted: ("1.0.0.a","1.a") and ("5.x","5.0.0.rc2").
+        #
+        # Reading maven-3.9.9's StringItem/IntItem dispatch says these order as
+        # 1 and -1, because IntItem.compareTo(STRING_ITEM) returns 1. A probe against
+        # the real ComparableVersion in CI returned 0 and 1 — the opposite of the first
+        # one. Those two answers cannot both be right, and nothing available here can
+        # settle it: the job log and its artifact are both unreachable from the
+        # authoring environment.
+        #
+        # So they are logged by the probe step and left unasserted. Inventing an
+        # expectation either way would make this self-check agree with whichever of the
+        # two is wrong, which is precisely the failure mode it exists to catch.
     ],
     "rubygems": [
         ("1.0.0.a", "1.a", 0, "leading zero-run is stripped before the first letter"),

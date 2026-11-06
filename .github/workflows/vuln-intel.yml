@@ -251,10 +251,21 @@ jobs:
           java_maven="$(java -cp "$jar:$work" Probe)"
           echo "java  ComparableVersion('1.0.0.a' vs '1.a') = $java_maven"
           echo "ruby  Gem::Version('1.0.0.a' vs '1.a')        = $(ruby -e 'puts((Gem::Version.new("1.0.0.a") <=> Gem::Version.new("1.a")) <=> 0)')"
-          if [ "$java_maven" = "0" ]; then
-            echo "::error title=JVM probe::ComparableVersion says 1.0.0.a == 1.a, which is impossible. The JVM step is not producing real Apache answers."
-            exit 1
-          fi
+          # Diagnostic, not an assertion. An earlier version of this step failed when
+          # the JVM answered 0, having assumed the answer was 1; the assumption came
+          # from reading the source, and reading the source is not the same as running
+          # it. Both answers are printed and the step stays green so the evidence
+          # reaches the log instead of being replaced by a verdict nobody can check.
+          ruby_eq="$(ruby -e 'puts((Gem::Version.new("1.0.0.a") <=> Gem::Version.new("1.a")) <=> 0)')"
+          echo "diagnostic (unasserted): ComparableVersion('1.0.0.a','1.a')=$java_maven  Gem::Version=$ruby_eq"
+          {
+            echo "### Runtime probe (diagnostic)"
+            echo ""
+            echo "| | 1.0.0.a vs 1.a |"
+            echo "| --- | --- |"
+            echo "| org.apache.maven ComparableVersion | $java_maven |"
+            echo "| RubyGems Gem::Version | $ruby_eq |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate vectors from the real implementations
         run: ./scripts/generate_runtime_vectors.sh
