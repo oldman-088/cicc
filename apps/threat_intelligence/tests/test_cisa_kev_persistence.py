@@ -131,7 +131,7 @@ def test_least_privilege_worker_cannot_rewrite_or_delete_history(db):
         data['vulnerabilities'][0]['product']='conflicting worker fixture'
         assert persist_catalog(worker,collected(data)).outcome=='conflicted'
         assert persist_catalog(worker,collected(data)).outcome=='conflicted'
-        for sql in ['DELETE FROM ti_kev.snapshot', "UPDATE ti_kev.revision SET record='{}'::jsonb", "UPDATE ti_kev.source_blob SET source_bytes=decode('00','hex')", 'DELETE FROM ti_kev.source_blob', 'UPDATE ti_kev.snapshot SET origin=\'FETCHED_FROM_GITHUB_CISA_REPO\'']:
+        for sql in ['DELETE FROM ti_kev.source_conflict', "UPDATE ti_kev.source_conflict SET observed_at=now()", 'DELETE FROM ti_kev.snapshot', "UPDATE ti_kev.revision SET record='{}'::jsonb", "UPDATE ti_kev.source_blob SET source_bytes=decode('00','hex')", 'DELETE FROM ti_kev.source_blob', 'UPDATE ti_kev.snapshot SET origin=\'FETCHED_FROM_GITHUB_CISA_REPO\'']:
             with pytest.raises(Exception):
                 with worker.begin() as conn: conn.exec_driver_sql(sql)
     finally:
@@ -334,3 +334,22 @@ def test_corrupt_previous_snapshot_cannot_be_replaced_by_new_release(db):
     newer=sample();newer['dateReleased']='2026-01-02T00:00:00Z'
     with pytest.raises(SnapshotIntegrityError): persist_catalog(db,collected(newer))
     assert counts(db)[0]==1
+
+
+def test_conflict_inspection_reproducible_and_preserves_both_bytes(db):
+    from apps.threat_intelligence.cisa_kev_snapshot import inspect_conflict, SnapshotUnavailable
+    from apps.threat_intelligence.cisa_github_collector import verify_source_bytes
+    original=collected(sample()); persisted=persist_catalog(db,original)
+    candidate_data=sample(); candidate_data['vulnerabilities'][0]['product']='conflicting fixture'
+    candidate=collected(candidate_data); conflict=persist_catalog(db,candidate)
+    first=inspect_conflict(db,origin=original.origin,conflict_id=conflict.conflict_id)
+    again=inspect_conflict(db,origin=original.origin,conflict_id=conflict.conflict_id)
+    assert first==again and first['previous_snapshot_id']==persisted.snapshot_id
+    assert first['changed_cves']==[candidate.catalog.vulnerabilities[0].cveID]
+    assert first['previous_sha256']==original.content_sha256 and first['candidate_sha256']==candidate.content_sha256
+    assert verify_source_bytes(first['previous'])==verify_source_bytes(original)
+    assert verify_source_bytes(first['candidate'])==verify_source_bytes(candidate)
+    with pytest.raises(SnapshotUnavailable): inspect_conflict(db,origin='FETCHED_FROM_GITHUB_CISA_REPO',conflict_id=conflict.conflict_id)
+    with db.begin() as conn:
+        conn.execute(text("UPDATE ti_kev.source_blob SET source_bytes=decode('00','hex') WHERE content_sha256=:digest"), {'digest':candidate.content_sha256})
+    with pytest.raises(SnapshotUnavailable): inspect_conflict(db,origin=original.origin,conflict_id=conflict.conflict_id)

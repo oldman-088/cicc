@@ -1,3 +1,5 @@
+> **M49 current verification:** 245 passed / 10 skipped isolated PostgreSQL suite; offline 153 passed / 102 skipped; separately live GitHub CISA mirror 2 passed; actual host 0 executed / 8 skipped. Quality report and conflict inspection are independent, not mounted; see `VULNERABILITY_QUALITY_CONTRACT.md` and `KEV_CONFLICT_LIFECYCLE.md`. Earlier verification counts are historical.
+
 > **M48 current verification:** 241 passed / 10 skipped in isolated PostgreSQL suite; offline 150 / 101 skipped; separate live GitHub mirror 2 passed; actual host 0 executed / 8 skipped. See `VULNERABILITY_QUALITY_CONTRACT.md` and `M46_HOST_ADAPTER.md`. Older counts and assertions below are historical.
 
 > **Current verification (2026-11-06):** Isolated run: 227 passed, 10 skipped (8 actual-host tests + 2 live-source opt-in). Two separate live CISA GitHub mirror tests passed, including original-byte persistence/reload in disposable PostgreSQL. Actual Agent 1 host integration and scheduler remain unverified; a DB administrator can alter audit. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `M46_HOST_ADAPTER.md`; historical claims below are unverified.

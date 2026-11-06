@@ -2,11 +2,11 @@
   "project_name": "CICC - Threat Intelligence Domain",
   "repository": "oldman-088/cicc",
   "branch": "arena/93315d2c-cicc",
-  "current_phase": "M48 independent evidence quality and KEV conflict quarantine; actual host integration pending",
+  "current_phase": "M49 deterministic evidence-quality reporting and read-only KEV conflict inspection; actual host integration pending",
   "phase_0_status": "completed",
   "extended_authorization_status": "completed",
   "autonomous_engineering_status": "in_progress",
-  "last_commit_sha": "5e0e6df793c623c99e4566cac911d84609ca9ea4 (parent before M48; use git rev-parse HEAD for current)",
+  "last_commit_sha": "899f4ec1e4dc1939045662cc0af704bd82793497 (parent before M49; use git rev-parse HEAD for current)",
   "pull_request": {
     "number": 3,
     "url": "https://github.com/oldman-088/cicc/pull/3",
@@ -18,8 +18,8 @@
     "core_modules": 5,
     "extended_layers": 3,
     "autonomous_extensions": 4,
-    "total_tests": 251,
-    "tests_passed": 241,
+    "total_tests": 255,
+    "tests_passed": 245,
     "warnings": 0,
     "pydantic_v2_compatible": true,
     "experimental_labeling": "EXPERIMENTAL_DEMO_DATA_ONLY",
@@ -34,7 +34,7 @@
     "api_mounting_interface": "router mounted in standalone app and synthetic test host, not Agent 1 host",
     "agent_1_coordination_contract": "Legacy dispatcher uses unverified tenant; actual host binding unapproved and untested",
     "agent_4_frontend_contract": "frontend integration not approved",
-    "vulnerability_quality": "offline caller-scoped evidence quality; synthetic fixtures, not Agent 3 integration"
+    "vulnerability_quality": "deterministic versioned offline caller-scoped quality JSON and classifications; not a decision or approved API"
   },
   "modules": [
     "threat_actors",
@@ -55,11 +55,11 @@
     "threat_intelligence_api"
   ],
   "test_results": {
-    "scope": "apps/threat_intelligence/tests, isolated PostgreSQL enabled, 2026-11-06",
-    "passed": 241,
+    "scope": "apps/threat_intelligence/tests, isolated PostgreSQL enabled, M49",
+    "passed": 245,
     "skipped": 10,
     "failed": 0,
-    "default": "150 passed, 101 skipped",
+    "default": "153 passed, 102 skipped",
     "live_cisa_github_mirror": "2 passed separately",
     "actual_agent1_host": "0 executed, 8 skipped",
     "note": "categories overlap; no production integration claim"
@@ -122,7 +122,7 @@
     "functionality_completed": false,
     "architecture_summary": "documented",
     "files_created_modified": true,
-    "test_results_evidence": "M48: 241 passed, 10 skipped isolated PG; actual host 0 executed, 8 skipped",
+    "test_results_evidence": "M49: 245 passed, 10 skipped isolated PG; actual host 0 executed, 8 skipped",
     "security_integrity_review": "partial; real host and administrator boundaries unverified",
     "remaining_limitations": "host contracts, shared deployment, scheduler, confidence calibration and cross-agent decisions pending",
     "integration_contracts": "defined",
@@ -146,14 +146,14 @@
     "Extend evidence quality/SBOM and temporal conflict work without inferring truth or source independence",
     "Complete real-host security tests, frontend read-only contracts, Command Theater and System Health integration"
   ],
-  "updated_at": "2026-11-06T11:56:49.585589+00:00",
+  "updated_at": "2026-11-06T12:05:16.249279+00:00",
   "agent_status": "autonomous_engineering_active",
   "verification_update_2026_11_06": {
-    "command": "CICC_TEST_PG_EMBEDDED=1 /home/user/.venv-cicc-m48/bin/python -m pytest -q apps/threat_intelligence/tests --disable-warnings",
-    "passed": 241,
+    "command": "CICC_TEST_PG_EMBEDDED=1 PYTHONDONTWRITEBYTECODE=1 /home/user/.venv-cicc-m48/bin/python -m pytest -q apps/threat_intelligence/tests --disable-warnings",
+    "passed": 245,
     "skipped": 10,
     "failed": 0,
-    "default_run": "150 passed, 101 skipped",
+    "default_run": "153 passed, 102 skipped",
     "host_integration": "0 executed, 8 skipped; approved isolated actual host unavailable",
     "host_harness_config": "7 passed offline",
     "live_provider_tests": "2 passed separately against CISA GitHub mirror, one with isolated PostgreSQL",

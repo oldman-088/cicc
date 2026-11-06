@@ -76,19 +76,63 @@ def load_conflict_candidate(engine: Engine, *, origin: str, conflict_id: int) ->
         raise ValueError('invalid database or origin')
     if type(conflict_id) is not int or conflict_id <= 0:
         raise ValueError('invalid conflict identifier')
-    with engine.connect() as conn:
-        row=conn.execute(text('''SELECT c.observed_at,c.candidate_content_sha256,b.blob_sha,b.source_bytes
-            FROM ti_kev.source_conflict c JOIN ti_kev.source_blob b ON (b.origin,b.content_sha256)=(c.origin,c.candidate_content_sha256)
-            WHERE c.origin=:origin AND c.id=:id'''), {'origin':origin,'id':conflict_id}).mappings().first()
-        if row is None:
-            raise SnapshotUnavailable('conflict candidate unavailable')
-        try:
-            raw=bytes(row['source_bytes'])
-            result=CollectedCatalog(catalog=parse_catalog(raw), source_url=METADATA_URL,
-                github_blob_sha=row['blob_sha'], content_sha256=row['candidate_content_sha256'],
-                collected_at=row['observed_at'],origin=origin)
-            result._source_bytes=raw
-            verify_source_bytes(result)
-        except (CollectionError, ValueError, TypeError):
-            raise SnapshotUnavailable('conflict candidate integrity check failed') from None
-        return result
+    with engine.begin() as conn:
+        conn.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        return _load_conflict_candidate_conn(conn,origin=origin,conflict_id=conflict_id)
+
+
+def _load_conflict_candidate_conn(conn, *, origin: str, conflict_id: int) -> CollectedCatalog:
+    row=conn.execute(text('''SELECT c.observed_at,c.candidate_content_sha256,b.blob_sha,b.source_bytes
+        FROM ti_kev.source_conflict c JOIN ti_kev.source_blob b ON (b.origin,b.content_sha256)=(c.origin,c.candidate_content_sha256)
+        WHERE c.origin=:origin AND c.id=:id'''), {'origin':origin,'id':conflict_id}).mappings().first()
+    if row is None:
+        raise SnapshotUnavailable('conflict candidate unavailable')
+    try:
+        raw=bytes(row['source_bytes'])
+        result=CollectedCatalog(catalog=parse_catalog(raw), source_url=METADATA_URL,
+            github_blob_sha=row['blob_sha'], content_sha256=row['candidate_content_sha256'],
+            collected_at=row['observed_at'],origin=origin)
+        result._source_bytes=raw
+        verify_source_bytes(result)
+    except (CollectionError, ValueError, TypeError):
+        raise SnapshotUnavailable('conflict candidate integrity check failed') from None
+    return result
+
+
+def inspect_conflict(engine: Engine, *, origin: str, conflict_id: int):
+    """Return verified original streams, metadata and deterministic delta, read-only.
+
+    The result is for trusted operators; it makes no resolution or source-truth
+    decision. All reads share one repeatable-read transaction.
+    """
+    if engine.dialect.name != 'postgresql' or origin not in ('FETCHED_FROM_GITHUB_CISA_REPO','EXPERIMENTAL_DEMO_DATA_ONLY'):
+        raise ValueError('invalid database or origin')
+    if type(conflict_id) is not int or conflict_id <= 0:
+        raise ValueError('invalid conflict identifier')
+    with engine.begin() as conn:
+        conn.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        row=conn.execute(text('''SELECT previous_snapshot_id,observed_at FROM ti_kev.source_conflict
+            WHERE origin=:origin AND id=:id'''),{'origin':origin,'id':conflict_id}).mappings().first()
+        if row is None: raise SnapshotUnavailable('conflict unavailable')
+        previous=_load_snapshot_conn(conn,origin=origin,snapshot_id=row['previous_snapshot_id'])
+        candidate=_load_conflict_candidate_conn(conn,origin=origin,conflict_id=conflict_id)
+        old=previous.catalog; new=candidate.catalog
+        if old.dateReleased != new.dateReleased:
+            raise SnapshotUnavailable('conflict release metadata inconsistent')
+        before={r.cveID:r.model_dump(mode='json') for r in old.vulnerabilities}
+        after={r.cveID:r.model_dump(mode='json') for r in new.vulnerabilities}
+        old_meta=old.model_dump(mode='json',exclude={'vulnerabilities'})
+        new_meta=new.model_dump(mode='json',exclude={'vulnerabilities'})
+        metadata_fields=sorted(k for k in old_meta.keys()|new_meta.keys() if old_meta.get(k)!=new_meta.get(k) or (k in old_meta)!=(k in new_meta))
+        added=sorted(after.keys()-before.keys()); removed=sorted(before.keys()-after.keys())
+        changed=sorted(k for k in before.keys() & after.keys() if before[k]!=after[k])
+        if not (metadata_fields or added or removed or changed):
+            raise SnapshotUnavailable('conflict has no normalized disagreement')
+        return {'schema_version':'cicc.kev-conflict-inspection/1','conflict_id':conflict_id,'origin':origin,
+                'previous_snapshot_id':row['previous_snapshot_id'],'observed_at':row['observed_at'],
+                'release_at':old.dateReleased,'previous_collected_at':previous.collected_at,
+                'candidate_collected_at':candidate.collected_at,
+                'previous_sha256':previous.content_sha256,'candidate_sha256':candidate.content_sha256,
+                'previous_blob_sha':previous.github_blob_sha,'candidate_blob_sha':candidate.github_blob_sha,
+                'metadata_fields_changed':metadata_fields,'added_cves':added,'removed_cves':removed,'changed_cves':changed,
+                'previous':previous,'candidate':candidate}

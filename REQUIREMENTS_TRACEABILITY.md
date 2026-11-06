@@ -16,3 +16,11 @@ See `P2_01_VERIFICATION_REPORT.md` for current verification and limitations.
 - Domain B, D and Section 6: `vulnerability_quality.py` and `VULNERABILITY_QUALITY_CONTRACT.md` add explicitly caller-scoped source/SBOM/license/age/difference analysis; actual source ingestion and cross-agent interface remain partial.
 - Section 7: P2-05 quarantines same-release content disagreement with original bytes and health signal; source truth, provider authenticity, operator resolution, shared deployment and scheduler remain unimplemented.
 - Master Prompt: original `README.md`, ULTIMATE MASTER PROMPT v1.0, commit `ca8f82c0500637e22851d7128cddf99081ef3c08`, SHA-256 `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1`, unchanged and re-read in M48.
+
+## M49 alignment and evidence
+
+- Re-read original `README.md`, ULTIMATE MASTER PROMPT v1.0 at `ca8f82c0500637e22851d7128cddf99081ef3c08` (SHA-256 `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1`), including role, product objectives, Domains B/C/D/F/G, Sections 5.2, 5.3 and 5.6. No original prompt changes.
+- Domain B / Section 6: restricted-role relationship CRUD/read traversal and local mount tested in isolation; actual identity, gateway, trace, audit and tenant isolation are blocked, not completed.
+- Domains C/F and 5.2/5.3/5.6: deterministic evidence-quality JSON, exact CVE links, declared SBOM dependencies/license and verified KEV bytes available independently; true SBOM format ingestion, automatic applicability, provider-wide coverage, calibrated confidence and production integration remain partial/missing.
+- Domain D: local graph analysis exists; investigation/case workflow, real host integration and end-to-end authorization remain incomplete. Domain G asset/risk integration remains incomplete. Broader unified platform, AI and frontend/system health integration remain outside independent implementation and unverified.
+- `inspect_conflict` is read-only and returns verified bytes, metadata and sorted differences. Resolution/audit is a design proposal only (`KEV_CONFLICT_LIFECYCLE.md`). No shared schema deployment.
