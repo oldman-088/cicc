@@ -31,6 +31,17 @@ vi.mock("next/link", () => ({
 vi.mock("next/navigation", () => ({ usePathname: () => routeState.pathname }));
 
 describe("CICC application shell", () => {
+  it("includes visible brand text in the brand link accessible name", () => {
+    render(
+      <ApplicationShell locale="en" onLocaleChange={vi.fn()}>
+        <h1>Investigation workspace</h1>
+      </ApplicationShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "CICC Cyber Intelligence Command Center" }))
+      .toHaveAttribute("href", "/");
+  });
+
   it("exposes module routes, preferences, and usable skip/navigation controls", () => {
     const onLocaleChange = vi.fn();
     render(

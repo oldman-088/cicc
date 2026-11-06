@@ -254,7 +254,7 @@ export function ApplicationShell({ locale, onLocaleChange, children }: Applicati
       </a>
 
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/" aria-label={messages.brandDescription}>
+        <Link className={styles.brand} href="/" aria-label={`CICC ${messages.brandDescription}`}>
           <span className={styles.brandMark} aria-hidden="true">
             <svg viewBox="0 0 32 32" focusable="false">
               <path d="M7 9.5 16 5l9 4.5v13L16 27l-9-4.5z" />
