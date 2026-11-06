@@ -63,7 +63,7 @@
     "live_cisa_github_mirror": "2 passed separately",
     "actual_agent1_host": "0 executed, 8 skipped",
     "note": "categories overlap; no production integration claim",
-    "engine_guard": "101 passed, 0 skipped, 1 live test deselected locally; M52 hosted CI pending"
+    "engine_guard": "101 passed, 0 skipped, 1 live test deselected locally; hosted PG guard succeeded at 1e502ea (run 42220600632)"
   },
   "documentation_files": [
     "PROJECT_STATE.json",
