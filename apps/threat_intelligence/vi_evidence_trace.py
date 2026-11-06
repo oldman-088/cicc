@@ -67,6 +67,8 @@ def build_evidence_trace(inventories, bindings, source_evidence, *, as_of,
         inv = docs[entry['binding']['document_id']]
         if entry['binding']['origin'] != inv.origin:
             raise EvidenceError('binding and inventory origin mismatch')
+        if any(license.origin != inv.origin for c in inv.components for license in c.licenses):
+            raise EvidenceError('license evidence and inventory origin mismatch')
         components = {c.bom_ref: c.model_dump(mode='json') for c in inv.components}
         links = []
         for timed_link in entry['links']:

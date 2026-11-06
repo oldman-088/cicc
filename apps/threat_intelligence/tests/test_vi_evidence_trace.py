@@ -88,3 +88,12 @@ def test_repeated_raw_verification_work_is_bounded(monkeypatch):
     monkeypatch.setattr(trace,'MAX_RAW_VERIFICATION_BYTES',len(raw(doc)))
     with pytest.raises(EvidenceError,match='verification work limit'):
         run(fixture_inventory(),[e,e],raw_by_sha256={e.source_sha256:raw(doc)})
+
+
+def test_license_origin_mismatch_cannot_leak_across_fixture_boundary():
+    from apps.threat_intelligence.vulnerability_quality import LicenseEvidence
+    inv=fixture_inventory(); data=inv.model_dump()
+    data['components'][0]['licenses']=[LicenseEvidence(evidence_id=UUID(int=2),expression='MIT',
+        collected_at=NOW,provenance='unverified',origin='CALLER_SUPPLIED_UNVERIFIED').model_dump()]
+    with pytest.raises(EvidenceError,match='license evidence and inventory origin mismatch'):
+        run(Inventory.model_validate(data),[])
