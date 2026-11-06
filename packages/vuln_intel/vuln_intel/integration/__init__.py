@@ -5,6 +5,7 @@ implements :class:`VulnerabilityStore` / :class:`AuditPort`; nothing here import
 ``app.*``, SQLAlchemy or FastAPI (enforced by ``tests/test_isolation.py``).
 """
 
+from .asgi import VulnerabilityAsgiApp, build_app
 from .contracts import (
     AuditPort,
     ImportReport,
@@ -42,8 +43,10 @@ __all__ = [
     "SQLiteVulnerabilityStore",
     "UpsertOutcome",
     "UpsertResult",
+    "VulnerabilityAsgiApp",
     "VulnerabilityStore",
     "assert_persistable",
+    "build_app",
     "to_enrichment",
     "to_entity_payload",
     "to_provenance",

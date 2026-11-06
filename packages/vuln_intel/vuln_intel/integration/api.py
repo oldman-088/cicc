@@ -64,6 +64,9 @@ ERROR_CODES = {
     "forbidden_tenant": 403,
     "not_found": 404,
     "invalid_request": 400,
+    # A read-only surface that receives a write must say 405, not 400: 400 tells a
+    # client its body was malformed, and there is no body it could have sent.
+    "method_not_allowed": 405,
     "store_unavailable": 503,
 }
 
