@@ -25817,9 +25817,14 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - Exact-head review corrected the M48 role statement: PR #1 current handover supports original Agent 3 VI; PR #3 body supports replacement Agent 3 VI with earlier Agent 2 TI history. No independent human identity or source/host approval is inferred. PR #1 migration 0043 exists despite the PR body claim and remains marked unapplied; its candidate host checks do not establish mounted-app persistence. See `docs/M49_CROSS_AGENT_INTEGRATION_REVIEW.md`.
 - Posted correction/follow-up comments on PR #1 `6689778670`, PR #3 `6689783355`, PR #2 `6689786705`; no response or owner approval observed. No other branch/PR changed. Whole-product integrated Beta estimate remains **29%**; tenant-isolation acceptance **0%**; no production or TI/VI integration claim.
 
-## In progress / blocked after M49 (current priorities; supersedes older queue snapshot above)
-1. Obtain owner-approved exact application/source/module/host/tenant/auth/DB/audit/trace manifest and executable host harness; choose a single TI/VI source/revision only after approval.
-2. Resolve production identity, authorization, tenant isolation/RLS, AMD-003 and migration governance before any shared schema or sensitive multi-tenant Beta. Do not apply PR #1 migration 0043 without approval.
-3. After approval, execute non-skipped actual-Agent-1-host TI/VI acceptance and the exact-revision merged-app runner; current PR #3 actual-host suite remains **0/8**.
-4. Keep Agent 4's decoder/UI work on its own branch and disconnected from TI/VI until the API/BFF/tenant/error contract is approved; track response to PR #2 M49 request.
-5. Continue the full Master Prompt roadmap (shared data/graph, real-source collection, investigations, AI governance, Persian and accessible localized UI, 3D, deployment/recovery acceptance); do not call candidate PR code a delivered module.
+## Done — M50 (2026-11-06; database health disclosure hardening)
+- Fixed a health-response information disclosure: `/health` previously returned the rendered database connection URL, including SQLite path/DB name. Success details now include only `engine.dialect.name` and a fixed verification message; no configured host, path, user, port, or database name is returned.
+- Added endpoint-level and direct-check regression tests proving the DB path/name are absent. Local API suite **311/311**, PostgreSQL-selected suite **42/42**; live temporary dashboard health check confirms no DB path disclosure. No schema or migration changes.
+- Code commit: `d7bc7625dd52f38bd65185a117e87baafc18944d`. GitHub PR run `42297518074` and push run `42297508625` each passed all three CI jobs; no change to the 29% overall Beta or 0% tenant-isolation estimates.
+
+## In progress / blocked after M50 (sole active lead; inherited branches remain untouched)
+1. Independently inspect and selectively adapt useful code from preserved PRs #1/#2/#3 into this branch only; verify the exact contracts and keep original PRs/branches unchanged. Do not wait for specialist responses.
+2. Keep integration fail-closed where identity, tenant binding, persistence or host approvals are required. Obtain the exact app/source/module/host/tenant/auth/DB/audit/trace manifest; no production or cross-tenant claims without evidence.
+3. Resolve AMD-003 and migration governance before any shared schema/RLS change. PR #1 migration 0043 remains unapplied; do not apply it without required approval.
+4. After an approved host is available, run the non-skipped TI/VI actual-host suite and exact-revision merged-app acceptance; PR #3 currently reports **0/8**.
+5. Continue the remaining Master Prompt roadmap (integrated read-only TI/VI, source data/persistence, investigations/graph, AI governance, accessible Persian localization, 3D, deployment/recovery); do not count candidate code as integrated functionality.

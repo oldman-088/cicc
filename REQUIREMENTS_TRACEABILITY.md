@@ -82,3 +82,9 @@ README.md (ULTIMATE MASTER PROMPT v1.0, main@ca8f82c) §12.
 | Original Master Prompt status | `README.md`, v1.0 at `ca8f82c0500637e22851d7128cddf99081ef3c08`, SHA-256 `6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d`; every §2 objective, §4 module, §5 extension, §12 deliverable and §17 DoD mapped | See `docs/M49_MASTER_PROMPT_REQUIREMENT_STATUS.md`; full prompt and §17 remain INCOMPLETE |
 | Cross-agent source, host and migration review | Exact PR #1/#3 heads and source trees reviewed; role-level map corrected; PR #1 migration 0043/body mismatch and unpinned host-test scope documented | See `docs/M49_CROSS_AGENT_INTEGRATION_REVIEW.md`; no owner approval or migration application |
 | Merged-app, production auth and tenant isolation | Existing M47 gate remains fail-closed without approved manifest; no trusted production principal/tenant pool/RLS acceptance | BLOCKED / NOT VERIFIED; tenant-isolation acceptance 0% |
+
+## M50 security hardening trace (2026-11-06)
+
+| Requirement / control | Implementation / tests | Status and boundary |
+|---|---|---|
+| Minimize health-response disclosure of database configuration (§10, §17) | `apps/api/app/checks.py::check_database` reports only the driver and a verification message; route/helper regressions in `apps/api/tests/test_monitoring.py` prove DB path/name do not reach `/health` | IMPLEMENTED + LOCAL TESTED; full API 311/311, PostgreSQL-selected 42/42; no production identity/tenant control claimed |

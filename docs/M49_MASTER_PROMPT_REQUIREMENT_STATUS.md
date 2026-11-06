@@ -1,7 +1,7 @@
 # M49 requirement-by-requirement alignment to the original Master Prompt
 
-**Assessment date:** 2026-11-06
-**Product revision assessed:** Agent 1 checkout, code commit `e1122bd3aed644af8607bd0873f1863a2a2edf94` on `arena/961971ed-cicc` (PR #4 remains open). This is branch evidence, not a merge to `main`, deployment, production acceptance, or tenant-isolation acceptance.
+**Assessment date:** 2026-11-06 (M49 full review; M50 security addendum)
+**Product revision assessed:** Agent 1 checkout, latest code commit `d7bc7625dd52f38bd65185a117e87baafc18944d` on `arena/961971ed-cicc` (PR #4 remains open). M50 only hardens health-response disclosure; it does not change the M49 feature-integration or tenant-isolation status. This is branch evidence, not a merge to `main`, deployment, production acceptance, or tenant-isolation acceptance.
 
 ## Source and status rules
 
@@ -173,7 +173,7 @@ Current-product status only. Notes about PR #1/#3 below are candidate evidence a
 |---|---|---|
 | Secure login, password hashing, session security, MFA/recovery/revocation, login rate limiting | **NOT VERIFIED** | The assessed Agent 1 app has optional Ops token gates and an inert platform-auth adapter; production login/session/MFA is not accepted. PR #1 direct host tests do not prove current-app identity. |
 | RBAC, least privilege, tenant isolation, API/service checks, administrative controls | **NOT VERIFIED** | Coarse endpoint/BFF/approver gates exist, but principal-bound tenant access, production roles, RLS and cross-tenant acceptance are absent. Tenant-isolation acceptance is 0%. |
-| Input validation, output encoding, CSRF/CORS/security headers, SQL injection, SSRF/XSS, secure errors | **PARTIAL** | Agent 1 has bounded DTOs, parameterized SQL, BFF same-origin controls and sanitized errors. Product-wide route/file/SSRF/XSS/security-header review is not complete. |
+| Input validation, output encoding, CSRF/CORS/security headers, SQL injection, SSRF/XSS, secure errors | **PARTIAL** | Agent 1 has bounded DTOs, parameterized SQL, BFF same-origin controls and sanitized errors. M50 also limits successful database-health detail to the non-sensitive driver name, not the connection URL. Product-wide route/file/SSRF/XSS/security-header review is not complete. |
 | Quarantine, size/type validation, scanning, safe parsing, no execution, integrity verification for uploads | **NOT VERIFIED** | No integrated upload/quarantine/scanning path. PR #1 SBOM handler is candidate parsing only; it does not establish product file custody or malware scanning. |
 | Structured security/auth/admin audit, redaction, no secrets in logs | **PARTIAL** | Ops/task events and BFF log restrictions exist; trusted actor identity, cross-domain data-access audit and production redaction tests remain unverified. |
 | Authorized-use boundaries | **PARTIAL** | The M49 change adds no active scanning/exploitation behavior and keeps collection integration blocked pending authorization; whole-product security-policy acceptance remains outstanding. |
@@ -224,7 +224,7 @@ Current-product status only. Notes about PR #1/#3 below are candidate evidence a
 | Provenance preserved; freshness tracked; demo data labeled; errors visible | **PARTIAL** | Candidate contracts and Agent 1 honest gateway states exist; no unified integrated data lifecycle. |
 | Authentication and authorization verified | **NOT VERIFIED** | No production identity/role acceptance. |
 | Tenant isolation tested | **NOT VERIFIED** | No trusted tenant resolver/RLS/runtime pool/cross-tenant acceptance; score 0%. |
-| Sensitive information protected | **PARTIAL** | BFF token stripping and bounded logs exist; production secrets management and full data-access review are not verified. |
+| Sensitive information protected | **PARTIAL** | BFF token stripping and bounded logs exist; M50 prevents health responses from disclosing DB host/path/user/port/name; production secrets management and full data-access review remain unverified. |
 | Audit logging operational | **PARTIAL** | Agent 1 task/Ops events exist; trusted actor/source/domain audit is incomplete. |
 | File handling secured | **NOT VERIFIED** | No integrated quarantine, scanner, or approved file lifecycle. |
 | Security testing documented | **PARTIAL** | Agent 1 security docs and tests exist; product-wide penetration/authorization evidence is absent. |
@@ -269,3 +269,9 @@ Current-product status only. Notes about PR #1/#3 below are candidate evidence a
 - Deliver the missing management files, target deployment guide, versioned migrations, production security acceptance, and intended-environment backup/restore/DR drill.
 
 The weighted integrated-Beta estimate remains **29%** after M49; the status panel is a small control-plane integration and does not change TI/VI integrated scores or tenant-isolation acceptance. Candidate implementation estimates remain separate in `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`.
+
+## M50 security hardening addendum
+
+- Code commit `d7bc7625dd52f38bd65185a117e87baafc18944d` changes successful database health-check detail from a rendered connection URL to `{driver} database connection verified`; it no longer exposes DB host, path, user, port, or database name. Failure details remain exception-class-only.
+- Added route-level and helper-level redaction tests in `apps/api/tests/test_monitoring.py`. Local API suite: **311 passed** (two pre-existing warnings); PostgreSQL-selected suite: **42 passed, 269 deselected** (one pre-existing warning). The live disposable dashboard preview also returns a reachable health response without the SQLite path. GitHub PR run [42297518074](https://github.com/oldman-088/cicc/actions/runs/42297518074) and push run [42297508625](https://github.com/oldman-088/cicc/actions/runs/42297508625) each passed all three Agent 1 CI jobs, including Web/BFF smoke.
+- This improves the §10/§17 sensitive-information control only. It does not change the M49 integration assessment, production identity, tenant-bound authorization, tenant-isolation acceptance (**0%**), or overall integrated-Beta estimate (**29%**).

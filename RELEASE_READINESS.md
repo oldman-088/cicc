@@ -1,10 +1,10 @@
-# RELEASE READINESS — Agent 1 scope (updated 2026-11-06, M49) — NOT production-ready product-wide
+# RELEASE READINESS — Agent 1 scope (updated 2026-11-06, M50) — NOT production-ready product-wide
 
 Per Master Prompt DoD (repository `README.md` §17, v1.0), do not call the project
 production-ready until every applicable item is verified. Current Agent 1 branch evidence:
 
-- Automated checks: API **309/309**, PostgreSQL-selected **42/42**, Web **40/40**, typecheck/build and disposable API-to-production-BFF smoke **PASS** locally; hosted PR/push runs `42252536511` and `42252527313` each pass all three jobs.
-- Monitoring/health checks: Ops API and gateway lifecycle/metrics available in Agent 1 branch; M49 panel exposes gateway evidence only and no TI/VI feed.
+- Automated checks: API **311/311**, PostgreSQL-selected **42/42** (269 deselected), Web **40/40**, typecheck/build and disposable API-to-production-BFF smoke **PASS** locally; hosted M50 PR/push runs `42297518074` and `42297508625` each pass all three jobs.
+- Monitoring/health checks: Ops API and gateway lifecycle/metrics available in Agent 1 branch; M49 panel exposes gateway evidence only and no TI/VI feed. M50 successful database health details expose only the driver/dialect, not the connection target/path.
 - Authentication/authorization: branch token gates, BFF, and same-origin tests pass; **production identity, tenant-bound authorization, and tenant isolation are NOT verified** → DoD security item unmet.
 - Audit logging: coordination transitions and Ops events are audited; trusted actor identity and cross-domain data-access audit are not established.
 - API documentation: `docs/API_REFERENCE.md` + FastAPI `/docs` cover Agent 1 APIs.
@@ -33,3 +33,9 @@ production-ready until every applicable item is verified. Current Agent 1 branch
 - The exact-revision merged-app gate remains **BLOCKED** until an owner approves the pinned application/source/module/host/tenant/auth/DB/audit/trace manifest and executable isolated host harness. PR #3 actual-host suite remains 0/8; PR #1's 6/6 candidate host-test claim is not mounted-app acceptance. Migration 0043 remains unapplied/unapproved despite the PR body discrepancy.
 - M49 is a gateway status-display milestone only. Overall integrated Beta remains **29%** (approximate, not an acceptance result); tenant-isolation acceptance remains **0%**. Do not release or describe the product as Beta-accepted/production-ready.
 - Detailed Master Prompt status: `docs/M49_MASTER_PROMPT_REQUIREMENT_STATUS.md`; cross-agent/host/migration evidence: `docs/M49_CROSS_AGENT_INTEGRATION_REVIEW.md`; current full-product score and blockers: `docs/handover/CICC_PROJECT_COMPLETION_STATUS.md`.
+
+## M50 security-hardening snapshot (2026-11-06)
+
+- PR #4 code commit `d7bc7625dd52f38bd65185a117e87baafc18944d` removes DB connection targets from successful health details; only the SQLAlchemy dialect/driver and fixed verification text are returned. Endpoint/helper regression tests prove DB path/name do not appear.
+- Local API **311 passed**; PostgreSQL-selected **42 passed / 269 deselected**. GitHub PR run `42297518074` and push run `42297508625` each passed all three CI jobs, including BFF smoke. This is branch-level evidence only.
+- No migration/schema change. The merged-app manifest/host harness, production identity, tenant-bound authorization, cross-tenant tests, AMD-003 and migration approval remain blockers. Tenant-isolation acceptance **0%**; integrated-Beta estimate **29%**. **NOT BETA-ACCEPTED / NOT PRODUCTION-READY.**
