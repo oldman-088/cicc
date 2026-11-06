@@ -10,6 +10,7 @@ import base64
 import binascii
 import hashlib
 import json
+import math
 import re
 import time
 from datetime import date, datetime, timezone
@@ -82,8 +83,14 @@ def _json(raw: bytes):
                 raise ValueError('duplicate JSON key')
             result[key] = value
         return result
+    def finite_float(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError('non-finite JSON number')
+        return number
     try:
         return json.loads(raw.decode('utf-8'), object_pairs_hook=reject_duplicates,
+                          parse_float=finite_float,
                           parse_constant=lambda _: (_ for _ in ()).throw(ValueError('invalid constant')))
     except (ValueError, UnicodeError, RecursionError):
         raise CollectionError('Invalid JSON content') from None

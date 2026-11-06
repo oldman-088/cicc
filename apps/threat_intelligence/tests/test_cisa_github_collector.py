@@ -129,3 +129,16 @@ def test_bounded_retry_after_respects_server_request():
         raise HTTPError(url,429,'rate limit',{'Retry-After':'90'},None)
     with pytest.raises(CollectionError,match='delay'):
         fetch_catalog(transport=long_delay,sleep=lambda _:pytest.fail('should defer to scheduler'),min_interval=0,retries=1)
+
+
+@pytest.mark.parametrize('number', ['1e999', '-1e999', 'NaN', 'Infinity', '-Infinity'])
+def test_non_finite_extension_numbers_fail_closed(number):
+    # Unknown provider fields are preserved, so numeric overflow must not leak
+    # non-JSON values into persistence or integrity reserialization.
+    body=json.dumps(sample()).encode()[:-1] + b',"futureMetric":' + number.encode() + b'}'
+    with pytest.raises(CollectionError): parse_catalog(body)
+
+
+def test_finite_extension_number_is_preserved():
+    data=sample(); data['futureMetric']=1.25
+    assert parse_catalog(json.dumps(data).encode()).model_extra['futureMetric']==1.25
