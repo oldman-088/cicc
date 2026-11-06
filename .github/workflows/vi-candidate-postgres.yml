@@ -36,5 +36,6 @@ jobs:
             apps/threat_intelligence/tests/test_cisa_kev_persistence.py \
             apps/threat_intelligence/tests/test_vulnerability_quality_pg.py \
             apps/threat_intelligence/tests/test_kev_resolution_draft_pg.py \
+            apps/threat_intelligence/tests/test_resolution_atomicity_model_pg.py \
             -k 'not test_live_collection_persistence' --junitxml=/tmp/cicc-vi-pg.xml
           python scripts/verify_vi_pg_junit.py /tmp/cicc-vi-pg.xml

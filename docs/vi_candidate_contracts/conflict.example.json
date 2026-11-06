@@ -1,0 +1,20 @@
+{
+  "added_cves": [],
+  "candidate_blob_sha": "4444444444444444444444444444444444444444",
+  "candidate_collected_at": "2026-01-02T00:00:00+00:00",
+  "candidate_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "changed_cves": [
+    "CVE-2099-0001"
+  ],
+  "conflict_id": 1,
+  "metadata_fields_changed": [],
+  "observed_at": "2026-01-02T00:00:00+00:00",
+  "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+  "previous_blob_sha": "3333333333333333333333333333333333333333",
+  "previous_collected_at": "2026-01-02T00:00:00+00:00",
+  "previous_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "previous_snapshot_id": 1,
+  "release_at": "2026-01-02T00:00:00+00:00",
+  "removed_cves": [],
+  "schema_version": "cicc.kev-conflict-summary/1"
+}

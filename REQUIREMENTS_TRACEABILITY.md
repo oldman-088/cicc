@@ -35,3 +35,7 @@ See `P2_01_VERIFICATION_REPORT.md` for current verification and limitations.
 ## M51 VI assignment correction
 
 Full Vulnerability Intelligence Engineer replacing original Agent 3, per user instruction; PR #3 is historically TI, and separate original VI PR #1 is not merged into this branch. `M51_VI_ALIGNMENT.md` maps Domain C 25–33 and Sections 5.2/5.3/5.6 to actual implementation, partial/missing scope, blockers and conservative 0/9 end-to-end module evidence. README v1.0 re-read at ca8f82c0500637e22851d7128cddf99081ef3c08; SHA-256 6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1, unchanged. PostgreSQL categories and all ten skips in `M51_POSTGRES_EVIDENCE.md`; no host acceptance or shared deployment claim.
+
+## M52 replacement Agent 3 VI alignment
+
+Original README v1.0 re-read at ca8f82c0500637e22851d7128cddf99081ef3c08, SHA-256 6249373bd3c19602b4a92f217afa3236ad18b5b51feea188bf1b791fbbb611d1, unchanged. See `M52_VI_ALIGNMENT.md`: two narrow independent foundations tested and five VI work areas partial; 0/9 Domain C modules complete end-to-end under stated criterion. NVD/OSV/GHSA/EPSS JSON subset evidence and explicit asset/SBOM association now have fixture tests but no live fetch or authoritative applicability. Conflict transactional atomicity is only a test model. Eight existing host cases remain blocked and test relationship adapter rather than VI endpoints; detailed owner/setup/expectations in `HOST_ACCEPTANCE_M52.md`. Frontend examples and schemas are candidate only.

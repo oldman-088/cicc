@@ -1,0 +1,6 @@
+{
+  "note": "No persistent resolution status or trusted audit is implemented.",
+  "persistent_history_available": false,
+  "schema_version": "cicc.vi.resolution-availability/1",
+  "status": "not_implemented"
+}

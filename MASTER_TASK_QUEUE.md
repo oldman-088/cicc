@@ -1,3 +1,5 @@
+> **M52 VI verification:** 288 passed / 10 skipped full isolated PostgreSQL; dedicated engine guard 101 passed / 0 skipped / 1 live deselected locally; offline 187 passed / 111 skipped; separate live CISA GitHub mirror 2 passed; actual host 0 executed / 8 skipped. See `M52_VI_ALIGNMENT.md`, `HOST_ACCEPTANCE_M52.md`, `VI_SOURCE_AND_DUPLICATION_M52.md`. Earlier counts below are historical.
+
 > **M51 VI role correction and verification:** 268 passed / 10 skipped full isolated PostgreSQL; dedicated engine guard 98 passed / 0 skipped / 1 live deselected locally; offline 170 passed / 108 skipped; separate live mirror 2 passed; actual host 0 executed / 8 skipped. See `M51_VI_ALIGNMENT.md` and `M51_POSTGRES_EVIDENCE.md`. Older agent-role text and counts below are historical.
 
 > **M50 verification:** 261 passed / 10 skipped isolated PostgreSQL suite; default 164 passed / 107 skipped; separately 2 live CISA GitHub mirror tests passed; actual Agent 1 host 0 executed / 8 skipped. Subset SBOM import and resolution planning are offline, not production integrations. See `INTELLIGENCE_HOST_HANDOFF_M50.md`. Earlier counts below are historical.

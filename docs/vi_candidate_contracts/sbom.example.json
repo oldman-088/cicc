@@ -1,0 +1,27 @@
+{
+  "format": "CycloneDX",
+  "ignored_fields": [],
+  "inventory": {
+    "collected_at": "2026-01-02T00:00:00Z",
+    "component_completeness": "unknown",
+    "components": [
+      {
+        "bom_ref": "fixture-a",
+        "licenses": [],
+        "name": "EXPERIMENTAL_DEMO_DATA_ONLY component",
+        "purl": null,
+        "version": null
+      }
+    ],
+    "dependencies": [],
+    "dependency_completeness": "unknown",
+    "document_id": "EXPERIMENTAL_DEMO_DATA_ONLY sbom",
+    "origin": "EXPERIMENTAL_DEMO_DATA_ONLY",
+    "provenance": "EXPERIMENTAL_DEMO_DATA_ONLY fixture#sha256:3dbb93daef95308ba393fb1cd95c6b43316b4fe6485bd497af63f411e6941df6",
+    "vulnerability_links": []
+  },
+  "license_statements": [],
+  "schema_version": "cicc.vi.sbom-summary/1",
+  "source_sha256": "3dbb93daef95308ba393fb1cd95c6b43316b4fe6485bd497af63f411e6941df6",
+  "version": "1.5"
+}

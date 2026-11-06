@@ -371,3 +371,13 @@ def test_versioned_inspection_document_is_read_only_and_json_reproducible(db):
     assert 'previous' not in one and 'candidate' not in one and one['observed_at'].endswith('+00:00')
     assert counts(db)==before_counts
     with pytest.raises(ValueError,match='unsupported'): conflict_document(db,**(kw|{'schema_version':'cicc.kev-conflict-summary/2'}))
+
+
+def test_frontend_conflict_candidate_schema_accepts_actual_isolated_inspection(db):
+    from apps.threat_intelligence.cisa_kev_snapshot import conflict_document
+    from apps.threat_intelligence.frontend_vi_candidates import ConflictCandidate
+    original=collected(sample());persist_catalog(db,original)
+    data=sample();data['vulnerabilities'][0]['product']='EXPERIMENTAL_DEMO_DATA_ONLY changed fixture'
+    result=persist_catalog(db,collected(data))
+    doc=conflict_document(db,origin=original.origin,conflict_id=result.conflict_id,schema_version='cicc.kev-conflict-summary/1')
+    assert ConflictCandidate.model_validate(doc).origin=='EXPERIMENTAL_DEMO_DATA_ONLY'
