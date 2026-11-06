@@ -1,0 +1,599 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openctem.io/ctis/2.0/report.json",
+  "title": "CTIS Report",
+  "description": "CTEM Interchange Schema (CTIS) 2.0: one producer's observations of assets, findings, dependencies, relationships and endpoints. A document carries natural keys (canonical forms) and the producer's own references, never a receiver's database keys. Normative semantics: docs/spec.md. Media type application/vnd.ctis+json; version=2.0, file suffix .ctis.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "metadata"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^2\\.(0|[1-9][0-9]{0,3})$",
+      "default": "2.0",
+      "description": "CTIS specification version as MAJOR.MINOR. Receivers decode a document of their own or an older minor strictly, ignore unknown members and map unknown enum values to their fallback in a document of a newer minor, and reject another major (spec section Versioning). 1.x documents are rejected.",
+      "maxLength": 1024
+    },
+    "$schema": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+      "description": "Schema URL, normally https://schemas.openctem.io/ctis/2.0/report.json. An identifier: receivers never fetch it."
+    },
+    "metadata": {
+      "$ref": "#/$defs/ReportMetadata"
+    },
+    "tool": {
+      "$ref": "#/$defs/Tool"
+    },
+    "assets": {
+      "type": "array",
+      "description": "Discovered assets",
+      "items": {
+        "$ref": "asset.json"
+      },
+      "maxItems": 1000000
+    },
+    "rules": {
+      "type": "array",
+      "maxItems": 10000,
+      "description": "Rules and checks the findings name by rule_ref, described once",
+      "items": {
+        "$ref": "#/$defs/Rule"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Security findings",
+      "items": {
+        "$ref": "finding.json"
+      },
+      "maxItems": 1000000
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Software dependencies (SBOM)",
+      "items": {
+        "$ref": "dependency.json"
+      },
+      "maxItems": 1000000
+    },
+    "relationships": {
+      "type": "array",
+      "maxItems": 10000,
+      "description": "Typed relationships between two assets of this report, named by their ids",
+      "items": {
+        "$ref": "#/$defs/Relationship"
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "maxItems": 200000,
+      "description": "Methods and paths web origins serve, as a tool saw them; parameters are named, never valued",
+      "items": {
+        "$ref": "endpoint.json"
+      }
+    },
+    "properties": {
+      "$ref": "#/$defs/Properties"
+    },
+    "extensions": {
+      "$ref": "#/$defs/Extensions"
+    }
+  },
+  "$defs": {
+    "Extensions": {
+      "type": "object",
+      "description": "Namespaced producer data: keys are reverse-DNS namespaces (io.openctem, com.example.scanner), values objects that namespace defines. A receiver validates a namespace it knows and ignores one it does not. At most 32 namespaces and 64 KiB serialized (the size is checked by Validate).",
+      "maxProperties": 32,
+      "propertyNames": {
+        "maxLength": 128,
+        "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true,
+        "maxProperties": 64
+      }
+    },
+    "TargetOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How one target of the work ended, in the vocabulary of the outcome package: done and unfinished take no class or cause; failed and skipped need a class of their own",
+      "required": [
+        "target",
+        "state"
+      ],
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The target as the work was given it (a name, an address, a range, a URL)"
+        },
+        "kind": {
+          "$ref": "asset.json#/$defs/AssetType"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "done",
+            "failed",
+            "skipped",
+            "unfinished"
+          ]
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "unreachable",
+            "timeout",
+            "tool_error",
+            "egress_refused",
+            "name_gone",
+            "resolver_failed",
+            "sensor_network_fault",
+            "rate_limited",
+            "edge_challenged",
+            "edge_blocked",
+            "refused",
+            "excluded"
+          ]
+        },
+        "cause": {
+          "type": "string",
+          "enum": [
+            "target",
+            "sensor",
+            "platform"
+          ]
+        }
+      }
+    },
+    "Segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "This document's place in a result split over count documents that share one metadata.id. index is zero-based.",
+      "required": [
+        "index",
+        "count"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        }
+      }
+    },
+    "Relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A typed edge between two different assets of the report",
+      "required": [
+        "type",
+        "from_ref",
+        "to_ref"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/RelationshipType"
+        },
+        "from_ref": {
+          "$ref": "report.json#/$defs/DocumentRef",
+          "description": "The asset the relationship starts from"
+        },
+        "to_ref": {
+          "$ref": "report.json#/$defs/DocumentRef",
+          "description": "The asset the relationship points to"
+        },
+        "first_seen_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the producer first observed the edge",
+          "maxLength": 64
+        },
+        "last_seen_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the producer last observed the edge",
+          "maxLength": 64
+        },
+        "confidence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "How sure the producer is of the edge, 0-100"
+        },
+        "extensions": {
+          "$ref": "#/$defs/Extensions"
+        }
+      }
+    },
+    "RelationshipType": {
+      "type": "string",
+      "enum": [
+        "subdomain_of",
+        "resolves_to",
+        "cname_of",
+        "exposes",
+        "serves_certificate",
+        "hosted_by",
+        "contains",
+        "runs_on",
+        "depends_on",
+        "deployed_from",
+        "member_of",
+        "routes_to",
+        "has_access_to",
+        "has_address"
+      ],
+      "description": "One direction per type, read as from <type> to; no inverse duplicates"
+    },
+    "ReportMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Report metadata. No member carries a tenant identifier: the tenant comes from the credential.",
+      "required": [
+        "id",
+        "generated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "description": "Producer-generated UUIDv7 that identifies this document: the idempotency key. A retry re-sends the same id; receivers deduplicate on (credential, id). Every segment of a split result shares it. Never a receiver's key."
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the producer generated the document (RFC 3339 with offset)",
+          "maxLength": 64
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Scan duration in milliseconds"
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "scanner",
+            "collector",
+            "integration",
+            "manual"
+          ],
+          "description": "How the data reached the document: scanner, collector, integration, manual. A separate axis from the detection technique."
+        },
+        "source_refs": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/SourceRef"
+          },
+          "description": "The producer's own references for the work (a job id in its scheduler, a scan id in the source product)"
+        },
+        "coverage_type": {
+          "type": "string",
+          "enum": [
+            "full",
+            "incremental",
+            "partial"
+          ],
+          "description": "Coverage type: full (complete scan), incremental (diff scan), partial (specific directories)"
+        },
+        "branch": {
+          "$ref": "#/$defs/BranchInfo"
+        },
+        "profiles": {
+          "type": "array",
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "core",
+              "discovery",
+              "vulnerability",
+              "code",
+              "sbom",
+              "validation",
+              "web3"
+            ]
+          },
+          "description": "Conformance profiles the producer claims for this document"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the work that produced the report started",
+          "maxLength": 64
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the work that produced the report ended",
+          "maxLength": 64
+        },
+        "targets": {
+          "type": "array",
+          "maxItems": 100000,
+          "description": "How each target of the work ended. An item seen earlier on target T is gone only when a coverage_type full report lists T with state done and omits it",
+          "items": {
+            "$ref": "#/$defs/TargetOutcome"
+          }
+        },
+        "segment": {
+          "$ref": "#/$defs/Segment"
+        },
+        "properties": {
+          "$ref": "#/$defs/Properties"
+        },
+        "extensions": {
+          "$ref": "#/$defs/Extensions"
+        }
+      }
+    },
+    "BranchInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Git branch context for CI/CD scans. Used for branch-aware finding lifecycle management.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Branch name (e.g., 'main', 'feature/xyz')",
+          "maxLength": 512
+        },
+        "is_default_branch": {
+          "type": "boolean",
+          "description": "Whether this is the default branch (main/master). Auto-resolve only applies to default branch scans."
+        },
+        "commit_sha": {
+          "type": "string",
+          "description": "Commit SHA being scanned",
+          "maxLength": 1024
+        },
+        "base_branch": {
+          "type": "string",
+          "description": "Base branch for PR/MR scans (e.g., 'main' when scanning a PR targeting main)",
+          "maxLength": 1024
+        },
+        "pull_request_number": {
+          "type": "integer",
+          "description": "PR/MR number if this is a pull request scan"
+        },
+        "pull_request_url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "description": "Pull request URL (http or https)"
+        },
+        "repository_url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "description": "Repository URL (http or https)"
+        }
+      }
+    },
+    "Tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Tool that generated this report",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Tool name",
+          "maxLength": 512
+        },
+        "version": {
+          "type": "string",
+          "description": "Tool version",
+          "maxLength": 1024
+        },
+        "vendor": {
+          "type": "string",
+          "description": "Tool vendor/organization",
+          "maxLength": 1024
+        },
+        "info_url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "description": "Tool information URL (http or https)"
+        },
+        "techniques": {
+          "type": "array",
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Technique"
+          },
+          "description": "Detection techniques the tool applies (closed set). A finding may override with its own technique."
+        },
+        "content": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "Content releases the tool ran with: template and rule packs, vulnerability databases",
+          "items": {
+            "$ref": "#/$defs/ToolContent"
+          }
+        }
+      }
+    },
+    "Properties": {
+      "type": "object",
+      "additionalProperties": true,
+      "maxProperties": 64,
+      "description": "An opaque bag. Receivers MUST NOT give meaning to its keys; namespaced data goes in extensions."
+    },
+    "Technique": {
+      "type": "string",
+      "enum": [
+        "sast",
+        "sca",
+        "secret",
+        "iac",
+        "container",
+        "dast",
+        "va",
+        "easm",
+        "cspm",
+        "bas",
+        "pentest",
+        "manual"
+      ],
+      "description": "Detection technique: how a finding was found"
+    },
+    "SourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A producer's own identifier of an item in its own system ({system, id}): a plugin id, a scan id, an issue key. Never a receiver's key; receivers never use it as one.",
+      "required": [
+        "system",
+        "id"
+      ],
+      "properties": {
+        "system": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "The system that issued the id, an open token"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The id in that system (opaque)"
+        }
+      }
+    },
+    "DocumentRef": {
+      "type": "string",
+      "description": "A document-local reference (id and *_ref members): links items inside one document and means nothing outside it. At most 255 visible ASCII characters, and never UUID-shaped, so a receiver's database key cannot be passed off as one.",
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+=~%-]{0,254}$",
+      "not": {
+        "pattern": "^(urn:uuid:|\\{)?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\}?$"
+      }
+    },
+    "Rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A rule or check described once; findings name it by rule_ref and keep an equal rule_id",
+      "required": [
+        "id",
+        "rule_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/DocumentRef",
+          "description": "Document-local reference findings name the rule by"
+        },
+        "rule_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "The tool's identifier of the rule"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Human-readable rule name"
+        },
+        "short_description": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "One-sentence description (plain text)"
+        },
+        "full_description": {
+          "type": "string",
+          "maxLength": 32768,
+          "description": "Full description (plain text)"
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 32768,
+          "description": "How to fix what the rule finds (plain text)"
+        },
+        "help_uri": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/?#]+[^\\s]*$",
+          "description": "Page that documents the rule (http or https). Receivers never fetch it."
+        },
+        "default_severity": {
+          "$ref": "finding.json#/$defs/Severity",
+          "description": "Severity the tool gives the rule when a finding does not override it"
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "description": "The tool's tags for the rule"
+        },
+        "cwe_ids": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "pattern": "^CWE-[1-9][0-9]{0,5}$"
+          },
+          "description": "CWE identifiers the rule checks for"
+        },
+        "content_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the rule's content as the tool ran it (a template or rule file), lowercase hex"
+        },
+        "content_path": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Path of the rule within the tool's content (plain text; receivers never open it)"
+        },
+        "extensions": {
+          "$ref": "#/$defs/Extensions"
+        }
+      }
+    },
+    "ToolContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One content release a tool ran with",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Content name, for example a template pack or a vulnerability database"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Release version"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the release, lowercase hex"
+        }
+      }
+    }
+  }
+}

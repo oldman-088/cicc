@@ -1,0 +1,398 @@
+"""EPSS integration interface — designed now, network intentionally not wired.
+
+EPSS (Exploit Prediction Scoring System, FIRST) publishes a *probability* that a
+CVE will be exploited in the next 30 days, plus a percentile, together with the
+model version that produced it:
+
+    GET https://api.first.org/data/v1/epss?cve=CVE-2024-1234
+    {"status":"OK","status-code":200,"version":"2025.03.14","model":"...",
+     "total":1,"offset":0,"limit":1,
+     "data":[{"cve":"CVE-2024-1234","epss":"0.97228","percentile":"0.99966",
+              "date":"2025-03-14"}]}
+
+Scope decision (deliberate, documented):
+
+* **The HTTP call is not implemented.**  EPSS lives behind a host this
+  environment cannot reach, and shipping an untested integration would violate
+  the project rule against claiming unverified connections.  Instead this module
+  ships the parts that are safe to build and test offline:
+  a typed normalization layer, a strict response parser, a cache protocol and a
+  provider protocol.
+* These seams are what the ranking module consumes, so swapping in a live
+  provider later requires **no** change to scoring code.
+* EPSS is a prediction, never a definition of exploitability.  A missing score
+  is ``None``; it is never coerced to ``0.0`` (which would read as "safe").
+
+To wire it later: implement :class:`EpssProvider` with the existing
+:class:`~vuln_intel.transport.Transport`, reuse :func:`parse_epss_response`, and
+flip ``LIVE_PROVIDER_AVAILABLE`` only when a real fetch has been recorded.
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
+from typing import Any, Callable, Mapping, Protocol, Sequence, runtime_checkable
+
+from ..errors import (
+    SourceRateLimited,
+    SourceResponseError,
+    ValidationError,
+)
+from ..ratelimit import RateGate
+from ..retry import RetryPolicy, call_with_retry
+from ..schema import CveId, coerce_text, mapping_list, utcnow
+from ..transport import Transport
+
+__all__ = [
+    "EPSS_API",
+    "LIVE_PROVIDER_AVAILABLE",
+    "EpssCache",
+    "EpssConnector",
+    "EpssProvider",
+    "EpssScore",
+    "FixtureEpssProvider",
+    "InMemoryEpssCache",
+    "UnavailableEpssProvider",
+    "parse_epss_response",
+]
+
+EPSS_API = "https://api.first.org/data/v1/epss"
+
+#: ``False`` until an authorized, executed live fetch exists.  Code paths that
+#: consult this must degrade to "EPSS unavailable", never to a silent zero.
+LIVE_PROVIDER_AVAILABLE = False
+
+
+@dataclass(frozen=True)
+class EpssScore:
+    """One EPSS observation.
+
+    ``stale`` is computed by the caller-supplied policy, not guessed here.
+    """
+
+    cve: CveId
+    score: float
+    percentile: float
+    model_date: str | None
+    observed_at: datetime
+    model_version: str | None = None
+    origin: str = "live"
+    stale: bool = False
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.score <= 1.0:
+            raise ValidationError("EPSS score must be within 0.0-1.0", field="epss")
+        if not 0.0 <= self.percentile <= 1.0:
+            raise ValidationError("EPSS percentile must be within 0.0-1.0", field="percentile")
+        if self.observed_at.tzinfo is None:
+            raise ValidationError("observed_at must be timezone-aware", field="observed_at")
+        if self.origin not in ("live", "fixture", "demo", "cached"):
+            raise ValidationError("unknown EPSS origin", field="origin")
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "cve": str(self.cve),
+            "epss": self.score,
+            "percentile": self.percentile,
+            "model_date": self.model_date,
+            "model_version": self.model_version,
+            "observed_at": self.observed_at.isoformat(),
+            "origin": self.origin,
+            "stale": self.stale,
+        }
+
+
+@runtime_checkable
+class EpssProvider(Protocol):
+    """Contract for an EPSS source of truth.
+
+    Implementations MUST raise :class:`~vuln_intel.errors.SourceError` when they
+    cannot answer, so "unavailable" never masquerades as "score = 0".
+    """
+
+    name: str
+
+    def fetch(self, cves: Sequence[CveId]) -> Mapping[str, EpssScore]:  # pragma: no cover
+        ...
+
+
+@runtime_checkable
+class EpssCache(Protocol):
+    """Cache seam: a DB-backed implementation can be added without touching scoring."""
+
+    def get(self, cve: CveId) -> EpssScore | None:  # pragma: no cover
+        ...
+
+    def put(self, score: EpssScore) -> None:  # pragma: no cover
+        ...
+
+
+@dataclass
+class InMemoryEpssCache:
+    """Process-local cache; explicitly *not* durable and not multi-tenant.
+
+    ``clock`` is injectable so expiry behaviour is testable without sleeping.
+    """
+
+    max_age_seconds: float = 24 * 3600
+    clock: Callable[[], datetime] = utcnow
+    _items: dict[str, EpssScore] = field(default_factory=dict, repr=False)
+
+    def get(self, cve: CveId) -> EpssScore | None:
+        score = self._items.get(str(cve))
+        if score is None:
+            return None
+        age = (self.clock() - score.observed_at).total_seconds()
+        if age > self.max_age_seconds:
+            return None
+        return score
+
+    def put(self, score: EpssScore) -> None:
+        self._items[str(score.cve)] = score
+
+
+@dataclass
+class FixtureEpssProvider:
+    """Deterministic provider for **fixture/demo** runs.
+
+    Records are stamped ``origin="fixture"`` so they can never be merged into
+    live intelligence (see :func:`vuln_intel.schema.merge_records`).
+    """
+
+    scores: Mapping[str, tuple[float, float, str | None]] = field(default_factory=dict)
+    model_version: str = "fixture"
+    name: str = "fixture-epss"
+
+    def fetch(self, cves: Sequence[CveId]) -> Mapping[str, EpssScore]:
+        out: dict[str, EpssScore] = {}
+        for cve in cves:
+            entry = self.scores.get(str(cve))
+            if entry is None:
+                continue
+            score, percentile, model_date = entry
+            out[str(cve)] = EpssScore(
+                cve=cve,
+                score=score,
+                percentile=percentile,
+                model_date=model_date,
+                observed_at=utcnow(),
+                model_version=self.model_version,
+                origin="fixture",
+            )
+        return out
+
+
+@dataclass
+class UnavailableEpssProvider:
+    """Default provider while the live call is not implemented/verified."""
+
+    reason: str = (
+        "EPSS live provider is not implemented or verified in this build; "
+        "scores are unavailable, not zero"
+    )
+    name: str = "unavailable-epss"
+
+    def fetch(self, cves: Sequence[CveId]) -> Mapping[str, EpssScore]:
+        raise SourceResponseError(self.reason, source="epss")
+
+
+def _ratio(value: object, *, field_name: str) -> float:
+    """EPSS numbers arrive as strings such as ``"0.97228"``."""
+    if isinstance(value, bool):
+        raise ValidationError("expected a numeric string", field=field_name)
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str) and value.strip():
+        try:
+            number = float(value.strip())
+        except ValueError as exc:
+            raise ValidationError(f"unparseable {field_name}: {value!r}", field=field_name) from exc
+    else:
+        raise ValidationError(f"missing {field_name}", field=field_name)
+    if not 0.0 <= number <= 1.0:
+        raise ValidationError(f"{field_name} outside 0.0-1.0", field=field_name)
+    return number
+
+
+def _model_date(value: object) -> str | None:
+    text = coerce_text(value, field_name="date", limit=40)
+    if text is None:
+        return None
+    try:
+        date.fromisoformat(text)
+    except ValueError as exc:
+        raise ValidationError(f"unparseable EPSS date: {text!r}", field="date") from exc
+    return text
+
+
+def parse_epss_response(
+    body: Mapping[str, Any],
+    *,
+    observed_at: datetime | None = None,
+    origin: str = "live",
+    requested: Sequence[CveId] = (),
+) -> Mapping[str, EpssScore]:
+    """Strictly parse an EPSS API payload.
+
+    * non-``OK`` status raises instead of returning an empty mapping;
+    * each entry is validated independently — one bad row fails the parse
+      visibly rather than being dropped silently;
+    * CVEs absent from a successful response are genuinely unscored and are
+      simply not present in the result (callers must render "no EPSS").
+    """
+    if not isinstance(body, Mapping):
+        raise SourceResponseError("EPSS body is not an object", source="epss")
+    status = body.get("status")
+    if status is not None and str(status).upper() != "OK":
+        raise SourceResponseError(
+            f"EPSS returned status {status!r}", source="epss"
+        )
+    observed = observed_at or utcnow()
+    if observed.tzinfo is None:
+        raise ValidationError("observed_at must be aware", field="observed_at")
+    model_version = coerce_text(body.get("version"), field_name="version", limit=40)
+    # `data` must be a list. A null/absent value used to fall through to an empty
+    # mapping, which is indistinguishable from a well-formed "none of these CVEs is
+    # scored" answer — the strongest claim a provider can make about exploitability.
+    # An envelope without the documented array is a contract violation, not data.
+    raw_data = body.get("data")
+    if not isinstance(raw_data, list):
+        raise SourceResponseError(
+            "EPSS envelope has no 'data' array; refusing to treat a malformed "
+            "response as 'no scores'",
+            source="epss",
+        )
+    scores: dict[str, EpssScore] = {}
+    for entry in mapping_list(body.get("data"), field_name="data"):
+        cve = CveId.parse(entry.get("cve"))
+        if requested and str(cve) not in {str(item) for item in requested}:
+            # The provider answered about a CVE we did not ask for.
+            raise ValidationError(
+                "EPSS returned an unrequested CVE", field="cve"
+            )
+        scores[str(cve)] = EpssScore(
+            cve=cve,
+            score=_ratio(entry.get("epss"), field_name="epss"),
+            percentile=_ratio(entry.get("percentile"), field_name="percentile"),
+            model_date=_model_date(entry.get("date")),
+            observed_at=observed.astimezone(timezone.utc),
+            model_version=model_version,
+            origin=origin,
+        )
+    return scores
+
+
+#: Documents how many CVEs one request may ask for. The API accepts a
+#: comma-separated ``cve`` parameter; a bounded batch keeps the URL well inside
+#: provider and proxy limits rather than discovering the ceiling in production.
+MAX_CVES_PER_REQUEST = 100
+
+
+@dataclass
+class EpssConnector:
+    """Live-ish EPSS client over an injected transport.
+
+    Ship-with-caution design. The HTTP path is implemented and tested, but
+    :data:`LIVE_PROVIDER_AVAILABLE` stays ``False`` until an authorized live fetch
+    has actually succeeded and been recorded. Nothing in this class sets it, by
+    design: a module must not be able to certify itself.
+
+    Behaviour that matters more than the plumbing:
+
+    * a CVE with **no** EPSS record is absent from the result, not ``0.0`` — a
+      projected zero is the strongest possible claim of "not exploited";
+    * a non-OK envelope, a transport failure or a malformed row **raises**, so an
+      outage is never reported as "no scores for anything";
+    * batching is bounded and every CVE in a request is checked against the
+      response, so a score can never be attributed to the wrong identifier.
+    """
+
+    transport: Transport | None = None
+    retry: RetryPolicy = RetryPolicy()
+    gate: RateGate | None = None
+    timeout: float = 30.0
+    origin: str = "live"
+    sleep: Callable[[float], None] | None = None
+    max_cves_per_request: int = MAX_CVES_PER_REQUEST
+    name: str = "epss"
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.max_cves_per_request <= 1000:
+            raise ValidationError(
+                "max_cves_per_request must be within 1-1000", field="max_cves_per_request"
+            )
+        if self.gate is None:
+            self.gate = RateGate(
+                min_interval=0.0, clock=time.monotonic, sleep=self.sleep or time.sleep
+            )
+
+    def _headers(self) -> dict[str, str]:
+        return {"Accept": "application/json", "User-Agent": "CICC-vuln-intel/0.1"}
+
+    def fetch(self, cves: Sequence[CveId]) -> Mapping[str, EpssScore]:
+        """Return the scores FIRST actually published for ``cves``.
+
+        Absent keys mean "this CVE has no published EPSS score", which callers must
+        render as unknown rather than as zero risk.
+        """
+        if self.transport is None:
+            raise SourceResponseError(
+                "no transport configured for EPSS; scores are unavailable", source="epss"
+            )
+        wanted = list(dict.fromkeys(str(cve) for cve in cves))
+        if not wanted:
+            return {}
+
+        out: dict[str, EpssScore] = {}
+        for start in range(0, len(wanted), self.max_cves_per_request):
+            batch = wanted[start : start + self.max_cves_per_request]
+            out.update(self._fetch_batch(batch))
+        return out
+
+    def _fetch_batch(self, batch: Sequence[str]) -> Mapping[str, EpssScore]:
+        url = EPSS_API
+
+        def attempt() -> Mapping[str, EpssScore]:
+            assert self.gate is not None and self.transport is not None
+            self.gate.wait()
+            response = self.transport.get(
+                url,
+                params={"cve": ",".join(batch), "envelope": "true"},
+                headers=self._headers(),
+                timeout=self.timeout,
+            )
+            if response.status == 429:
+                raise SourceRateLimited(
+                    "EPSS rate limited", retry_after=None, status=429, source="epss"
+                )
+            if response.status != 200:
+                raise SourceResponseError(
+                    f"unexpected EPSS status {response.status}",
+                    status=response.status,
+                    source="epss",
+                )
+            body = response.json()
+            if not isinstance(body, Mapping):
+                raise SourceResponseError("EPSS body is not an object", source="epss")
+            try:
+                return parse_epss_response(
+                    body,
+                    origin=self.origin,
+                    requested=[CveId.parse(item) for item in batch],
+                )
+            except ValidationError as exc:
+                # A malformed row is a *data* fault, not a caller error, so it must
+                # not escape as ValidationError: callers treat that as a programming
+                # bug, and the pipeline's EPSS handling only degrades on SourceError.
+                # Letting it out crashed an entire enrichment run because one CVE
+                # carried an out-of-range score.
+                raise SourceResponseError(
+                    f"EPSS returned data this client cannot accept: {exc}",
+                    source="epss",
+                ) from exc
+
+        return call_with_retry(
+            attempt, policy=self.retry, sleep=self.sleep or time.sleep
+        )

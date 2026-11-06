@@ -1,0 +1,37 @@
+# Curated rules for a security-sensitive, dependency-free package.
+# Deliberately not "select = ALL": style churn has no value here, but the
+# correctness and security families do.
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = [
+    "F",    # pyflakes: real bugs (unused, undefined)
+    "E9",   # syntax/runtime errors
+    "B",    # bugbear: mutable defaults, shadowing traps
+    "S",    # bandit: security (hardcoded secrets, assert, subprocess)
+    "UP",   # pyupgrade: modern stdlib usage
+    "SIM",  # simplify
+    "RET",  # return paths
+    "PIE",  # misc lints
+    "RUF",  # ruff-native correctness
+    "I",    # import order (deterministic diffs)
+]
+ignore = [
+    "S101",    # assert is used deliberately in tests and in invariants
+    "UP017",   # datetime.timezone.utc kept readable across 3.11/3.12
+    "UP035",   # typing imports are explicit for readability
+    "SIM108",  # ternaries are not always clearer
+    "RUF012",  # ClassVar annotation churn
+    "RUF005",  # explicit tuple concatenation reads better than unpacking here
+    "RUF009",  # frozen dataclass defaults (RetryPolicy is immutable) are safe
+    "UP042",   # str-Enum keeps current str()/format semantics stable
+]
+
+[lint.per-file-ignores]
+# Tests assert a lot and import fixtures by path; security rules are relaxed,
+# but correctness rules still apply.
+"tests/*" = ["S101", "S105", "S106", "SIM117", "B017"]
+
+[lint.isort]
+known-first-party = ["vuln_intel"]

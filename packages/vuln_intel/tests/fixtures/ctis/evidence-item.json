@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openctem.io/ctis/2.0/evidence-item.json",
+  "title": "CTIS Evidence Item",
+  "description": "One piece of typed evidence of a finding. Known kinds are validated whole; another kind is validated by its envelope and carries its own fields in data. Sensitive values may appear only inside the spans listed in sensitive, which receivers mask before display or forwarding.",
+  "type": "object",
+  "required": [
+    "kind"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "description": "http_exchange, raw_text, screenshot, file_excerpt, command_output, curl, or a newer kind"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "label": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Over the item as captured, before masking or truncation"
+    },
+    "http": {
+      "$ref": "#/$defs/EvidenceHTTP"
+    },
+    "match": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/EvidenceMatch"
+      }
+    },
+    "extracted": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "maxLength": 1024
+      }
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 65536
+    },
+    "protocol": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+    },
+    "command": {
+      "type": "string",
+      "maxLength": 8192
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "file": {
+      "$ref": "#/$defs/EvidenceFile"
+    },
+    "artifact": {
+      "$ref": "#/$defs/EvidenceArtifact"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Fields of a kind this version of the schema does not know",
+      "maxProperties": 64
+    },
+    "sensitive": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/SensitiveSpan"
+      }
+    }
+  },
+  "$defs": {
+    "EvidenceHTTP": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/EvidenceRequest"
+        },
+        "response": {
+          "$ref": "#/$defs/EvidenceResponse"
+        }
+      }
+    },
+    "EvidenceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string",
+          "pattern": "^([A-Za-z][A-Za-z0-9-]{0,31})?$",
+          "maxLength": 1024
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "http_version": {
+          "type": "string",
+          "pattern": "^(HTTP/[0-9](\\.[0-9])?)?$",
+          "maxLength": 1024
+        },
+        "headers": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/EvidenceHeader"
+          }
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "body_encoding": {
+          "type": "string",
+          "enum": [
+            "",
+            "text",
+            "base64"
+          ]
+        },
+        "body_truncated": {
+          "type": "boolean"
+        },
+        "body_size": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "EvidenceResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 599
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "http_version": {
+          "type": "string",
+          "pattern": "^(HTTP/[0-9](\\.[0-9])?)?$",
+          "maxLength": 1024
+        },
+        "time_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "headers": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/EvidenceHeader"
+          }
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "body_encoding": {
+          "type": "string",
+          "enum": [
+            "",
+            "text",
+            "base64"
+          ]
+        },
+        "body_truncated": {
+          "type": "boolean"
+        },
+        "body_size": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "EvidenceHeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,256}$"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      }
+    },
+    "EvidenceMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "location",
+        "part"
+      ],
+      "properties": {
+        "location": {
+          "type": "string",
+          "enum": [
+            "request",
+            "response"
+          ]
+        },
+        "part": {
+          "type": "string",
+          "enum": [
+            "status",
+            "header",
+            "body",
+            "url"
+          ]
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "matcher": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "EvidenceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "snippet": {
+          "type": "string",
+          "maxLength": 65536
+        }
+      }
+    },
+    "EvidenceArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "media_type",
+        "sha256"
+      ],
+      "properties": {
+        "media_type": {
+          "type": "string",
+          "maxLength": 127
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ref": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    },
+    "SensitiveSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pointer"
+      ],
+      "description": "A secret or personal value inside the item: the string at pointer (a JSON pointer into the item), whole or the byte range [start, end)",
+      "properties": {
+        "pointer": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(/([^~/]|~[01])*)+$"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        }
+      }
+    }
+  }
+}

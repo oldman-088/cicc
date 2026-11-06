@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openctem.io/ctis/2.0/endpoint.json",
+  "title": "CTIS Endpoint",
+  "description": "One method and path a web origin serves, as a tool saw it. Parameters are named, never valued: a value member is refused.",
+  "type": "object",
+  "required": [
+    "origin",
+    "path"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "Document-local reference, named by finding.web.endpoint_ref"
+    },
+    "origin": {
+      "type": "string",
+      "maxLength": 2048,
+      "description": "Normalised origin: scheme://host[:port]"
+    },
+    "origin_ref": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "The web_origin asset of the origin in this report"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "",
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+        "TRACE",
+        "CONNECT",
+        "ANY"
+      ],
+      "description": "HTTP method; ANY or absent when unknown"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^/[^?#]*$",
+      "maxLength": 2048,
+      "description": "Concrete path without query or fragment"
+    },
+    "template": {
+      "type": "string",
+      "pattern": "^/[^?#]*$",
+      "maxLength": 2048,
+      "description": "Producer's path template; receivers recompute it"
+    },
+    "kind": {
+      "$ref": "#/$defs/EndpointKind"
+    },
+    "source": {
+      "$ref": "#/$defs/EndpointSource"
+    },
+    "parent_url": {
+      "type": "string",
+      "maxLength": 2048,
+      "description": "Page the endpoint was found on, redacted (no query value, user info or fragment)"
+    },
+    "status_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 599
+    },
+    "content_type": {
+      "type": "string",
+      "maxLength": 255
+    },
+    "auth": {
+      "$ref": "#/$defs/EndpointAuth"
+    },
+    "technologies": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "asset.json#/$defs/Technology"
+      }
+    },
+    "params": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/EndpointParam"
+      }
+    },
+    "extensions": {
+      "$ref": "report.json#/$defs/Extensions"
+    }
+  },
+  "$defs": {
+    "EndpointKind": {
+      "type": "string",
+      "enum": [
+        "page",
+        "api",
+        "script",
+        "form",
+        "graphql",
+        "websocket",
+        "static",
+        "other"
+      ]
+    },
+    "EndpointSource": {
+      "type": "string",
+      "enum": [
+        "crawl",
+        "js",
+        "sitemap",
+        "robots",
+        "spec",
+        "har",
+        "archive",
+        "dast",
+        "probe",
+        "import"
+      ]
+    },
+    "EndpointAuth": {
+      "type": "string",
+      "enum": [
+        "none",
+        "required",
+        "redirect_login",
+        "unknown"
+      ]
+    },
+    "ParamLocation": {
+      "type": "string",
+      "enum": [
+        "query",
+        "path",
+        "header",
+        "cookie",
+        "form",
+        "json",
+        "multipart",
+        "graphql_arg"
+      ]
+    },
+    "EndpointParam": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A parameter the endpoint takes: a name and hints, never a value",
+      "required": [
+        "location",
+        "name"
+      ],
+      "properties": {
+        "location": {
+          "$ref": "#/$defs/ParamLocation"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type_hint": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        },
+        "is_required": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

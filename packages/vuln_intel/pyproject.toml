@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cicc-vuln-intel"
+version = "0.1.0"
+description = "CICC vulnerability intelligence: NVD/OSV connectors, CVE normalization, EPSS interface, prioritization"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+# Deliberately dependency-free: the package must be importable in the API
+# container without new pins, and tests must run with pytest alone.
+dependencies = []
+
+[project.optional-dependencies]
+# Required only for live collection (HttpxTransport). Install explicitly.
+live = ["httpx>=0.27,<0.29"]
+dev = ["pytest>=8,<10", "hypothesis>=6,<7", "pyyaml>=6", "openapi-spec-validator>=0.7"]  # dev-only; runtime stays stdlib-only
+
+[tool.setuptools.packages.find]
+include = ["vuln_intel*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# `-rs` is deliberate: without it a skipped oracle check is nearly invisible in the
+# log, and a skipped differential test is NOT a passing cross-check.
+addopts = "-q --strict-markers -rs"
+filterwarnings = ["error::DeprecationWarning:vuln_intel.*"]
+markers = [
+    "oracle: differential check against an independent reference implementation (skipped, loudly, when that implementation is unavailable)",
+]
+# `tests/` must be importable so test modules can share helpers. The oracle status
+# banner prints on EVERY run via conftest's terminal summary, including a run that
+# selects no oracle test at all.
+pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+check_untyped_defs = true
+show_error_codes = true
+files = ["vuln_intel"]
+# httpx is an OPTIONAL live-only extra and is deliberately absent from the test
+# environment (the suite must run with pytest alone). Type checking must not
+# depend on whether that extra happens to be installed.
+ignore_missing_imports = true

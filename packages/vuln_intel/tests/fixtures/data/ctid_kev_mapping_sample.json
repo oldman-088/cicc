@@ -1,0 +1,220 @@
+{
+  "metadata": {
+    "mapping_version": "",
+    "technology_domain": "enterprise",
+    "attack_version": "16.1",
+    "mapping_framework": "kev",
+    "mapping_framework_version": "07/28/2025",
+    "author": null,
+    "contact": null,
+    "organization": null,
+    "creation_date": "07/28/2025",
+    "last_update": "08/28/2025",
+    "mapping_types": {
+      "primary_impact": {
+        "name": "primary_impact",
+        "description": ""
+      },
+      "secondary_impact": {
+        "name": "secondary_impact",
+        "description": ""
+      },
+      "exploitation_technique": {
+        "name": "exploitation_technique",
+        "description": ""
+      },
+      "uncategorized": {
+        "name": "uncategorized",
+        "description": ""
+      }
+    },
+    "capability_groups": {
+      "access_ctrl": "Improper Access Control",
+      "auth_bypass": "Authentication Bypass",
+      "auth_missing": "Missing Authentication",
+      "buffer_overflow": "Buffer Overflow",
+      "code_execution": "Code Execution",
+      "code_injection": "Code Injection",
+      "command_execution": "Command Execution",
+      "command_injection": "Command Injection",
+      "default_cfg": "Default Configuration",
+      "dir_traversal": "Directory Traversal (Relative and Absolute)",
+      "dos": "Denial of Service",
+      "feature_bypass": "Security Feature Bypass",
+      "hardcoded_creds": "Hard-coded Credentials",
+      "inject": "Other Injection",
+      "input_validation": "Input Validation",
+      "int_overflow": "Integer Overflow",
+      "memory_corruption": "Memory Corruption",
+      "memory_mgmt": "Memory Management",
+      "oob": "Out-of-Bounds (Read and Write)",
+      "other": "Other",
+      "pointer_deref": "Pointer Dereference",
+      "pointer_vuln": "Other Pointer Vulnerability",
+      "priv_escalation": "Privilege Escalation",
+      "priv_mgmt": "Improper Privilege Management",
+      "race_condition": "Race Condition",
+      "resource_mgmt": "Resource Management",
+      "sandbox_bypass": "Sandbox Bypass or Escape",
+      "spoofing_vuln": "Spoofing Vulnerability",
+      "sql_injection": "SQL Injection",
+      "ssrf": "Server-Side Request Forgery (SSRF)",
+      "type_confusion": "Type Confusion",
+      "unrestricted_upload": "Unrestricted File Upload",
+      "untrusted_data": "Deserialization of Untrusted Data",
+      "use_after_free": "Use After Free",
+      "xss": "Cross-site Scripting (XSS)",
+      "xxe": "XML External Entity (XXE)"
+    }
+  },
+  "mapping_objects": [
+    {
+      "capability_id": "CVE-2024-34102",
+      "capability_description": "Adobe Commerce and Magento Open Source Improper Restriction of XML External Entity Reference (XXE) Vulnerability",
+      "mapping_type": "exploitation_technique",
+      "attack_object_id": "T1190",
+      "attack_object_name": "Exploit Public-Facing Application",
+      "capability_group": "xxe",
+      "comments": "This vulnerability is exploited by sending a crafted XML document that references external entities with the likely goal of accessing local data.",
+      "references": [
+        "https://www.assetnote.io/resources/research/why-nested-deserialization-is-harmful-magento-xxe-cve-2024-34102",
+        "https://www.vicarius.io/vsociety/posts/cosmicsting-critical-unauthenticated-xxe-vulnerability-in-adobe-commerce-and-magento-cve-2024-34102"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2024-34102",
+      "capability_description": "Adobe Commerce and Magento Open Source Improper Restriction of XML External Entity Reference (XXE) Vulnerability",
+      "mapping_type": "primary_impact",
+      "attack_object_id": "T1059",
+      "attack_object_name": "Command and Scripting Interpreter",
+      "capability_group": "xxe",
+      "comments": "This vulnerability is exploited by sending a crafted XML document that references external entities with the likely goal of accessing local data.",
+      "references": [
+        "https://www.assetnote.io/resources/research/why-nested-deserialization-is-harmful-magento-xxe-cve-2024-34102",
+        "https://www.vicarius.io/vsociety/posts/cosmicsting-critical-unauthenticated-xxe-vulnerability-in-adobe-commerce-and-magento-cve-2024-34102"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2024-34102",
+      "capability_description": "Adobe Commerce and Magento Open Source Improper Restriction of XML External Entity Reference (XXE) Vulnerability",
+      "mapping_type": "secondary_impact",
+      "attack_object_id": "T1005",
+      "attack_object_name": "Data from Local System",
+      "capability_group": "xxe",
+      "comments": "This vulnerability is exploited by sending a crafted XML document that references external entities with the likely goal of accessing local data.",
+      "references": [
+        "https://www.assetnote.io/resources/research/why-nested-deserialization-is-harmful-magento-xxe-cve-2024-34102",
+        "https://www.vicarius.io/vsociety/posts/cosmicsting-critical-unauthenticated-xxe-vulnerability-in-adobe-commerce-and-magento-cve-2024-34102"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2019-13608",
+      "capability_description": "Citrix StoreFront Server XML External Entity (XXE) Processing Vulnerability",
+      "mapping_type": "secondary_impact",
+      "attack_object_id": "T1078",
+      "attack_object_name": "Valid Accounts",
+      "capability_group": "xxe",
+      "comments": "CVE-2019-13608 is a an XML External Entity (XXE) processing vulnerability that may allow an unauthenticated attacker to retrieve potentially sensitive information.\n",
+      "references": [
+        "https://news.sophos.com/en-us/2021/01/26/nefilim-ransomware-attack-uses-ghost-credentials/",
+        "https://threatpost.com/nefilim-ransomware-ghost-account/163341/"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2019-13608",
+      "capability_description": "Citrix StoreFront Server XML External Entity (XXE) Processing Vulnerability",
+      "mapping_type": "primary_impact",
+      "attack_object_id": "T1059",
+      "attack_object_name": "Command and Scripting Interpreter",
+      "capability_group": "xxe",
+      "comments": "CVE-2019-13608 is a an XML External Entity (XXE) processing vulnerability that may allow an unauthenticated attacker to retrieve potentially sensitive information.\n",
+      "references": [
+        "https://news.sophos.com/en-us/2021/01/26/nefilim-ransomware-attack-uses-ghost-credentials/",
+        "https://threatpost.com/nefilim-ransomware-ghost-account/163341/"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2019-13608",
+      "capability_description": "Citrix StoreFront Server XML External Entity (XXE) Processing Vulnerability",
+      "mapping_type": "secondary_impact",
+      "attack_object_id": "T1003",
+      "attack_object_name": "OS Credential Dumping",
+      "capability_group": "xxe",
+      "comments": "CVE-2019-13608 is a an XML External Entity (XXE) processing vulnerability that may allow an unauthenticated attacker to retrieve potentially sensitive information.\n",
+      "references": [
+        "https://news.sophos.com/en-us/2021/01/26/nefilim-ransomware-attack-uses-ghost-credentials/",
+        "https://threatpost.com/nefilim-ransomware-ghost-account/163341/"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2019-13608",
+      "capability_description": "Citrix StoreFront Server XML External Entity (XXE) Processing Vulnerability",
+      "mapping_type": "secondary_impact",
+      "attack_object_id": "T1046",
+      "attack_object_name": "Network Service Discovery",
+      "capability_group": "xxe",
+      "comments": "CVE-2019-13608 is a an XML External Entity (XXE) processing vulnerability that may allow an unauthenticated attacker to retrieve potentially sensitive information.\n",
+      "references": [
+        "https://news.sophos.com/en-us/2021/01/26/nefilim-ransomware-attack-uses-ghost-credentials/",
+        "https://threatpost.com/nefilim-ransomware-ghost-account/163341/"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2019-13608",
+      "capability_description": "Citrix StoreFront Server XML External Entity (XXE) Processing Vulnerability",
+      "mapping_type": "secondary_impact",
+      "attack_object_id": "T1005",
+      "attack_object_name": "Data from Local System",
+      "capability_group": "xxe",
+      "comments": "CVE-2019-13608 is a an XML External Entity (XXE) processing vulnerability that may allow an unauthenticated attacker to retrieve potentially sensitive information.\n",
+      "references": [
+        "https://news.sophos.com/en-us/2021/01/26/nefilim-ransomware-attack-uses-ghost-credentials/",
+        "https://threatpost.com/nefilim-ransomware-ghost-account/163341/"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2024-4671",
+      "capability_description": "Google Chromium Visuals Use-After-Free Vulnerability",
+      "mapping_type": "primary_impact",
+      "attack_object_id": "T1059",
+      "attack_object_name": "Command and Scripting Interpreter",
+      "capability_group": "use_after_free",
+      "comments": "CVE-2024-4671 is a use-after-free vulnerability where an adversary can perform a sandbox escape via a maliciously-crafted HTML page.",
+      "references": [
+        "https://security-tracker.debian.org/tracker/CVE-2024-4671"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    },
+    {
+      "capability_id": "CVE-2024-4671",
+      "capability_description": "Google Chromium Visuals Use-After-Free Vulnerability",
+      "mapping_type": "exploitation_technique",
+      "attack_object_id": "T1189",
+      "attack_object_name": "Drive-by Compromise",
+      "capability_group": "use_after_free",
+      "comments": "CVE-2024-4671 is a use-after-free vulnerability where an adversary can perform a sandbox escape via a maliciously-crafted HTML page.",
+      "references": [
+        "https://security-tracker.debian.org/tracker/CVE-2024-4671"
+      ],
+      "status": "complete",
+      "mapping_framework_version": "7/28/2025"
+    }
+  ]
+}

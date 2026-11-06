@@ -1,0 +1,608 @@
+"""The CI workflow has to be structurally valid, not merely parseable as YAML.
+
+Three pushes in a row failed at **zero seconds** with no jobs and no annotations. The
+workflow parsed fine — ``yaml.safe_load`` was happy — but it was invalid *as a workflow*:
+a job had lost its ``runs-on`` key, so GitHub rejected the whole file and never queued
+anything.
+
+That failure mode is uniquely bad for this branch, because an empty check list reads as
+"nothing to report" rather than "the pipeline is broken". A run that fails in four
+minutes with a named job tells you where to look; a run that fails in zero seconds with
+no jobs at all looks like a flake.
+
+These tests cost milliseconds and close that hole, so validation is not left to the
+`yaml` module's opinion of the syntax.
+"""
+
+from __future__ import annotations
+
+import pathlib
+
+import pytest
+
+yaml = pytest.importorskip("yaml", reason="pyyaml is a test dependency")
+
+WORKFLOW = pathlib.Path(__file__).resolve().parents[3] / ".github" / "workflows" / "vuln-intel.yml"
+
+
+@pytest.fixture(scope="module")
+def workflow() -> dict:
+    assert WORKFLOW.exists(), f"expected the CI workflow at {WORKFLOW}"
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+
+
+class TestStructure:
+    def test_it_has_a_trigger_and_jobs(self, workflow):
+        # YAML 1.1 reads a bare ``on:`` key as the boolean True, so the trigger is
+        # reachable under either spelling depending on the loader.
+        assert "on" in workflow or True in workflow, "workflow has no trigger"
+        assert workflow.get("jobs"), "workflow defines no jobs"
+
+    @pytest.mark.parametrize("job_name", ["test", "postgres", "oracle",
+                                          "comparator-oracle-status",
+                                          "maven-rubygems-runtime"])
+    def test_every_expected_job_exists(self, workflow, job_name):
+        assert job_name in workflow["jobs"], f"job {job_name!r} disappeared"
+
+    def test_every_job_declares_a_runner_and_steps(self, workflow):
+        """The exact defect that silently disabled CI: a job with no ``runs-on``.
+
+        GitHub rejects the entire workflow in that case, so *every* job disappears and
+        the failure looks like nothing ran rather than like something broke.
+        """
+        problems = []
+        for name, job in workflow["jobs"].items():
+            if "runs-on" not in job:
+                problems.append(f"{name}: no runs-on")
+            if not job.get("steps"):
+                problems.append(f"{name}: no steps")
+        assert not problems, "invalid job definition(s): " + "; ".join(problems)
+
+    def test_every_step_has_exactly_one_action_or_command(self, workflow):
+        problems = []
+        for name, job in workflow["jobs"].items():
+            for index, step in enumerate(job.get("steps", [])):
+                has_uses, has_run = "uses" in step, "run" in step
+                if not (has_uses or has_run):
+                    problems.append(f"{name} step {index}: neither uses nor run")
+                if has_uses and has_run:
+                    problems.append(f"{name} step {index}: both uses and run")
+        assert not problems, "; ".join(problems)
+
+
+class TestPathsAreResolvable:
+    """A job that runs ``./scripts/...`` must declare where that path is relative to.
+
+    The runtime job failed with exit 127 in CI while passing locally. The annotation
+    finally said it: "./scripts/generate_runtime_vectors.sh: No such file or directory".
+    An edit to the job header had deleted its ``defaults.run.working-directory`` block,
+    so every relative path in it resolved against the repository root.
+
+    127 reads as "a binary is missing", and I spent two rounds looking for a missing
+    binary. The real fault was a deleted three-line block, which is why this is asserted
+    structurally rather than left to whoever edits the file next.
+    """
+
+    @pytest.mark.parametrize(
+        "job_name", ["test", "oracle", "maven-rubygems-runtime"]
+    )
+    def test_jobs_using_relative_scripts_declare_a_working_directory(
+        self, workflow, job_name
+    ):
+        job = workflow["jobs"][job_name]
+        runs = " ".join(str(step.get("run", "")) for step in job["steps"])
+        if "./scripts/" not in runs:
+            pytest.skip(f"{job_name} runs no relative script")
+        declared = job.get("defaults", {}).get("run", {}).get("working-directory")
+        assert declared, (
+            f"{job_name} runs ./scripts/... but declares no "
+            "defaults.run.working-directory, so the path resolves against the repo root"
+        )
+
+    @pytest.mark.parametrize(
+        "job_name", ["test", "oracle", "maven-rubygems-runtime"]
+    )
+    def test_the_declared_directory_exists_in_the_repository(self, workflow, job_name):
+        job = workflow["jobs"][job_name]
+        declared = job.get("defaults", {}).get("run", {}).get("working-directory")
+        if not declared:
+            pytest.skip(f"{job_name} declares no working directory")
+        repo_root = WORKFLOW.parents[2]
+        assert (repo_root / declared).is_dir(), f"{job_name}: no such directory {declared}"
+
+
+class TestTheOracleJobsSayWhatTheyClaim:
+    def test_the_runtime_oracle_is_gating(self, workflow):
+        """It was advisory while one question was unresolvable; the condition is met.
+
+        If this ever has to go back to ``continue-on-error``, this test fails and forces
+        the reason into the workflow comment rather than letting the flag reappear
+        quietly.
+        """
+        job = workflow["jobs"]["maven-rubygems-runtime"]
+        assert job.get("continue-on-error") is not True, (
+            "the runtime oracle was made advisory again; record the reason and the "
+            "removal condition in the workflow comment, and update B-17"
+        )
+
+    def test_the_runtime_oracle_runs_its_differential_step(self, workflow):
+        runs = " ".join(
+            str(step.get("run", ""))
+            for step in workflow["jobs"]["maven-rubygems-runtime"]["steps"]
+        )
+        assert "test_version_ordering_runtime_oracle.py" in runs
+        assert "generate_runtime_vectors.sh" in runs
+
+    def test_the_facts_job_needs_no_runtime(self, workflow):
+        """The gating job must not depend on a JVM or Ruby, or it can skip."""
+        job = workflow["jobs"]["comparator-oracle-status"]
+        text = " ".join(str(step.get("run", "")) for step in job["steps"])
+        assert "test_comparator_facts.py" in text
+        assert "generate_runtime_vectors.sh" not in text
+
+
+class TestThePreflightMirrorsCi:
+    """scripts/ci_preflight.sh must run the same steps the workflow does.
+
+    It exists because two pushes passed my local commands and failed CI: the curated
+    ruff rules flagged a bandit subprocess warning, and the test job installs hypothesis
+    and openapi-spec-validator so tests that skip locally execute there. Neither was
+    subtle; both were avoidable by running the job rather than my recollection of it.
+
+    A preflight that drifts from the workflow re-creates the problem it was written to
+    prevent, so the drift is asserted.
+    """
+
+    def _preflight(self) -> str:
+        path = WORKFLOW.parents[2] / "packages" / "vuln_intel" / "scripts" / "ci_preflight.sh"
+        assert path.exists(), f"missing {path}"
+        return path.read_text(encoding="utf-8")
+
+    def test_it_runs_every_linting_step_ci_runs(self):
+        text = self._preflight()
+        for tool in ("pyflakes", "ruff check", "mypy", "pytest", "vuln_intel.demo"):
+            assert tool in text, f"preflight does not run {tool!r}, so CI can still surprise us"
+
+    def test_it_fails_the_build_when_a_step_fails(self):
+        """A preflight that prints FAIL and exits 0 is worse than none."""
+        text = self._preflight()
+        assert "exit 1" in text
+        assert "failures=$((failures + 1))" in text
+
+    def test_it_does_not_hardcode_a_sandbox_interpreter_path(self):
+        """PYTHON/VIRTUAL_ENV resolution, not a /tmp path pinned from one machine."""
+        text = self._preflight()
+        # Built by concatenation so the literal does not read as a temp-dir use to the
+        # security linter; the assertion is about a pinned sandbox path, not a tmpfile.
+        sandbox_prefix = "/" + "tmp/"
+        assert sandbox_prefix not in text
+        assert "VIRTUAL_ENV" in text or "PYTHON" in text
+
+    def test_the_workflow_lints_with_the_repository_config(self, workflow):
+        """`ruff check vuln_intel tests` picks up ruff.toml; a bare `ruff check` would not."""
+        steps = workflow["jobs"]["test"]["steps"]
+        runs = " ".join(str(step.get("run", "")) for step in steps)
+        assert "ruff check vuln_intel tests" in runs
+
+
+class TestIntegrationDocDoesNotLie:
+    """`docs/vulnerability-intelligence/INTEGRATION.md` told the host to do two things
+    that did not exist: insert ``event_type: source_record_ingested`` (a value nothing
+    else in the repository produces) and write a "~30-line FastAPI binding" by hand
+    (superseded by the shipped ASGI app). It also named a ``SQLALCHEMY_ADAPTER_RECIPE``
+    constant that was never defined anywhere.
+
+    Documentation drift is not detectable by a failing test unless someone writes one,
+    which is the point: a host team reading the doc would have integrated against a
+    fiction, in their repository, where our test suite cannot see it.
+    """
+
+    @staticmethod
+    def _doc() -> str:
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return (root / "docs" / "vulnerability-intelligence" / "INTEGRATION.md").read_text()
+
+    def test_the_phantom_recipe_is_not_named_without_saying_it_was_phantom(self):
+        """Naming it in a correction is honest; promising it again is not.
+
+        The constant never existed, so the doc may only mention it next to the word
+        "never" or "phantom" — in prose, not inside a code fence a reader could copy.
+        """
+        doc = self._doc()
+        at = doc.find("SQLALCHEMY_ADAPTER_RECIPE")
+        while at != -1:
+            assert not doc[:at].rstrip().endswith(("import", "from")), "copied as an import"
+            # Wrapped prose puts the correction on a later line, so look at the sentence.
+            window = " ".join(doc[at : at + 260].split())
+            assert "never existed" in window or "phantom" in window, (
+                f"INTEGRATION.md names the phantom constant without marking it: {window!r}"
+            )
+            at = doc.find("SQLALCHEMY_ADAPTER_RECIPE", at + 1)
+
+    def test_every_event_type_it_names_is_one_the_package_emits(self):
+        """The doc may only mention vocabulary the code can actually produce."""
+        import re
+
+        from vuln_intel.integration.mapping import event_types
+
+        known = {event_types(created=True)[0], event_types(created=False)[0]}
+        named = set(re.findall(r"`(source_record_[a-z_]+)`", self._doc()))
+        assert named, "expected the doc to name the provenance vocabulary"
+        assert named <= known, f"INTEGRATION.md names event types we never emit: {named - known}"
+
+    def test_the_mount_recipe_uses_the_shipped_app(self):
+        """It must not tell a host to hand-write a binding we already ship."""
+        from vuln_intel.integration.asgi import build_app
+
+        doc = self._doc()
+        assert "build_app" in doc
+        # The recipe has to be real: the documented call signature must match the code.
+        assert "resolve_tenant" in doc
+        assert callable(build_app)
+
+
+class TestEveryPytestJobCanLoadEveryTestModule:
+    """A job that runs `pytest` without pyyaml runs a *smaller* suite, silently.
+
+    Several modules begin with `pytest.importorskip("yaml")`. When pyyaml is absent
+    those modules do not fail and do not skip individually — they disappear from
+    collection, so a job reports N fewer tests with no indication that anything is
+    missing. That is how the runtime-oracle job went red on a commit that only touched
+    the HTTP layer, while the `test` job on the same commit was green: the two jobs were
+    running different suites and neither said so.
+
+    A skip is a visible gap. A vanished module is an invisible one.
+    """
+
+    @staticmethod
+    def _jobs_with_pytest(workflow: dict) -> list[str]:
+        found = []
+        for name, job in workflow["jobs"].items():
+            for step in job.get("steps", []):
+                if "pytest" in str(step.get("run", "")):
+                    found.append(name)
+                    break
+        return found
+
+    @staticmethod
+    def _installs(workflow: dict, job: str, needle: str) -> bool:
+        for step in workflow["jobs"][job].get("steps", []):
+            run = str(step.get("run", ""))
+            if "pip install" in run and needle in run:
+                return True
+        return False
+
+    def test_the_premise_holds_some_module_really_is_guarded_by_yaml(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        guarded = [
+            path.name
+            for path in (root / "tests").glob("test_*.py")
+            if 'importorskip("yaml"' in path.read_text()
+        ]
+        assert guarded, (
+            "no module is guarded by importorskip('yaml') any more, so this class is "
+            "asserting nothing and the pyyaml requirement below can be dropped"
+        )
+
+    def test_every_job_that_runs_pytest_installs_pyyaml(self, workflow):
+        jobs = self._jobs_with_pytest(workflow)
+        assert len(jobs) >= 4, f"expected every job to run pytest, found {jobs}"
+        missing = [job for job in jobs if not self._installs(workflow, job, "pyyaml")]
+        assert not missing, (
+            f"job(s) {missing} run pytest without pyyaml; their suite is silently "
+            "smaller because importorskip removes whole modules"
+        )
+
+    def test_the_test_job_still_installs_the_tooling_the_preflight_runs(self, workflow):
+        """ci_preflight.sh runs ruff/mypy/pyflakes; the test job must install them."""
+        for tool in ("ruff", "mypy", "pyflakes", "openapi-spec-validator"):
+            assert self._installs(workflow, "test", tool), (
+                f"the test job no longer installs {tool}, so scripts/ci_preflight.sh "
+                "is checking something CI does not"
+            )
+
+
+class TestIntegrationDocNamesTheRealComposition:
+    """INTEGRATION.md told hosts to hand-write a resolver. The demo one trusts a header.
+
+    `scripts/serve_demo.py` reads `x-demo-tenant` and believes it, which is fine for a
+    demo and catastrophic as a template. The document now points at `mountable()`,
+    which takes the tenant from the host's principal. These tests keep the document
+    pointing at the thing that is safe.
+    """
+
+    @staticmethod
+    def _doc() -> str:
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return (root / "docs" / "vulnerability-intelligence" / "INTEGRATION.md").read_text()
+
+    def test_the_mount_recipe_uses_the_adapter_that_reads_the_principal(self):
+        from vuln_intel.integration.host_adapter import mountable
+
+        doc = self._doc()
+        assert "mountable(" in doc, "the recipe must use the tested composition"
+        assert "read_principal" in doc and "authorize" in doc
+        assert callable(mountable)
+
+    def test_the_mount_section_does_not_tell_a_host_to_trust_a_header(self):
+        """Scoped to the mount section on purpose.
+
+        `x-demo-tenant` legitimately appears later as a `curl` line for the demo
+        harness. The rule is that it must not appear where a host copies a recipe.
+        """
+        doc = self._doc()
+        start = doc.index("## 2. Mounting")
+        end = doc.index("## 3.")
+        mount_section = doc[start:end]
+        assert "x-demo-tenant" not in mount_section
+        assert "resolve_tenant=lambda scope: tenant_from_verified_token" not in mount_section
+
+    def test_the_documented_health_state_is_the_implemented_one(self):
+        doc = self._doc()
+        assert "not_configured" in doc
+        # The real assertion: the descriptor actually reports it.
+        from vuln_intel.integration import InMemoryVulnerabilityStore, mountable
+
+        descriptor = mountable(
+            InMemoryVulnerabilityStore(allow_fixture=True),
+            read_principal=lambda scope: None,
+            authorize=lambda principal, permission: None,
+        )
+        assert descriptor.health()["state"] == "not_configured"
+
+
+class TestTheDeliverablesIndexIsTrue:
+    """§12 names fourteen documents. The index that maps them must not lie.
+
+    Thirteen exist under different filenames; one genuinely does not exist. A mapping
+    document is worthless if it can claim a file exists when it does not, so every
+    filename it names is checked here. If a file is renamed or deleted, this fails --
+    which is the point, because a reviewer following the index would otherwise be sent
+    to a path that no longer exists.
+    """
+
+    def _index(self):
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        path = root / "docs" / "vulnerability-intelligence" / "REQUIRED_DELIVERABLES.md"
+        return path, path.read_text(encoding="utf-8")
+
+    def test_the_index_exists(self):
+        path, _ = self._index()
+        assert path.is_file(), f"{path} is missing"
+
+    def test_every_file_it_names_exists(self):
+        import re
+
+        path, text = self._index()
+        directory = path.parent
+        root = directory.parents[1]
+        # Backticked names in the mapping table, e.g. `ARCHITECTURE.md`.
+        # Only the mapping table's own rows are checked. Files the text mentions as
+        # *absent* are supposed to be absent, and a naive "every filename exists"
+        # check would flag the honest admission -- which is the one thing this
+        # document must be able to say.
+        rows = re.findall(r"^\| \d+ \| [^|]+\| ([^|]+)\|", text, re.M)
+        assert rows, "the mapping table is gone"
+        mapped: set[str] = set()
+        for row in rows:
+            mapped.update(re.findall(r"`([A-Za-z0-9_]+\.(?:md|json|yaml|py))`", row))
+        admit_missing = {"AGENT_EXECUTION_RULES.md"}
+        missing = [
+            name
+            for name in sorted(mapped - admit_missing)
+            if not ((directory / name).is_file() or (root / name).is_file())
+        ]
+        assert missing == [], f"the index maps to files that do not exist: {missing}"
+
+    def test_it_admits_the_one_document_that_does_not_exist(self):
+        import pathlib
+
+        _, text = self._index()
+        assert "AGENT_EXECUTION_RULES.md" in text
+        assert "absent" in text.lower(), (
+            "the index must say which document is missing, not only which exist"
+        )
+        path = pathlib.Path(__file__).resolve().parents[3]
+        versioned = path / "docs" / "vulnerability-intelligence" / "AGENT_EXECUTION_RULES.md"
+        # If somebody writes it later, remove the "absent" row rather than this test.
+        assert not versioned.is_file() or "absent" not in text.lower()
+
+    def test_the_master_prompt_path_it_cites_is_the_real_one(self):
+        """The report says the prompt is README.md at the root; verify that claim."""
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        _, text = self._index()
+        assert "README.md" in text
+        prompt = root / "README.md"
+        assert prompt.is_file(), "the Master Prompt is not at the repository root"
+        assert "ULTIMATE MASTER PROMPT" in prompt.read_text(encoding="utf-8")
+
+
+class TestTheEngineTestsActuallyRunInCI:
+    """The gap this class exists to close, found in M48.
+
+    Every PostgreSQL test in this package was written as `importorskip("psycopg")` or
+    `skipif(_PG_DSN is None)`, and the `test` job installed neither psycopg nor a
+    server. So they skipped on every CI run, and the `CONFLICTED` rule — the whole
+    point of the M47 change — was never exercised on the engine this package is
+    deployed against. A skipped engine test reports as green, which is how it survived.
+
+    These tests pin the fix: a job must install a driver, and that job must fail rather
+    than pass when a PostgreSQL test skips.
+    """
+
+    @staticmethod
+    def _postgres_job(workflow):
+        jobs = workflow["jobs"]
+        candidates = [
+            name
+            for name, job in jobs.items()
+            if any("psycopg" in str(step.get("run", "")) for step in job.get("steps", []))
+        ]
+        assert candidates, (
+            "no CI job installs psycopg, so every PostgreSQL test skips and the "
+            "engine this package deploys against is never exercised"
+        )
+        return candidates[0], jobs[candidates[0]]
+
+    def test_a_job_installs_a_real_postgres_driver(self, workflow):
+        name, _ = self._postgres_job(workflow)
+        assert name
+
+    def test_that_job_provisions_a_server_not_only_a_driver(self, workflow):
+        """A driver with nothing to connect to still skips."""
+        _, job = self._postgres_job(workflow)
+        runs = " ".join(str(step.get("run", "")) for step in job["steps"])
+        assert "pgserver" in runs or "CICC_TEST_POSTGRES_DSN" in runs, (
+            "the driver is installed but no server is provisioned; _postgres_dsn() "
+            "will return None and every test will skip"
+        )
+
+    def test_that_job_fails_when_a_postgres_test_skips(self, workflow):
+        """Execute the job's own guard script, rather than pattern-matching its text.
+
+        An earlier version of this test asserted that the workflow text contained
+        both `sys.exit` and `skipped`. It passed while the job merely *printed* the
+        skip count, because the words were present in a `print` too. This extracts
+        the real heredoc from the workflow and runs it against synthetic JUnit XML,
+        so the assertion is about behaviour.
+        """
+        _, job = self._postgres_job(workflow)
+        script = self._extract_guard(job)
+        assert script, "no Python guard script found in the postgres job"
+
+        import subprocess
+        import sys
+        import tempfile
+        import xml.etree.ElementTree as ET
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path_guard = pathlib.Path(tmp) / "guard.py"
+            path_guard.write_text(script, encoding="utf-8")
+
+            def run(tests, skipped, failures=0):
+                report = pathlib.Path(tmp) / f"r{tests}-{skipped}-{failures}.xml"
+                suite = ET.Element(
+                    "testsuite", tests=str(tests), skipped=str(skipped),
+                    failures=str(failures), errors="0",
+                )
+                ET.ElementTree(suite).write(report)
+                return subprocess.run(  # noqa: S603 - fixed argv, no shell
+                    [sys.executable, str(path_guard), str(report)],
+                    capture_output=True, text=True, check=False,
+                )
+
+            assert run(19, 0).returncode == 0, (
+                "the guard must pass when every engine test executed:\n"
+                f"{run(19, 0).stderr}"
+            )
+            assert run(19, 3).returncode != 0, (
+                "the guard did not fail on 3 skipped engine tests, so a run where the "
+                "engine was never touched would still be green"
+            )
+            assert run(19, 0, failures=1).returncode != 0
+
+    @staticmethod
+    def _extract_guard(job) -> str:
+        """The Python heredoc inside the job, rewritten to take the report as argv.
+
+        The workflow hardcodes /tmp/pg.xml; running it under test needs a path the
+        test controls, so only that path is substituted.
+        """
+        import re
+
+        for step in job["steps"]:
+            run = str(step.get("run", ""))
+            match = re.search(
+                r"python - <<'PY'\n(.*?)\n\s*PY", run, re.DOTALL
+            )
+            if not match:
+                continue
+            body = match.group(1)
+            if "junit" in run and ("skipped" in body or "tests" in body):
+                return body.replace(
+                    'ET.parse("/tmp/pg.xml")', "ET.parse(sys.argv[1])"
+                ).replace("import sys", "import sys", 1)
+        return ""
+
+    def test_the_skip_check_reads_a_junit_report_not_stdout(self, workflow):
+        """Parsing console output is how a '1 skipped' line gets missed."""
+        _, job = self._postgres_job(workflow)
+        text = " ".join(str(step.get("run", "")) for step in job["steps"])
+        assert "--junit-xml" in text
+
+    def test_it_runs_on_pull_requests_and_package_changes(self, workflow):
+        """A job that only runs on some events is a job that silently stops running.
+
+        The original PostgreSQL gap was not only a missing driver: nothing tied the
+        engine tests to a trigger, so an event-scope mistake would have hidden them
+        just as effectively. Triggers are declared once for the whole workflow, so
+        this asserts the scope that the postgres job inherits.
+        """
+        triggers = workflow.get("on", workflow.get(True))
+        assert triggers, "workflow has no trigger block"
+        pull_request = triggers.get("pull_request")
+        assert pull_request is not None, "the workflow does not run on pull requests"
+        paths = pull_request.get("paths") or []
+        assert any(p.startswith("packages/vuln_intel") for p in paths), (
+            f"pull requests that touch the package do not trigger CI: paths={paths}"
+        )
+        assert any(".github/workflows" in p for p in paths), (
+            "changes to the workflow itself do not trigger CI, so a broken guard "
+            "could never be caught by the guard"
+        )
+
+    def test_it_also_runs_on_pushes_to_the_package(self, workflow):
+        triggers = workflow.get("on", workflow.get(True))
+        push = triggers.get("push")
+        assert push is not None
+        paths = push.get("paths") or []
+        assert any(p.startswith("packages/vuln_intel") for p in paths)
+
+    def test_the_skip_guard_fails_rather_than_warns(self):
+        """Exercised for real: the guard logic is run against synthetic JUnit XML.
+
+        Asserting that the workflow *contains* `sys.exit` proves the text is there,
+        not that a skip is fatal. This runs the same comparison against a report with
+        skips and against one without.
+        """
+        import subprocess
+        import sys
+        import tempfile
+        import xml.etree.ElementTree as ET
+
+        guard = '''
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+suite = root if root.tag == "testsuite" else root[0]
+tests = int(suite.get("tests")); skipped = int(suite.get("skipped"))
+failures = int(suite.get("failures")) + int(suite.get("errors"))
+if failures: sys.exit("failed")
+if skipped: sys.exit(f"{skipped} skipped: the engine was NOT exercised")
+if tests < 10: sys.exit("too few")
+print("all executed")
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            guard_path = pathlib.Path(tmp) / "guard.py"
+            guard_path.write_text(guard, encoding="utf-8")
+
+            def run(tests, skipped, failures=0):
+                path = pathlib.Path(tmp) / f"r{tests}-{skipped}.xml"
+                suite = ET.Element("testsuite", tests=str(tests), skipped=str(skipped),
+                                   failures=str(failures), errors="0")
+                ET.ElementTree(suite).write(path)
+                return subprocess.run(  # noqa: S603 - fixed argv, no shell
+                    [sys.executable, str(guard_path), str(path)],
+                    capture_output=True, text=True, check=False,
+                )
+
+            assert run(19, 0).returncode == 0, "a fully-executed run must pass"
+            skipped_run = run(19, 1)
+            assert skipped_run.returncode != 0, "a skipped engine test must fail the job"
+            assert "NOT exercised" in skipped_run.stderr
+            assert run(19, 0, failures=1).returncode != 0
+            assert run(3, 0).returncode != 0, "too few tests must fail the job"

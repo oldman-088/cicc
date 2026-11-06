@@ -1,0 +1,322 @@
+"""Reference implementations of the storage and audit ports.
+
+Two stores are provided:
+
+* :class:`InMemoryVulnerabilityStore` — dict-backed, for tests and dry-run
+  previews.  It enforces the same *rules* the real adapter must enforce (tenant
+  scoping, CVE uniqueness, no overwrite by older observations, provenance
+  emitted on change), so integration tests exercise the real control flow.
+* :class:`RefusingStore` — used when no approval exists.  It refuses every write
+  with an explicit reason, which is preferable to a silent no-op.
+
+A real SQLAlchemy adapter is **not** shipped: it would need an approved migration
+and must live in the host.  What *is* shipped is the SQL itself — see
+:mod:`vuln_intel.integration.sqlite_store`, whose ``SCHEMA`` constant is the table
+shape, the uniqueness rule, the tenancy constraint and the ordering rank.  That is
+the part a host migration has to reproduce; the ORM call around it is not.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Mapping, Sequence
+
+from ..schema import severity_rank
+from .contracts import CONFLICT_REASON, UpsertOutcome, UpsertResult, conflict_detail
+from .mapping import ENRICHMENT_KEY, assert_persistable, event_types
+
+__all__ = ["InMemoryVulnerabilityStore", "RecordingAudit", "RefusingStore"]
+
+
+def _source_of(provenance: Sequence[Mapping[str, Any]]) -> str | None:
+    """Source named by the most recent provenance block, if any names one."""
+    for block in reversed(list(provenance)):
+        source = block.get("source")
+        if source:
+            return str(source)
+    return None
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+@dataclass
+class _Row:
+    entity_id: str
+    details: dict[str, Any]
+    collected_at: datetime
+    origin: str
+    provenance: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class InMemoryVulnerabilityStore:
+    """Tenant-scoped in-memory store honouring the persistence invariants."""
+
+    allow_fixture: bool = False
+    rows: dict[tuple[str, str], _Row] = field(default_factory=dict, repr=False)
+    provenance_events: list[dict[str, Any]] = field(default_factory=list, repr=False)
+    writes: int = 0
+
+    # -- read port -------------------------------------------------------
+    def find(self, *, tenant_id: str, cve: str) -> Mapping[str, Any] | None:
+        row = self.rows.get((tenant_id, cve))
+        if row is None:
+            return None
+        # `cve` is part of the read contract: a caller that fetched by identifier
+        # must not have to remember which identifier it asked for, and an API
+        # shaper that omits it emits a record with a null primary key.
+        return {
+            "cve": cve,
+            "entity_id": row.entity_id,
+            "details": row.details,
+            "collected_at": row.collected_at,
+            "origin": row.origin,
+        }
+
+    def list(
+        self,
+        *,
+        tenant_id: str,
+        limit: int,
+        cursor: str | None = None,
+        severity: str | None = None,
+        kev_only: bool = False,
+        order: str = "cve",
+    ) -> tuple[Sequence[Mapping[str, Any]], str | None]:
+        """Page one tenant's rows.
+
+        Filtering happens here rather than in the caller for the same reason the
+        SQL adapter must do it in SQL: paging after filtering is correct, paging
+        before filtering silently drops matching rows.
+        """
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if order not in ("cve", "-cve", "severity", "-severity"):
+            raise ValueError("unsupported order")
+        rows = [
+            (cve, row)
+            for (tenant, cve), row in self.rows.items()
+            if tenant == tenant_id
+        ]
+        # Severity/KEV are written into `details` by the mapping layer; the enrichment
+        # block may carry them on rows from hosts that only fill it. Read details
+        # first, enrichment as fallback (same dual-read rule as shape_record).
+        def _field(row: _Row, key: str) -> object:
+            value = row.details.get(key)
+            if value is None:
+                value = (row.details.get(ENRICHMENT_KEY) or {}).get(key)
+            return value
+
+        if severity is not None:
+            wanted = severity.strip().lower()
+            rows = [
+                (cve, row)
+                for cve, row in rows
+                if str(_field(row, "severity") or "").lower() == wanted
+            ]
+        if kev_only:
+            rows = [
+                (cve, row)
+                for cve, row in rows
+                if bool(_field(row, "kev"))
+            ]
+
+        def severity_key(row: _Row) -> tuple[int, str]:
+            """Sort by canonical severity rank, not by the severity *name*.
+
+            Sorting the name put ``low`` before ``medium`` — lexicographic order on
+            "critical"/"high"/"low"/"medium"/"none"/"unknown" is not severity order.
+            The tuple keeps a stable tie-break so paging is deterministic; without it
+            the cursor could not identify a position among equal-severity rows.
+            """
+            raw = _field(row, "severity")
+            return (severity_rank(raw if isinstance(raw, str) else None), str(raw or ""))
+
+        reverse = order.startswith("-")
+        rows.sort(
+            key=(lambda item: item[0]) if order.endswith("cve") else (lambda item: severity_key(item[1])),
+            reverse=reverse,
+        )
+        # The cursor is the last key emitted, not an offset: an offset shifts when
+        # rows are inserted mid-listing, which would skip or repeat records.
+        if cursor:
+            keys = [item[0] for item in rows]
+            try:
+                start = keys.index(cursor) + 1
+            except ValueError:
+                start = 0
+            rows = rows[start:]
+
+        page = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit and page:
+            last = page[-1]
+            # The cursor is always the CVE. For a severity order that is still a
+            # unique, stable key, because (tenant, cve) is unique — whereas the
+            # severity rank is not, and a cursor on a non-unique key either repeats
+            # or skips rows at a page boundary.
+            next_cursor = last[0]
+        out: list[Mapping[str, Any]] = []
+        for cve, row in page:
+            out.append(
+                {
+                    "cve": cve,
+                    "entity_id": row.entity_id,
+                    "details": row.details,
+                    "collected_at": row.collected_at,
+                    "origin": row.origin,
+                }
+            )
+        return out, next_cursor
+
+    # -- write port ------------------------------------------------------
+    def upsert(
+        self,
+        *,
+        tenant_id: str,
+        cve: str,
+        entity: Mapping[str, Any],
+        details: Mapping[str, Any],
+        enrichment: Mapping[str, Any] | None,
+        provenance: Mapping[str, Any],
+        collected_at: datetime,
+        dry_run: bool,
+    ) -> UpsertResult:
+        payload = {"origin": (enrichment or {}).get("origin", "live"), "cve": cve}
+        assert_persistable(payload, allow_fixture=self.allow_fixture)
+
+        if dry_run:
+            # The service previews before it ever calls this, so this branch is a
+            # second line of defence - but the port *takes* the flag, and a host
+            # adapter that forwards it would otherwise write on a dry run. Accepting
+            # a flag and ignoring it is worse than not having it: the caller believes
+            # it asked for no writes and gets writes.
+            existing_row = self.rows.get((tenant_id, cve))
+            return UpsertResult(
+                UpsertOutcome.PREVIEWED,
+                entity_id=existing_row.entity_id if existing_row else None,
+                reason="dry run: nothing was written",
+            )
+
+        key = (tenant_id, cve)
+        incoming = _aware(collected_at)
+        existing = self.rows.get(key)
+
+        merged_details = dict(details)
+        if enrichment is not None:
+            merged_details[ENRICHMENT_KEY] = dict(enrichment)
+        else:
+            merged_details.setdefault(ENRICHMENT_KEY, {})
+
+        if existing is None:
+            entity_id = f"entity-{tenant_id[:8]}-{cve}"
+            self.rows[key] = _Row(
+                entity_id=entity_id,
+                details=merged_details,
+                collected_at=incoming,
+                origin=str(payload["origin"]),
+                provenance=[dict(provenance)],
+            )
+            event_type, _ = event_types(created=True)
+            self.provenance_events.append(
+                {**dict(provenance), "event_type": event_type, "tenant_id": tenant_id, "cve": cve}
+            )
+            self.writes += 1
+            return UpsertResult(UpsertOutcome.CREATED, entity_id=entity_id, provenance_id=event_type)
+
+        if incoming < existing.collected_at:
+            # Mirrors the host importer: an older observation never wins.
+            return UpsertResult(
+                UpsertOutcome.SKIPPED,
+                entity_id=existing.entity_id,
+                reason="older observation cannot overwrite a newer one",
+            )
+
+        if incoming == existing.collected_at and existing.details != merged_details:
+            # Same rule as the DB-API store and the host importer: an equal-instant
+            # disagreement is a contradiction, not an update. The stored body is left
+            # exactly as it was, and the refused body is described rather than
+            # discarded, so a reviewer can see what disagreed.
+            return UpsertResult(
+                UpsertOutcome.CONFLICTED,
+                entity_id=existing.entity_id,
+                reason=CONFLICT_REASON,
+                conflict=conflict_detail(
+                    existing_details=existing.details,
+                    incoming_details=merged_details,
+                    instant=incoming.isoformat(),
+                    existing_source=_source_of(existing.provenance),
+                    incoming_source=_source_of([provenance]),
+                ),
+            )
+
+        changed = existing.details != merged_details
+        if changed:
+            existing.details = merged_details
+            existing.collected_at = incoming
+            existing.provenance.append(dict(provenance))
+            self.provenance_events.append(
+                {
+                    **dict(provenance),
+                    "event_type": event_types(created=False)[0],
+                    "tenant_id": tenant_id,
+                    "cve": cve,
+                }
+            )
+            self.writes += 1
+            return UpsertResult(
+                UpsertOutcome.UPDATED, entity_id=existing.entity_id, provenance_id="source_record_updated"
+            )
+        # Same timestamp and same body: refresh the stamp only, no new evidence.
+        existing.collected_at = incoming
+        return UpsertResult(UpsertOutcome.UNCHANGED, entity_id=existing.entity_id)
+
+
+@dataclass
+class RefusingStore:
+    """Deny-by-default store used when no integration approval exists."""
+
+    reason: str = (
+        "integration not approved: no store adapter installed; "
+        "writes are refused rather than silently discarded"
+    )
+
+    def find(self, *, tenant_id: str, cve: str) -> Mapping[str, Any] | None:
+        return None
+
+    def upsert(self, **kwargs: Any) -> UpsertResult:
+        return UpsertResult(UpsertOutcome.SKIPPED, reason=self.reason)
+
+
+@dataclass
+class RecordingAudit:
+    """Audit port that records calls and can be told to fail."""
+
+    events: list[dict[str, Any]] = field(default_factory=list)
+    fail: bool = False
+
+    def record(
+        self,
+        *,
+        tenant_id: str,
+        action: str,
+        actor_id: str | None,
+        target_entity_id: str | None,
+        target_provenance_id: str | None,
+        details: Mapping[str, Any],
+    ) -> None:
+        if self.fail:
+            raise RuntimeError("audit sink unavailable")
+        self.events.append(
+            {
+                "tenant_id": tenant_id,
+                "action": action,
+                "actor_id": actor_id,
+                "target_entity_id": target_entity_id,
+                "target_provenance_id": target_provenance_id,
+                "details": dict(details),
+            }
+        )

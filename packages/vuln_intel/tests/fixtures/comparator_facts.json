@@ -1,0 +1,135 @@
+{
+  "schema": "cicc.vuln_intel.comparator_facts.v1",
+  "families": {
+    "maven": [
+      {
+        "left": "1.0-beta-1",
+        "right": "1.0-SNAPSHOT",
+        "expected": -1,
+        "why": "3.9.9 ComparableVersionTest.checkVersionsOrder"
+      },
+      {
+        "left": "1.0-SNAPSHOT",
+        "right": "1.0",
+        "expected": -1,
+        "why": "snapshot precedes the release"
+      },
+      {
+        "left": "1-alpha-1",
+        "right": "1.0",
+        "expected": -1,
+        "why": "3.9.9 checkVersionsOrder"
+      },
+      {
+        "left": "2.0.1",
+        "right": "2.0.1-xyz",
+        "expected": -1,
+        "why": "3.9.9 checkVersionsOrder"
+      },
+      {
+        "left": "2.0-1",
+        "right": "2.0.1",
+        "expected": -1,
+        "why": "3.9.9 checkVersionsOrder"
+      },
+      {
+        "left": "1",
+        "right": "1.0",
+        "expected": 0,
+        "why": "3.9.9 checkVersionsEqual"
+      },
+      {
+        "left": "1alpha",
+        "right": "1-alpha",
+        "expected": 0,
+        "why": "no separator between number and character"
+      },
+      {
+        "left": "1.0.0.a",
+        "right": "1.a",
+        "expected": 0,
+        "why": "checkVersionsEqual 1a == 1.0.0-a: .X parses as -X"
+      },
+      {
+        "left": "1.0.0.x",
+        "right": "1-x",
+        "expected": 0,
+        "why": "same rule for x"
+      },
+      {
+        "left": "1.0.0.a",
+        "right": "1-1",
+        "expected": -1,
+        "why": "a sublist sorts below a number"
+      },
+      {
+        "left": "5.0.0.rc2",
+        "right": "5.x",
+        "expected": -1,
+        "why": "qualifiers compare lexically inside the sublist"
+      },
+      {
+        "left": "5.x",
+        "right": "5.0.0.rc2",
+        "expected": 1,
+        "why": "the reverse must be the mirror"
+      }
+    ],
+    "rubygems": [
+      {
+        "left": "1.0.0.a",
+        "right": "1.a",
+        "expected": 0,
+        "why": "leading zero-run is stripped before the first letter"
+      },
+      {
+        "left": "0.beta.1",
+        "right": "0.0.beta.1",
+        "expected": 0,
+        "why": "same rule, with several leading zeros"
+      },
+      {
+        "left": "1.0.0",
+        "right": "1",
+        "expected": 0,
+        "why": "trailing zeros are stripped"
+      },
+      {
+        "left": "5.0.0.rc2",
+        "right": "5.x",
+        "expected": -1,
+        "why": "'rc' sorts before 'x'"
+      },
+      {
+        "left": "1.x",
+        "right": "1.0.0.a",
+        "expected": 1,
+        "why": "'x' sorts after 'a', so 1.x is the greater"
+      },
+      {
+        "left": "1",
+        "right": "1.0.0.a",
+        "expected": 1,
+        "why": "a prerelease sorts below its release"
+      },
+      {
+        "left": "5.x",
+        "right": "5.0.0.rc2",
+        "expected": 1,
+        "why": "RubyGems: 'x' sorts after 'rc'"
+      },
+      {
+        "left": "1.a",
+        "right": "1.0.0.a",
+        "expected": 0,
+        "why": "RubyGems strips the leading zero run too"
+      },
+      {
+        "left": "1.A",
+        "right": "1.0.0.a",
+        "expected": -1,
+        "why": "RubyGems is case sensitive where Maven is not"
+      }
+    ]
+  }
+}

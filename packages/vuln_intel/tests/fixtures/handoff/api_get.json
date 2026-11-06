@@ -1,0 +1,63 @@
+{
+  "data": {
+    "affected": [
+      {
+        "ecosystem": "npm",
+        "fixed": "2.4.1",
+        "introduced": "0",
+        "name": "acme-router",
+        "purl": null,
+        "versions": []
+      }
+    ],
+    "collected_at": "2026-11-04T09:00:00+00:00",
+    "confidence": null,
+    "conflicts": [],
+    "cve": "CVE-2026-1001",
+    "cvss": {
+      "assessed": true,
+      "base_score": 9.3,
+      "severity": "critical",
+      "source": "nvd",
+      "vector": "CVSS:4.0/AV:N/AC:L/AT:N",
+      "version": "4.0"
+    },
+    "entity_id": "entity-tenant-d-CVE-2026-1001",
+    "epss": {
+      "model_date": "2026-11-03",
+      "percentile": 0.998,
+      "score": 0.94
+    },
+    "freshness": null,
+    "freshness_view": {
+      "age_seconds": null,
+      "assessed_at": "2026-11-04T09:00:00+00:00",
+      "observed_at": null,
+      "reason": "no observation timestamp: age cannot be assessed",
+      "state": "unknown"
+    },
+    "kev": true,
+    "origin": "fixture",
+    "policy": null,
+    "record_status": "published",
+    "references": [
+      {
+        "kind": "advisory",
+        "url": "https://example.invalid/advisory/1001"
+      }
+    ],
+    "severity": "critical",
+    "sources": [
+      "nvd",
+      "ghsa",
+      "cisa-kev"
+    ],
+    "ssvc": {
+      "automatable": "yes",
+      "exploitation": "active",
+      "technical_impact": "total"
+    },
+    "summary": "Remote code execution in acme-router before 2.4.1",
+    "withdrawn": null
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openctem.io/ctis/2.0/dependency.json",
+  "title": "CTIS Dependency",
+  "description": "Software component or library dependency (SBOM)",
+  "type": "object",
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "Document-local reference"
+    },
+    "name": {
+      "type": "string",
+      "description": "Component name",
+      "maxLength": 512
+    },
+    "version": {
+      "type": "string",
+      "description": "Component version. Recommended; omit only when the version is genuinely unknown.",
+      "maxLength": 1024
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "application",
+        "framework",
+        "library",
+        "container",
+        "platform",
+        "operating-system",
+        "device",
+        "device-driver",
+        "firmware",
+        "file",
+        "machine-learning-model",
+        "data",
+        "cryptographic-asset"
+      ],
+      "description": "Component type (CycloneDX component types, verbatim)"
+    },
+    "purl": {
+      "type": "string",
+      "description": "Package URL (PURL) identifier",
+      "maxLength": 1024
+    },
+    "source_id": {
+      "type": "string",
+      "description": "The producer's own id of the component (a CycloneDX bom-ref, an SPDX element id)",
+      "maxLength": 1024
+    },
+    "licenses": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "description": "List of licenses",
+      "maxItems": 32
+    },
+    "relationship": {
+      "type": "string",
+      "enum": [
+        "root",
+        "direct",
+        "transitive"
+      ],
+      "description": "Place in the dependency graph"
+    },
+    "depends_on": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "report.json#/$defs/DocumentRef"
+      },
+      "description": "Ids of the dependencies of this report this one depends on"
+    },
+    "locations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DependencyLocation"
+      },
+      "description": "All locations where this dependency is defined",
+      "maxItems": 100
+    },
+    "asset_ref": {
+      "$ref": "report.json#/$defs/DocumentRef",
+      "description": "The asset of this report the component was found in"
+    },
+    "properties": {
+      "$ref": "report.json#/$defs/Properties"
+    },
+    "extensions": {
+      "$ref": "report.json#/$defs/Extensions"
+    }
+  },
+  "$defs": {
+    "DependencyLocation": {
+      "type": "object",
+      "description": "A place where the dependency is declared",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File path",
+          "maxLength": 4096
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Start line number"
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "End line number"
+        },
+        "start_column": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Start column number"
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "End column number"
+        }
+      }
+    }
+  }
+}

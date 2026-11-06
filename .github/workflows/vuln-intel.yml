@@ -1,0 +1,451 @@
+name: vuln-intel
+
+# Isolated CI for packages/vuln_intel. Kept separate from the application CI so
+# this package can be reviewed and merged independently. Paths are scoped, so
+# unrelated changes do not trigger it.
+
+on:
+  push:
+    paths:
+      - "packages/vuln_intel/**"
+      - ".github/workflows/vuln-intel.yml"
+  pull_request:
+    paths:
+      - "packages/vuln_intel/**"
+      - ".github/workflows/vuln-intel.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: packages/vuln_intel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install --upgrade pip
+      # The package itself has no runtime dependencies; only the test tooling is
+      # installed, which keeps this job fast and avoids pin drift.
+      - run: python -m pip install "pytest>=8,<10" "hypothesis>=6,<7" "pyyaml>=6" "openapi-spec-validator>=0.7" "pyflakes>=3,<4" "ruff>=0.6,<1" "mypy>=1.10,<2"
+      - name: Static check (pyflakes)
+        run: python -m pyflakes vuln_intel tests
+      - name: Lint (ruff, curated rules)
+        run: python -m ruff check vuln_intel tests
+      - name: Type check (mypy, package only)
+        run: python -m mypy
+      - name: Offline test suite (no network)
+        run: python -m pytest
+      - name: Offline pipeline demo
+        run: python -m vuln_intel.demo
+      - name: Verify demo artifacts are synthetic-only
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          path = pathlib.Path("vuln_intel/DEMO_OUTPUT.json")
+          payload = json.loads(path.read_text())
+          origins = {record["origin"] for record in payload["records"]}
+          if origins != {"fixture"}:
+              sys.exit(f"demo leaked non-fixture records: {origins}")
+          print("demo output is fixture-only")
+          PY
+      - name: Integration preview + separation rules
+        # Exits non-zero if a fixture/demo record could reach a store payload, or
+        # if the enrichment contract is missing.
+        run: python -m vuln_intel.integration.preview
+      - name: Guard against live-verification claims
+        # Fails if anyone flips the "verified live" flags without evidence.
+        run: |
+          python - <<'PY'
+          import sys
+          from vuln_intel.connectors import epss, nvd, osv
+          problems = []
+          if nvd.LAST_VERIFIED_LIVE is not None:
+              problems.append("nvd.LAST_VERIFIED_LIVE must stay None until a real fetch is recorded")
+          if osv.LAST_VERIFIED_LIVE is not None:
+              problems.append("osv.LAST_VERIFIED_LIVE must stay None until a real fetch is recorded")
+          if epss.LIVE_PROVIDER_AVAILABLE:
+              problems.append("epss.LIVE_PROVIDER_AVAILABLE must stay False: no live provider exists")
+          if problems:
+              sys.exit("; ".join(problems))
+          print("no unverified live-connectivity claims")
+          PY
+      - name: Network denial is enforced, not grepped
+        # tests/conftest.py blocks socket connect/connect_ex/create_connection and
+        # getaddrinfo for every test; tests/test_network_denial.py proves the guard
+        # is active. This replaced a fragile grep for "HttpxTransport()".
+        run: python -m pytest tests/test_network_denial.py -q
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL job
+  #
+  # Separate from `test` because it downloads a real server and a driver, and the
+  # `test` job is deliberately fast. It exists because of a defect found in M48: the
+  # PostgreSQL tests were written with `importorskip` and `skipif(_PG_DSN is None)`,
+  # and CI never installed psycopg or a server -- so every one of them skipped on
+  # every run, and `CONFLICTED` was never exercised on the engine actually deployed.
+  #
+  # A skipped engine test is not a passing engine test, so this job FAILS if the
+  # PostgreSQL tests do not run. `--strict` on the deselection and the explicit
+  # `pytest.raises`-free count check below are what make that true.
+  # ---------------------------------------------------------------------------
+  postgres:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/vuln_intel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      # psycopg is the driver the host uses; pgserver brings its own server binaries,
+      # so this does not depend on a system PostgreSQL being present or a version
+      # matching whatever the runner ships.
+      # pyyaml is not optional here: this job also runs the full suite below, and
+      # without it `importorskip("yaml")` silently removes whole modules from it.
+      - run: python -m pip install "pytest>=8,<10" "pyyaml>=6" "psycopg[binary]>=3.1" pgserver "sqlalchemy>=2" fastapi "argon2-cffi" httpx
+      - name: Fetch the host branch so the actual-host acceptance test can run
+        # Without this the acceptance test skips, and a skip is not evidence. The
+        # branch is read with `git archive`; nothing is checked out or modified.
+        if: always()
+        run: git fetch --depth=1 origin +refs/heads/arena/da631853-cicc:refs/remotes/origin/arena/da631853-cicc || echo "host branch fetch failed; the acceptance test will skip and this job will fail"
+      - name: Fail if any PostgreSQL test skips
+        # This is the check that would have caught the original gap. It runs the
+        # engine-specific tests and fails on a skip rather than reporting success
+        # for tests that did not execute.
+        run: |
+          python -m pytest tests/test_dbapi_store.py tests/test_migration_authored.py             tests/test_actual_host_sbom_acceptance.py             -q -rs -p no:randomly             -k "Postgres or Migration or ActualHost or HostBlocks"             --junit-xml=/tmp/pg.xml
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse("/tmp/pg.xml").getroot()
+          suite = root if root.tag == "testsuite" else root[0]
+          tests = int(suite.get("tests"))
+          skipped = int(suite.get("skipped"))
+          failures = int(suite.get("failures")) + int(suite.get("errors"))
+          print(f"tests={tests} skipped={skipped} failures={failures}")
+          if failures:
+              sys.exit("PostgreSQL tests failed")
+          if skipped:
+              sys.exit(f"{skipped} PostgreSQL test(s) skipped: the engine was NOT exercised")
+          if tests < 10:
+              sys.exit(f"only {tests} PostgreSQL tests ran; expected the full set")
+          print("all PostgreSQL tests executed against a real server")
+          PY
+      - name: Full suite still passes with a real server available
+        # With a server present the PostgreSQL branches run alongside everything
+        # else, which is how a conflict between the two paths would surface.
+        run: python -m pytest -q -p no:randomly
+
+  # ---------------------------------------------------------------------------
+  # Differential ("oracle") job
+  #
+  # Separate from `test` on purpose. The unit job deliberately installs only the
+  # test tooling, so the differential checks against external reference
+  # implementations SKIP there. A skipped cross-check is not evidence of
+  # correctness, and a green unit job must not be readable as one. This job
+  # installs every oracle it can and then FAILS if any of them is still missing,
+  # so a cross-check cannot disappear quietly.
+  #
+  # Every job that runs `pytest` installs pyyaml, even though the package does not
+  # import it: `importorskip` turns an absent optional dependency into silently fewer
+  # tests rather than a skip, which is the exact failure mode that made this job red
+  # for a change that only touched the HTTP layer.
+  #
+  # Licences of the reference tools:
+  #   packaging        Apache-2.0 OR BSD-2-Clause   (pip, already a pytest dep)
+  #   semantic_version BSD-3-Clause                 (pip)
+  #   rpm-vercmp       Apache-2.0                   (pip)
+  #   dpkg             GPL-2.0+                     (apt, preinstalled on ubuntu)
+  #   rpm              GPL-2.0-or-later             (apt, installed below)
+  # All are permissively licensed or GPL tools invoked as external binaries; none
+  # is vendored, and none is imported by the shipped package.
+  # ---------------------------------------------------------------------------
+  oracle:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/vuln_intel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install reference tooling
+        # pyyaml matters more than it looks: modules guarded by
+        # `pytest.importorskip("yaml")` drop out of collection without it, so this
+        # environment runs a *smaller* suite without saying so. CI must not depend on
+        # which optional dev extra happens to be installed.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8,<10" "hypothesis>=6,<7" "pyyaml>=6"
+          # Pinned: the documented cross-check results are tied to these versions.
+          # A bump is a signal to re-run the audit, not an invisible behaviour change.
+          python -m pip install "packaging==26.3" "semantic_version==2.10.0" "rpm-vercmp==0.1.2"
+
+      - name: Install the real rpm binary (provides rpmvercmp incl. '^')
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends rpm
+
+      - name: Record oracle versions
+        # Written to the job summary so the evidence travels with the run.
+        run: |
+          {
+            echo "### Oracle versions"
+            echo ""
+            echo "| tool | version |"
+            echo "| --- | --- |"
+            echo "| python | $(python -V 2>&1) |"
+            echo "| dpkg | $(dpkg --version | head -1) |"
+            echo "| rpm | $(rpm --version) |"
+            echo "| packaging | $(python -m pip show packaging | awk '/^Version/{print $2}') |"
+            echo "| semantic_version | $(python -m pip show semantic_version | awk '/^Version/{print $2}') |"
+            echo "| rpm-vercmp | $(python -m pip show rpm-vercmp | awk '/^Version/{print $2}') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if any oracle is unavailable
+        # The whole point of this job. Without this step a missing oracle would show
+        # up as a skip, and the job would still be green.
+        run: |
+          python -m tests.oracle_tools || {
+            echo "::error::An oracle is unavailable, so its cross-check did NOT run. See the table above."
+            exit 1
+          }
+
+      - name: Differential checks only (oracle-marked)
+        run: python -m pytest -m oracle -q
+
+      - name: Full suite with every oracle present
+        # Also proves the non-oracle suite passes in the richer environment.
+        run: python -m pytest -q
+
+  # ---------------------------------------------------------------------------
+  # Maven and RubyGems differential cross-check (B-17).
+  #
+  # The `oracle` job covers every scheme whose reference implementation is a Python
+  # package or a system binary. Maven and RubyGems need a JVM and a Ruby, so they get
+  # their own job rather than being forced into the main one: a Python job that
+  # silently depends on a JDK is a job that breaks for unrelated reasons.
+  #
+  # This job GENERATES the vectors from the real implementations and then diffs our
+  # comparators against them. Before it existed, Maven and RubyGems were only checked
+  # against their upstream test suites - which encodes what the implementation does,
+  # but is not the same as running it. This is the job that turns B-17 from
+  # "vector-verified" into "differentially verified", so it must fail rather than skip.
+  # ---------------------------------------------------------------------------
+  comparator-oracle-status:
+    runs-on: ubuntu-latest
+    # GATING, and deliberately not the same thing as the runtime job above.
+    #
+    # This job answers "do we still match the upstream facts?" without needing a JVM or
+    # a Ruby, so it cannot skip. The runtime job answers the stronger question "do we
+    # match the implementations?" but can be unavailable, so it is advisory. Keeping
+    # them as two jobs is what makes a green board honest: this one means the known
+    # facts hold; neither means every comparison passed.
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install test tooling
+        run: pip install -q "pytest>=8,<10" rpm-vercmp semantic_version packaging pyyaml jsonschema
+      - name: Enforce the upstream ordering facts
+        working-directory: packages/vuln_intel
+        run: python -m pytest tests/test_comparator_facts.py -q
+      - name: Summarise oracle status
+        working-directory: packages/vuln_intel
+        run: |
+          {
+            echo "### Comparator oracle status"
+            echo ""
+            echo "| Check | Scope | Gating? |"
+            echo "| --- | --- | --- |"
+            echo "| upstream facts (this job) | 21 known facts from maven-3.9.9 and RubyGems | **yes** |"
+            echo "| hand-transcribed vectors | 55 Maven + 52 RubyGems upstream cases | yes (test job) |"
+            echo "| live runtime diff | full corpus vs real ComparableVersion / Gem::Version | **no — advisory** |"
+            echo ""
+            echo "A green run here means the known facts hold. It does **not** mean every"
+            echo "comparison against the real implementations passed; that is reported"
+            echo "separately by the \`maven-rubygems-runtime\` job, which is provisional."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  maven-rubygems-runtime:
+    # GATING, as of the run that met the removal condition recorded below.
+    #
+    # History, because the flag was advisory for several rounds and that should not be
+    # quietly forgotten: this job was continue-on-error while an open question - how the
+    # real ComparableVersion orders a string item against an integer item - could not be
+    # investigated, because job logs and artifacts are unreachable from the environment
+    # that maintained this branch. The condition for making it gating was written down
+    # at the time:
+    #
+    #   1. zero disagreements on two consecutive runs on different commits   -> MET
+    #      (f9924b2 and 50da4e9, both clean, against the real JVM and Ruby)
+    #   2. tests/test_comparator_facts.py green                              -> MET (45 tests)
+    #   3. generator self-check non-empty, no corpus-completeness failure    -> MET (21 facts)
+    #
+    # The open question was settled by evidence rather than by argument: the runtime was
+    # right and our parser was wrong, three times over (snapshot rank, the sublist rules,
+    # normalize walking through sublists). It is gating now because a red run means
+    # something real, not because a deadline arrived.
+    #
+    # A failure here means our comparator disagrees with Apache or RubyGems on the
+    # generated corpus. Fix the comparator or the corpus; do not add continue-on-error
+    # back. If it ever has to go advisory again, the reason belongs in this comment with
+    # the same three conditions listed.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/vuln_intel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up a JVM (for Apache ComparableVersion)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Ruby (for Gem::Version)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install test tooling
+        # pyyaml is not optional here. Several modules are guarded by
+        # `pytest.importorskip("yaml")`, so without it their tests do not fail and do
+        # not skip — they vanish from collection, and the same commit collects fewer
+        # tests than `quality_gates.tests_passed` declares. That is how this job went
+        # red on a change that only touched the HTTP layer.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8,<10" "pyyaml>=6"
+
+      - name: Fail if a runtime is unavailable
+        # Same rule as the oracle job: a missing reference implementation must fail the
+        # job, not become a skip that reads as green.
+        run: |
+          for tool in java javac ruby; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              echo "::error::$tool is unavailable, so the Maven/RubyGems cross-check did NOT run"
+              exit 1
+            fi
+          done
+
+      - name: Record runtime versions
+        run: |
+          {
+            echo "### Runtime oracle versions"
+            echo ""
+            echo "| runtime | version |"
+            echo "| --- | --- |"
+            echo "| java | $(java -version 2>&1 | head -1) |"
+            echo "| ruby | $(ruby -v) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prove each runtime answers independently
+        # Isolates a plumbing fault from a comparator fault, without needing the log.
+        # If the JVM step produced no output, or Java's answers equal Ruby's, the
+        # evidence pipeline is broken and no comparison against it means anything.
+        # A minimal Java program asking ComparableVersion directly, and a minimal Ruby
+        # one asking Gem::Version, must disagree on a pair the two algorithms order
+        # differently: 1.0.0.a vs 1.a is greater in Maven and equal in RubyGems.
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          jar="$work/maven-artifact.jar"
+          curl -fsSL -o "$jar" \
+            "https://repo1.maven.org/maven2/org/apache/maven/maven-artifact/3.9.9/maven-artifact-3.9.9.jar"
+          cat > "$work/Probe.java" <<'JAVA'
+          import org.apache.maven.artifact.versioning.ComparableVersion;
+          public class Probe {
+              public static void main(String[] a) {
+                  System.out.println(Integer.signum(
+                      new ComparableVersion("1.0.0.a").compareTo(new ComparableVersion("1.a"))));
+              }
+          }
+          JAVA
+          # The heredoc body above is indented for readability inside the YAML block, so
+          # strip the leading indentation before javac sees it.
+          sed -i 's/^          //' "$work/Probe.java"
+          javac -cp "$jar" -d "$work" "$work/Probe.java"
+          java_maven="$(java -cp "$jar:$work" Probe)"
+          echo "java  ComparableVersion('1.0.0.a' vs '1.a') = $java_maven"
+          echo "ruby  Gem::Version('1.0.0.a' vs '1.a')        = $(ruby -e 'puts((Gem::Version.new("1.0.0.a") <=> Gem::Version.new("1.a")) <=> 0)')"
+          # Diagnostic, not an assertion. An earlier version of this step failed when
+          # the JVM answered 0, having assumed the answer was 1; the assumption came
+          # from reading the source, and reading the source is not the same as running
+          # it. Both answers are printed and the step stays green so the evidence
+          # reaches the log instead of being replaced by a verdict nobody can check.
+          ruby_eq="$(ruby -e 'puts((Gem::Version.new("1.0.0.a") <=> Gem::Version.new("1.a")) <=> 0)')"
+          echo "diagnostic (unasserted): ComparableVersion('1.0.0.a','1.a')=$java_maven  Gem::Version=$ruby_eq"
+          {
+            echo "### Runtime probe (diagnostic)"
+            echo ""
+            echo "| | 1.0.0.a vs 1.a |"
+            echo "| --- | --- |"
+            echo "| org.apache.maven ComparableVersion | $java_maven |"
+            echo "| RubyGems Gem::Version | $ruby_eq |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate vectors from the real implementations
+        # Capture output and turn any failure into an annotation. The job log needs a
+        # GitHub sign-in and the artifact is unreachable from the environment that
+        # maintains this branch, while check annotations are readable through the API.
+        # Without this, a failure here costs a round trip and yields "exit code 127".
+        run: |
+          set +e
+          output="$(./scripts/generate_runtime_vectors.sh 2>&1)"
+          status=$?
+          printf '%s\n' "$output"
+
+          # Keep the tail: a traceback is the useful part and annotation bodies are
+          # capped, so annotating the whole output would truncate the diagnosis away.
+          tail_text="$(printf '%s' "$output" | tail -c 900)"
+          tail_text="${tail_text//'%'/'%25'}"
+          tail_text="${tail_text//$'\r'/'%0D'}"
+          tail_text="${tail_text//$'\n'/'%0A'}"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=generator failed ($status)::$tail_text"
+            {
+              echo "### Generator failed with exit $status"
+              echo ""
+              echo '```'
+              printf '%s\n' "$output" | tail -40
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$status"
+          fi
+
+      - name: Publish the generated vectors as an artifact
+        # So a reviewer can inspect the evidence without reproducing the run.
+        uses: actions/upload-artifact@v5
+        with:
+          name: runtime-vectors
+          path: packages/vuln_intel/tests/fixtures/runtime_vectors.json
+          if-no-files-found: error
+
+      - name: Differential cross-check against the real implementations
+        # -s so the test's ::error:: workflow commands reach the runner unbuffered and
+        # become check annotations. A disagreement that is only visible in a log is a
+        # disagreement somebody has to reproduce by hand to read.
+        run: python -m pytest tests/test_version_ordering_runtime_oracle.py -m oracle -q -s
+
+      - name: Full suite in the runtime-oracle environment
+        run: python -m pytest -q
