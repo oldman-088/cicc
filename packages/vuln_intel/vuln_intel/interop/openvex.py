@@ -160,6 +160,12 @@ def _product(match: PackageMatch) -> dict[str, Any]:
 
 def _status_note(match: PackageMatch, *, status: str, kev: bool | None) -> str:
     parts = [f"cicc verdict: {match.assessment.verdict.value}"]
+    # The status below comes from our version-ranges verdict. The advisory's standing
+    # is a different fact and has to ride along, or this document says `affected`
+    # about a CVE the vendor has retracted while our own CTIS export says
+    # `false_positive` about the same record.
+    if match.record_status is not None:
+        parts.append(f"advisory standing: {match.record_status.value}")
     if match.assessment.reasons:
         parts.extend(match.assessment.reasons)
     fixed = match.assessment.fixed_version or match.advisory_fixed

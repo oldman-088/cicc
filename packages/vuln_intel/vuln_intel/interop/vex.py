@@ -44,7 +44,7 @@ from typing import Any
 
 from ..affected import Verdict
 from ..assessment import AssessmentReport
-from ..schema import SEVERITY_ORDER, Severity
+from ..schema import SEVERITY_ORDER, RecordStatus, Severity
 from ..watchlist import PackageMatch
 
 __all__ = [
@@ -106,6 +106,11 @@ class VexExport:
     #: Fields of our model with no VEX counterpart (kept explicit, per the CTIS
     #: adapter's convention).
     lost: tuple[str, ...] = field(default_factory=tuple)
+    #: CVEs whose advisory standing is ``rejected``/withdrawn. They appear in the
+    #: document because their range matched and omitting them would hide a finding
+    #: someone may still be tracking, but the standing is stated in `analysis.detail`
+    #: and listed here so a consumer can filter without parsing prose.
+    retracted: tuple[str, ...] = ()
 
     def to_json(self) -> str:
         import json
@@ -169,6 +174,11 @@ def _vulnerability_entry(
 
 def _analysis_entry(match: PackageMatch, *, state: str, kev: bool | None) -> dict[str, Any]:
     detail_parts = [f"verdict: {match.assessment.verdict.value}"]
+    # A retracted advisory still has a version range, so it still matches, and the
+    # match is not wrong. Reporting it without saying the claim was withdrawn is:
+    # a consumer reads `analysis.state` and stops there.
+    if match.record_status is not None:
+        detail_parts.append(f"advisory standing: {match.record_status.value}")
     if match.assessment.reasons:
         detail_parts.append("; ".join(match.assessment.reasons))
     fixed = match.assessment.fixed_version or match.advisory_fixed
@@ -205,6 +215,11 @@ def to_vex(
     kev_by_cve: dict[str, bool | None] = {}
     for cluster in report.clusters:
         kev_by_cve[str(cluster.merged.cve)] = cluster.merged.kev
+    retracted_cves = {
+        str(cluster.merged.cve)
+        for cluster in report.clusters
+        if cluster.merged.record_status is RecordStatus.REJECTED
+    }
 
     vulnerabilities: list[dict[str, Any]] = []
     components: list[dict[str, Any]] = []
@@ -312,6 +327,7 @@ def to_vex(
     return VexExport(
         document=document,
         unassessed=tuple(sorted(unassessed)),
+        retracted=tuple(sorted(retracted_cves)),
         under_investigation=tuple(sorted(under_investigation)),
         lost=(
             "kev_due_date",

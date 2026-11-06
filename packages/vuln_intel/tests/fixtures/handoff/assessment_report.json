@@ -47,7 +47,9 @@
         "reasons": [
           "2.3.0 falls in any version < 2.4.1"
         ],
+        "record_status": "published",
         "remediation": "upgrade acme-router to 2.4.1 or later",
+        "retracted": false,
         "sources": [
           "nvd",
           "ghsa",
@@ -66,7 +68,9 @@
         "reasons": [
           "3.0.5 falls in >= 3.0.0 < 3.2.0"
         ],
+        "record_status": "published",
         "remediation": "upgrade acme-ui to 3.2.0 or later",
+        "retracted": false,
         "sources": [
           "nvd",
           "osv"

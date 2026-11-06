@@ -77,7 +77,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:8e1549d0-d7ce-57dc-ab1b-670f018b0560",
+  "serialNumber": "urn:uuid:a289577a-86ce-5915-b073-f13f6b603db4",
   "specVersion": "1.6",
   "version": 1,
   "vulnerabilities": [
@@ -89,7 +89,7 @@
       ],
       "analysis": {
         "bom-ref": "analysis:CVE-2026-1001:npm/acme-router",
-        "detail": "verdict: affected. 2.3.0 falls in any version < 2.4.1. first fixed version: 2.4.1. cisa_kev: listed",
+        "detail": "verdict: affected. advisory standing: published. 2.3.0 falls in any version < 2.4.1. first fixed version: 2.4.1. cisa_kev: listed",
         "state": "exploitable"
       },
       "bom-ref": "CVE-2026-1001|cicc-pkg:npm/acme-router@2.3.0",
@@ -135,7 +135,7 @@
       ],
       "analysis": {
         "bom-ref": "analysis:CVE-2026-1005:npm/acme-ui",
-        "detail": "verdict: affected. 3.0.5 falls in >= 3.0.0 < 3.2.0. first fixed version: 3.2.0. cisa_kev: not listed",
+        "detail": "verdict: affected. advisory standing: published. 3.0.5 falls in >= 3.0.0 < 3.2.0. first fixed version: 3.2.0. cisa_kev: not listed",
         "state": "affected"
       },
       "bom-ref": "CVE-2026-1005|cicc-pkg:npm/acme-ui@3.0.5",
@@ -164,7 +164,7 @@
       ],
       "analysis": {
         "bom-ref": "analysis:CVE-2026-1002:pypi/acme-auth",
-        "detail": "verdict: not_affected. outside every published affected range. first fixed version: 1.4.2. cisa_kev: not listed",
+        "detail": "verdict: not_affected. advisory standing: disputed. outside every published affected range. first fixed version: 1.4.2. cisa_kev: not listed",
         "state": "not_affected"
       },
       "bom-ref": "CVE-2026-1002|cicc-pkg:pypi/acme-auth@1.4.2",

@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
 from .affected import AffectedAssessment, Verdict, assess_affected, normalize_ecosystem
-from .schema import NormalizedVulnerability
+from .schema import NormalizedVulnerability, RecordStatus
 
 __all__ = [
     "Dependency",
@@ -145,13 +145,41 @@ class Inventory:
 
 @dataclass(frozen=True)
 class PackageMatch:
-    """One (advisory, dependency) pair with its verdict."""
+    """One (advisory, dependency) pair with its verdict.
+
+    ``record_status`` is the advisory's *standing* — whether the claim itself is
+    published, disputed or withdrawn. It is carried alongside the verdict rather than
+    folded into it, because the two answer different questions and both are needed:
+    a withdrawn advisory still has a version range, so it still produces an
+    ``AFFECTED`` verdict on a matching version, and the range is not wrong. What is
+    wrong is presenting that verdict without saying the claim was retracted.
+
+    Dropping it entirely — which is what happened before — is worse than either
+    option: the VEX and SARIF adapters then describe a withdrawn CVE as
+    ``affected``/``exploitable``, while the CTIS adapter, reading the same record,
+    calls it ``false_positive``. Two exports of one record disagreeing about whether
+    the vulnerability is real is not a nuance a consumer can resolve.
+    """
 
     cve: str
     dependency: Dependency
     assessment: AffectedAssessment
     advisory_fixed: str | None
     sources: tuple[str, ...]
+    #: The advisory's standing at merge time. ``None`` means no source said anything,
+    #: which is not the same as ``PUBLISHED`` and must not be rendered as such.
+    record_status: RecordStatus | None = None
+
+    @property
+    def retracted(self) -> bool:
+        """True when the advisory itself was withdrawn or rejected.
+
+        Deliberately narrower than "not published": a *disputed* advisory is still a
+        live claim that someone contests, so it must stay in the queue with a note.
+        A *rejected* one is not a claim at all, and treating it as one spends effort
+        on something the vendor says does not exist.
+        """
+        return self.record_status is RecordStatus.REJECTED
 
     @property
     def verifiable(self) -> bool:
@@ -166,6 +194,8 @@ class PackageMatch:
             "version": self.dependency.version,
             "direct": self.dependency.direct,
             "verdict": self.assessment.verdict.value,
+            "record_status": self.record_status.value if self.record_status else None,
+            "retracted": self.retracted,
             "fixed_version": self.assessment.fixed_version or self.advisory_fixed,
             "remediation": self.assessment.remediation,
             "reasons": list(self.assessment.reasons),
@@ -267,6 +297,7 @@ def analyse_exposure(
                     assessment=assessment,
                     advisory_fixed=entry.fixed,
                     sources=advisory.sources,
+                    record_status=advisory.record_status,
                 )
                 if assessment.verdict is Verdict.AFFECTED:
                     matches.append(match)

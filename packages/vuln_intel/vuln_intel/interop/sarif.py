@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 
 from ..errors import ValidationError
-from ..schema import CveId
+from ..schema import CveId, RecordStatus
 
 __all__ = [
     "SARIF_VERSION",
@@ -293,10 +293,19 @@ def to_sarif(report, *, tool: str = "cicc-vuln-intel", tool_version: str | None 
     if report.exposure is not None:
         for match in report.exposure.matches:
             level = "error"
+            # A retracted advisory is reported, not hidden: the range matched and
+            # someone may still be tracking it. It is demoted and labelled, because
+            # `error` is what makes a scanner gate a build on a claim the vendor has
+            # withdrawn.
+            if match.record_status is RecordStatus.REJECTED:
+                level = "warning"
             results.append({
                 "ruleId": str(match.cve),
                 "level": level,
-                "message": {"text": f"{match.cve} affects "
+                "message": {"text": f"{match.cve}"
+                                    + (" (advisory withdrawn) " if match.record_status is
+                                       RecordStatus.REJECTED else " ")
+                                    + "affects "
                                     f"{match.dependency.canonical_ecosystem}/"
                                     f"{match.dependency.canonical_name}=="
                                     f"{match.dependency.version} (asset: "
