@@ -42,8 +42,10 @@ Status legend: **Done** = implemented and checked to the stated level; **In prog
 
 ## PR #2 handling
 
-- [x] Reviewed the current PR #2 description, changed-file list, branch head, and this batch's source/documentation diff; typecheck, full suite, build, audit, and smoke checks passed before updating the PR.
-- [x] Reviewed and finalized the 35-file frontend/documentation diff (`ab549b8`) and the follow-up review-status commit (`b5d6273`); both were pushed only to `arena/09952395-cicc`. PR #2's description was updated via REST and refreshed after PR #4 advanced to M20 head `43c90259b3868340d4e1b929a9fb2b74250b6c29`. PR #2 remains open and unmerged; no push to `main`.
+- [x] Reviewed the current PR #2 description, changed-file list, branch head, and final diff; typecheck, 91-test suite, production build, audit, local HTTP smoke, and isolated API/BFF request-response smoke passed. Playwright E2E is explicitly blocked before assertions by the missing Chromium binary.
+- [x] Commit `33b3f967abfc5f65d52b2ca81229de75d385357f` (`feat(web): add coordination health and task traces`) was pushed only to `arena/09952395-cicc`.
+- [x] PR #2 description was refreshed via REST after the push; PR #2 remains open, targets `main`, and is unmerged. No push to `main`, PR #7, or any owner branch occurred.
+- [x] Earlier frontend foundation/review commits `ab549b8` and `b5d6273` were also pushed only to the same branch; the earlier PR description refresh history is preserved in `DEVELOPMENT_LOG.md`.
 
 ## Later work (contract/product dependent)
 
