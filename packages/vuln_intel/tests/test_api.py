@@ -500,12 +500,21 @@ class TestProjectStateFile:
             f"PROJECT_STATE.json declares {declared} mypy files; mypy reports {found.group(1)}"
         )
 
-class TestTheRecordedHeadIsARealCommit:
-    """`head` drifted five commits behind while every other guard passed.
+class TestTheRecordedHeadIsWellFormed:
+    """`head` cannot be self-verified, and pretending otherwise was worse.
 
-    A commit cannot name itself, so this cannot assert `head == today's HEAD`.
-    What it can do is stop the field from naming something that never existed,
-    and make the staleness cost a lookup instead of a wrong report.
+    I first wrote this as "the head names a real commit". It failed CI, because
+    the workflow checks out depth 1, so the commit is simply absent there. Making
+    it skip on a shallow clone made it skip in this sandbox too -- a test that
+    proves nothing in any environment I can run it in.
+
+    It also would not have caught the drift that prompted it: the stale value,
+    9c9d709, was a genuine ancestor of HEAD, so every ancestry check accepts it.
+    A commit cannot assert its own sha, and nothing in the tree can either.
+
+    So the field is documented as informational (`head_is_informational` in the
+    state file) and only its shape is checked. The numbers that ARE checked are
+    `tests_passed` and the mypy file count, which the guards above pin exactly.
     """
 
     def _state(self):
@@ -517,37 +526,18 @@ class TestTheRecordedHeadIsARealCommit:
             (root / "docs" / "vulnerability-intelligence" / "PROJECT_STATE.json").read_text()
         )
 
-    def test_the_head_is_recorded_as_a_hex_sha(self):
+    def test_the_head_is_recorded_as_a_lowercase_hex_sha(self):
         head = self._state()["head"]
-        assert isinstance(head, str) and 7 <= len(head) <= 40
-        int(head, 16)  # raises if it is not hexadecimal
+        assert isinstance(head, str) and 7 <= len(head) <= 40, f"head is {head!r}"
+        assert all(c in "0123456789abcdef" for c in head), f"head is not hex: {head!r}"
 
-    def test_the_head_names_a_commit_in_this_repository(self):
-        import pathlib
-        import shutil
-        import subprocess
-
-        head = self._state()["head"]
-        if len(head) < 7 or any(c not in "0123456789abcdef" for c in head):
-            import pytest
-
-            pytest.fail(f"head {head!r} is not a hex sha, so no lookup is meaningful")
-        git = shutil.which("git")
-        if git is None:
-            import pytest
-
-            pytest.skip("git is not on PATH, so the recorded head was NOT checked")
-        root = pathlib.Path(__file__).resolve().parents[1]
-        # The argument is the already-validated hex sha above, not external input.
-        found = subprocess.run(  # noqa: S603
-            [git, "cat-file", "-t", head],
-            capture_output=True, text=True, cwd=str(root), check=False,
-        )
-        # git ran, so "not found" is an answer about the file, not about the
-        # environment. Skipping here would let a wrong head pass as unverified.
-        assert "commit" in found.stdout, (
-            f"PROJECT_STATE.json records head {head!r}, which is not a commit in this "
-            f"repository (git said: {(found.stderr or found.stdout).strip() or 'nothing'})"
+    def test_the_state_file_says_the_head_is_not_self_verified(self):
+        # The honesty requirement, applied to our own bookkeeping: if a field is
+        # not checked, the file must say so rather than leave a reader assuming it.
+        note = self._state().get("head_is_informational")
+        assert isinstance(note, str) and note.strip(), (
+            "PROJECT_STATE.json must state that `head` is informational; without it a "
+            "stale value reads as a verified one"
         )
 
 
