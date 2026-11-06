@@ -18,7 +18,7 @@ vi.mock("./CiccApplication", () => ({
 
 const englishModules: { id: ModuleId; title: string; status: string; scope: string }[] = [
   { id: "threat-intelligence", title: "Threat Intelligence", status: "Threat data is not connected", scope: "Planned scope — not yet available" },
-  { id: "vulnerability-intelligence", title: "Vulnerability Intelligence", status: "Vulnerability data is not connected", scope: "Planned scope — not yet available" },
+  { id: "vulnerability-intelligence", title: "Vulnerability Intelligence", status: "Vulnerability API proposal is not mounted", scope: "Planned scope — not yet available" },
   { id: "system-health", title: "System Health", status: "Operations provider is not available", scope: "Available read-only views" },
   { id: "coordination", title: "Agent Coordination", status: "Coordination provider is not available", scope: "Available read-only views" },
 ];
@@ -47,7 +47,7 @@ describe("unconfigured workspace modules", () => {
     expect(screen.getByRole("link", { name: "بازگشت به نمای کلی فضای کاری" })).toHaveAttribute("href", "/");
   });
 
-  it("passes automated axe structural checks without contrast verification", async () => {
+  it("passes axe structural checks in jsdom; browser E2E covers color contrast", async () => {
     const { container } = render(<UnconfiguredModulePage moduleId="threat-intelligence" />);
     const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
       .mockImplementation(() => null as never);

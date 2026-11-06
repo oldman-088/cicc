@@ -10,7 +10,6 @@ import {
   parseCoordinationWriteCapabilities,
   parseOpsOverview,
   readIntegrationResource,
-  routeCoordinationTask,
 } from "./integration-api";
 
 afterEach(() => {
@@ -275,10 +274,10 @@ describe("same-origin integration client", () => {
     )).rejects.toMatchObject<Partial<IntegrationApiError>>({ kind: "invalid_response" });
   });
 
-  it("validates server-reported coordination write capabilities and result fields", () => {
-    expect(parseCoordinationWriteCapabilities({ task_creation_enabled: true, task_routing_enabled: false }))
-      .toEqual({ task_creation_enabled: true, task_routing_enabled: false });
-    expect(() => parseCoordinationWriteCapabilities({ task_creation_enabled: "true", task_routing_enabled: false }))
+  it("accepts only the approved task-creation capability and ignores obsolete routing flags", () => {
+    expect(parseCoordinationWriteCapabilities({ task_creation_enabled: true, task_routing_enabled: true }))
+      .toEqual({ task_creation_enabled: true });
+    expect(() => parseCoordinationWriteCapabilities({ task_creation_enabled: "true" }))
       .toThrow(/task_creation_enabled must be a boolean/);
   });
 
@@ -323,33 +322,4 @@ describe("same-origin integration client", () => {
     expect(JSON.parse(String(options.body))).toMatchObject({ kind: "review", payload: { labels: ["integration"] } });
   });
 
-  it("routes a task through the fixed same-origin adapter and validates the result identity", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      task_id: "task-42",
-      agent: "agent_one",
-      state: "QUEUED",
-      explanation: { via: "score", score: 92, candidates: 1, reasons: ["specialization match"] },
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await routeCoordinationTask("task-42");
-    expect(result).toMatchObject({ task_id: "task-42", agent: "agent_one", state: "QUEUED" });
-    expect(fetchMock).toHaveBeenCalledWith("/api/integrations/coordination/tasks/task-42/route", expect.objectContaining({
-      method: "POST",
-      credentials: "same-origin",
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    }));
-    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).body).toBeUndefined();
-
-    const mismatched = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      task_id: "another-task",
-      agent: null,
-      state: "BLOCKED",
-      explanation: { via: "none", reasons: [] },
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    vi.stubGlobal("fetch", mismatched);
-    await expect(routeCoordinationTask("task-42"))
-      .rejects.toMatchObject<Partial<IntegrationApiError>>({ kind: "invalid_response" });
-  });
 });

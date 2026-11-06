@@ -13,7 +13,6 @@ import {
   parseCoordinationTaskTrace,
   parseCoordinationTasks,
   parseCoordinationWriteCapabilities,
-  routeCoordinationTask,
   IntegrationApiError,
   type CoordinationAgent,
   type CoordinationEvent,
@@ -24,7 +23,6 @@ import {
   type CoordinationTaskTrace,
   type CoordinationWriteCapabilities,
   type CreateCoordinationTaskResult,
-  type RouteCoordinationTaskResult,
 } from "../../lib/integration-api";
 import { ResourcePanel } from "../integrations/ResourcePanel";
 import { useIntegrationResource, type ResourceState } from "../integrations/useIntegrationResource";
@@ -149,13 +147,6 @@ type WorkflowMessages = {
   taskCreateError: string;
   taskCreateUncertain: string;
   taskRouting: string;
-  taskRouteButton: string;
-  taskRoutingDisabled: string;
-  taskRoutingProgress: string;
-  taskRoutingError: string;
-  taskRoutingUncertain: string;
-  taskRouted: string;
-  taskRouteNoAgent: string;
   taskRouteVia: string;
   taskRouteRule: string;
   taskRouteScore: string;
@@ -179,8 +170,8 @@ const copy: Record<Locale, BaseMessages> = {
   en: {
     eyebrow: "CICC / COORDINATION",
     title: "Agent Coordination",
-    intro: "Provider-backed agent, task, metric, and webhook-event views. Task creation and routing are available only when their separate server-side gates are enabled.",
-    readOnly: "READ + GATED WRITES",
+    intro: "Provider-backed agent, task, metric, and webhook-event views. Task creation is available only when its server-side gate is enabled; routing and other task-state writes are not exposed by this frontend.",
+    readOnly: "READ + GATED TASK CREATION",
     scopeWarning: "Trusted single-tenant scope: these provider records have no tenant isolation, and this frontend does not authenticate users. Do not expose this deployment to untrusted users or multiple tenants.",
     metrics: "Coordination metrics",
     agents: "Registered agents",
@@ -280,8 +271,8 @@ const copy: Record<Locale, BaseMessages> = {
   ar: {
     eyebrow: "CICC / التنسيق",
     title: "تنسيق الوكلاء",
-    intro: "عرض سجلات الوكلاء والمهام والمقاييس وأحداث الويب هوك من مزوّد التنسيق. لا يتاح إنشاء المهام وتوجيهها إلا عند تفعيل بوابتيهما المنفصلتين على الخادم.",
-    readOnly: "قراءة + كتابة مقيّدة",
+    intro: "عرض سجلات الوكلاء والمهام والمقاييس وأحداث الويب هوك من مزوّد التنسيق. لا يتاح إنشاء المهام إلا عند تفعيل بوابته على الخادم؛ ولا تعرض هذه الواجهة التوجيه أو غيره من تغييرات حالة المهام.",
+    readOnly: "قراءة + إنشاء مقيّد",
     scopeWarning: "نطاق موثوق لمستأجر واحد: لا تتضمن سجلات المزوّد عزل المستأجرين، ولا تصادق هذه الواجهة على المستخدمين. لا تعرض هذا النشر لمستخدمين غير موثوقين أو لعدة مستأجرين.",
     metrics: "مقاييس التنسيق",
     agents: "الوكلاء المسجّلون",
@@ -381,8 +372,8 @@ const copy: Record<Locale, BaseMessages> = {
   fa: {
     eyebrow: "CICC / هماهنگی",
     title: "هماهنگی عامل‌ها",
-    intro: "نمای رکوردهای عامل‌ها، وظایف، معیارها و رویدادهای وب‌هوک از منبع هماهنگی. ایجاد و مسیریابی وظیفه فقط با فعال‌بودن دروازه‌های جداگانهٔ سرور در دسترس است.",
-    readOnly: "خواندن + نوشتن کنترل‌شده",
+    intro: "نمای رکوردهای عامل‌ها، وظایف، معیارها و رویدادهای وب‌هوک از منبع هماهنگی. ایجاد وظیفه فقط با فعال‌بودن دروازهٔ سرور در دسترس است؛ این رابط مسیردهی یا دیگر تغییرهای وضعیت وظیفه را ارائه نمی‌کند.",
+    readOnly: "خواندن + ایجاد محدود",
     scopeWarning: "محدودهٔ استقرار مورداعتماد و تک‌مستاجری: رکوردهای منبع جداسازی مستأجر ندارند و این رابط کاربران را احراز هویت نمی‌کند. این استقرار را در معرض کاربران نامطمئن یا چند مستأجر قرار ندهید.",
     metrics: "معیارهای هماهنگی",
     agents: "عامل‌های ثبت‌شده",
@@ -484,7 +475,7 @@ const copy: Record<Locale, BaseMessages> = {
 const workflowCopy: Record<Locale, WorkflowMessages> = {
   en: {
     taskCreation: "Create a coordination task",
-    taskCreationSummary: "Task submission uses a fixed server-side API route. Creation and routing are separately gated; this frontend does not authenticate users.",
+    taskCreationSummary: "Task creation uses a fixed server-side route and its explicit gate. The approved BFF policy is create-only: existing provider routing decisions are shown read-only. This frontend does not authenticate users.",
     taskCreationDisabled: "Task creation is disabled for this deployment. No task was submitted. Enable the server-side create gate only behind trusted single-tenant access controls.",
     taskKindLabel: "Task kind",
     taskTitleLabel: "Task title",
@@ -502,13 +493,6 @@ const workflowCopy: Record<Locale, WorkflowMessages> = {
     taskCreateError: "The server rejected the task request. Check the fields and the provider policy.",
     taskCreateUncertain: "The response could not confirm whether the task was created. Refresh the task list and trace before retrying to avoid duplicate work.",
     taskRouting: "Routing decision",
-    taskRouteButton: "Route task",
-    taskRoutingDisabled: "Task routing is not enabled for this deployment. The route action remains unavailable unless its separate server-side gate is enabled.",
-    taskRoutingProgress: "Requesting route…",
-    taskRoutingError: "The server rejected the routing request. Refresh the task and check provider policy.",
-    taskRoutingUncertain: "The routing request could not be confirmed. Refresh this task and its trace before retrying.",
-    taskRouted: "Routing response received.",
-    taskRouteNoAgent: "The provider returned no assigned agent.",
     taskRouteVia: "Routing method",
     taskRouteRule: "Matched rule",
     taskRouteScore: "Score",
@@ -527,7 +511,7 @@ const workflowCopy: Record<Locale, WorkflowMessages> = {
   },
   ar: {
     taskCreation: "إنشاء مهمة تنسيق",
-    taskCreationSummary: "يستخدم إرسال المهام مسار API ثابتًا على الخادم. إنشاء المهام وتوجيهها مقيّدان كلٌّ على حدة؛ ولا تصادق هذه الواجهة على المستخدمين.",
+    taskCreationSummary: "يستخدم إنشاء المهام مسارًا ثابتًا على الخادم وبوابة صريحة. سياسة BFF المعتمدة تقتصر على الإنشاء: تُعرض قرارات التوجيه الحالية من المزوّد للقراءة فقط. لا تصادق هذه الواجهة على المستخدمين.",
     taskCreationDisabled: "إنشاء المهام غير مفعّل لهذا النشر. لم تُرسل أي مهمة. لا تفعّل بوابة الإنشاء على الخادم إلا خلف ضوابط وصول موثوقة لمستأجر واحد.",
     taskKindLabel: "نوع المهمة",
     taskTitleLabel: "عنوان المهمة",
@@ -545,13 +529,6 @@ const workflowCopy: Record<Locale, WorkflowMessages> = {
     taskCreateError: "رفض الخادم طلب المهمة. تحقّق من الحقول وسياسة المزوّد.",
     taskCreateUncertain: "لم تؤكد الاستجابة ما إذا أُنشئت المهمة. حدّث قائمة المهام وسجلّ التتبع قبل إعادة المحاولة لتجنّب العمل المكرر.",
     taskRouting: "قرار التوجيه",
-    taskRouteButton: "توجيه المهمة",
-    taskRoutingDisabled: "توجيه المهام غير مفعّل لهذا النشر. يظل الإجراء متاحًا فقط عند تفعيل بوابته المنفصلة على الخادم.",
-    taskRoutingProgress: "جارٍ طلب التوجيه…",
-    taskRoutingError: "رفض الخادم طلب التوجيه. حدّث المهمة وتحقق من سياسة المزوّد.",
-    taskRoutingUncertain: "تعذّر تأكيد طلب التوجيه. حدّث المهمة وسجلّ التتبع قبل إعادة المحاولة.",
-    taskRouted: "تم استلام استجابة التوجيه.",
-    taskRouteNoAgent: "لم يُرجع المزوّد وكيلًا معيّنًا.",
     taskRouteVia: "طريقة التوجيه",
     taskRouteRule: "القاعدة المطابقة",
     taskRouteScore: "الدرجة",
@@ -570,7 +547,7 @@ const workflowCopy: Record<Locale, WorkflowMessages> = {
   },
   fa: {
     taskCreation: "ایجاد وظیفهٔ هماهنگی",
-    taskCreationSummary: "ارسال وظیفه از یک مسیر ثابت API در سرور استفاده می‌کند. ایجاد و مسیردهی جداگانه کنترل می‌شوند؛ این رابط کاربران را احراز هویت نمی‌کند.",
+    taskCreationSummary: "ایجاد وظیفه از مسیر ثابت سمت‌سرور و دروازهٔ صریح استفاده می‌کند. سیاست تأییدشدهٔ BFF فقط ایجاد است: تصمیم‌های مسیریابی گزارش‌شده از منبع فقط‌خواندنی نمایش داده می‌شوند. این رابط کاربران را احراز هویت نمی‌کند.",
     taskCreationDisabled: "ایجاد وظیفه در این استقرار فعال نیست. هیچ وظیفه‌ای ارسال نشد. دروازهٔ ایجاد را فقط پشت کنترل دسترسی معتبر تک‌مستاجری فعال کنید.",
     taskKindLabel: "نوع وظیفه",
     taskTitleLabel: "عنوان وظیفه",
@@ -588,13 +565,6 @@ const workflowCopy: Record<Locale, WorkflowMessages> = {
     taskCreateError: "سرور درخواست وظیفه را نپذیرفت. فیلدها و سیاست ارائه‌دهنده را بررسی کنید.",
     taskCreateUncertain: "پاسخ ایجاد وظیفه را تأیید نکرد. برای جلوگیری از کار تکراری، پیش از تلاش دوباره فهرست وظایف و ردگیری را تازه کنید.",
     taskRouting: "تصمیم مسیریابی",
-    taskRouteButton: "مسیردهی وظیفه",
-    taskRoutingDisabled: "مسیردهی وظیفه در این استقرار فعال نیست. این اقدام فقط با فعال‌سازی دروازهٔ جداگانهٔ سرور در دسترس خواهد بود.",
-    taskRoutingProgress: "در حال درخواست مسیریابی…",
-    taskRoutingError: "سرور درخواست مسیریابی را نپذیرفت. وظیفه را تازه کنید و سیاست ارائه‌دهنده را بررسی کنید.",
-    taskRoutingUncertain: "درخواست مسیریابی تأیید نشد. پیش از تلاش دوباره وظیفه و ردگیری آن را تازه کنید.",
-    taskRouted: "پاسخ مسیریابی دریافت شد.",
-    taskRouteNoAgent: "ارائه‌دهنده هیچ عامل تخصیص‌یافته‌ای برنگرداند.",
     taskRouteVia: "روش مسیریابی",
     taskRouteRule: "قاعدهٔ منطبق",
     taskRouteScore: "امتیاز",
@@ -1087,82 +1057,14 @@ function TaskCreateForm({
   );
 }
 
-function TaskRouteAction({
-  taskId,
-  canRoute,
-  routingEnabled,
-  capabilityReady,
-  messages,
-  onRouted,
-}: {
-  taskId: string;
-  canRoute: boolean;
-  routingEnabled: boolean;
-  capabilityReady: boolean;
-  messages: Messages;
-  onRouted: (result: RouteCoordinationTaskResult) => void;
-}) {
-  const [submitting, setSubmitting] = useState(false);
-  const [failure, setFailure] = useState<IntegrationApiError | null>(null);
-  const [result, setResult] = useState<RouteCoordinationTaskResult | null>(null);
-
-  async function routeTask() {
-    setFailure(null);
-    setSubmitting(true);
-    try {
-      const routed = await routeCoordinationTask(taskId);
-      setResult(routed);
-      onRouted(routed);
-    } catch (cause) {
-      setFailure(cause instanceof IntegrationApiError ? cause : new IntegrationApiError("unavailable"));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if ((!canRoute || !capabilityReady) && !result && !failure) return null;
-  return (
-    <div className={styles.taskAction}>
-      {canRoute && capabilityReady && !routingEnabled && <p className={styles.inlineNote}>{messages.taskRoutingDisabled}</p>}
-      {canRoute && capabilityReady && routingEnabled && (
-        <button className={styles.traceButton} type="button" disabled={submitting} onClick={() => void routeTask()}>
-          {submitting ? messages.taskRoutingProgress : messages.taskRouteButton}
-        </button>
-      )}
-      {failure && (
-        <p className={styles.errorNote} role="alert">
-          {failure.kind === "unavailable" || failure.kind === "invalid_response"
-            ? messages.taskRoutingUncertain
-            : messages.taskRoutingError}
-        </p>
-      )}
-      {result && (
-        <div className={styles.taskCreateSuccess} role="status" aria-live="polite">
-          <p>{messages.taskRouted} <bdi dir="ltr">{result.state}</bdi></p>
-          <p>{result.agent ? <bdi dir="ltr">{result.agent}</bdi> : messages.taskRouteNoAgent}</p>
-          <ul className={styles.healthReasons}>
-            {result.explanation.reasons.map((reason, index) => <li key={`${index}-${reason}`} dir="auto">{reason}</li>)}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function TaskContent({
   tasks,
   locale,
   messages,
-  routingEnabled,
-  routingCapabilityReady,
-  onTaskRouted,
 }: {
   tasks: CoordinationTask[];
   locale: Locale;
   messages: Messages;
-  routingEnabled: boolean;
-  routingCapabilityReady: boolean;
-  onTaskRouted: (result: RouteCoordinationTaskResult) => void;
 }) {
   const [stateFilter, setStateFilter] = useState("ALL");
   const [query, setQuery] = useState("");
@@ -1289,14 +1191,6 @@ function TaskContent({
                       <progress aria-label={messages.taskProgress} aria-valuetext={`${formatNumber(task.progress, locale)}%`} value={task.progress} max={100} />
                     </div>
                   )}
-                  <TaskRouteAction
-                    taskId={task.task_id}
-                    canRoute={task.state === "CREATED"}
-                    routingEnabled={routingEnabled}
-                    capabilityReady={routingCapabilityReady}
-                    messages={messages}
-                    onRouted={onTaskRouted}
-                  />
                   <section className={styles.taskDetailSection} aria-label={messages.taskRouting}>
                     <h3>{messages.taskRouting}</h3>
                     {task.routing_explanation ? (
@@ -1368,9 +1262,6 @@ export function CoordinationWorkspace() {
     integrationEndpoints.coordinationWriteCapabilities,
     parseCoordinationWriteCapabilities,
   );
-  const routingCapabilityReady = writeCapabilities.state.status === "ready";
-  const routingEnabled = routingCapabilityReady &&
-    writeCapabilities.state.data?.task_routing_enabled === true;
   const taskKindOptions = Object.keys(metrics.state.data?.by_kind ?? {}).sort();
 
   function refreshCoordinationData() {
@@ -1383,10 +1274,6 @@ export function CoordinationWorkspace() {
   function handleTaskCreated(result: CreateCoordinationTaskResult) {
     if (result.task_id) setTaskListKey((value) => value + 1);
     refreshCoordinationData();
-  }
-
-  function handleTaskRouted(result: RouteCoordinationTaskResult) {
-    if (result.task_id) refreshCoordinationData();
   }
 
   return (
@@ -1450,9 +1337,6 @@ export function CoordinationWorkspace() {
                 tasks={data.tasks}
                 locale={locale}
                 messages={text}
-                routingEnabled={routingEnabled}
-                routingCapabilityReady={routingCapabilityReady}
-                onTaskRouted={handleTaskRouted}
               />
             )}
           </ResourcePanel>

@@ -13,7 +13,6 @@ function jsonResponse(body: unknown) {
 
 function stubProvider(options: {
   taskCreationEnabled?: boolean;
-  taskRoutingEnabled?: boolean;
   tasks?: Array<Record<string, unknown>>;
 } = {}) {
   // Synthetic unit-test contract data only; this fixture is never used as a UI fallback.
@@ -126,7 +125,6 @@ function stubProvider(options: {
     if (url.endsWith("/coordination/write-capabilities")) {
       return jsonResponse({
         task_creation_enabled: options.taskCreationEnabled ?? false,
-        task_routing_enabled: options.taskRoutingEnabled ?? false,
       });
     }
     if (url.includes("/coordination/task-trace?")) return jsonResponse(responses.trace);
@@ -153,23 +151,6 @@ function stubProvider(options: {
       return new Response(JSON.stringify({ task_id: "task-created", kind: inputBody.kind, state: "CREATED", duplicate: false }), {
         status: 201,
         headers: { "Content-Type": "application/json", "X-CICC-Idempotency-Key": "bff-unit-test-key" },
-      });
-    }
-    const routeMatch = url.match(/\/coordination\/tasks\/([^/]+)\/route$/);
-    if (method === "POST" && routeMatch) {
-      const taskId = decodeURIComponent(routeMatch[1] ?? "");
-      const task = taskRecords.find((item) => item.task_id === taskId);
-      if (!task) return new Response("", { status: 404 });
-      Object.assign(task, {
-        state: "QUEUED",
-        agent: "agent_a",
-        routing_explanation: { via: "score", score: 88, candidates: 1, reasons: ["specialization match"] },
-      });
-      return jsonResponse({
-        task_id: taskId,
-        agent: "agent_a",
-        state: "QUEUED",
-        explanation: task.routing_explanation,
       });
     }
     if (url.endsWith("/coordination/tasks")) return jsonResponse({ tasks: taskRecords });
@@ -300,14 +281,14 @@ describe("Agent Coordination workspace", () => {
     expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
   });
 
-  it("routes a newly created task only when the separate routing capability is enabled", async () => {
+  it("keeps provider-reported routing output read-only and exposes no route action", async () => {
     const tasks = [{
-      task_id: "task-to-route",
+      task_id: "task-route-read-only",
       kind: "review",
       state: "CREATED",
       priority: 5,
       agent: null,
-      title: "New task awaiting routing",
+      title: "Awaiting provider routing",
       repo: null,
       branch_ref: null,
       created_at: null,
@@ -316,18 +297,22 @@ describe("Agent Coordination workspace", () => {
       attempts: 0,
       progress: 0,
       result: null,
-      routing_explanation: null,
+      routing_explanation: {
+        via: "score",
+        score: 88,
+        candidates: 1,
+        reasons: ["Provider-owned routing decision"],
+      },
     }];
-    const fetchMock = stubProvider({ taskRoutingEnabled: true, tasks });
+    const fetchMock = stubProvider({ tasks });
     render(<CoordinationWorkspace />);
 
-    fireEvent.click(await screen.findByText("New task awaiting routing"));
-    fireEvent.click(await screen.findByRole("button", { name: "Route task" }));
-    expect(await screen.findByText("Routing response received.")).toBeInTheDocument();
-    expect(screen.getAllByText("agent_a").length).toBeGreaterThan(1);
+    fireEvent.click(await screen.findByText("Awaiting provider routing"));
+    expect(await screen.findByText("Provider-owned routing decision")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Route task" })).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url, options]) =>
-      String(url) === "/api/integrations/coordination/tasks/task-to-route/route" && options?.method === "POST",
-    )).toBe(true);
+      String(url).includes("/coordination/tasks/") && String(url).endsWith("/route") && options?.method === "POST",
+    )).toBe(false);
   });
 
   it("loads task trace only on analyst request and distinguishes delivered/prepared records", async () => {

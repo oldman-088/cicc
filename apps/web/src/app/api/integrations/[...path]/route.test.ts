@@ -30,12 +30,11 @@ function post(path: string[], body?: unknown, headers?: HeadersInit) {
   );
 }
 
-function configureTaskWrite(routing = false) {
+function configureTaskWrite() {
   vi.stubEnv("API_INTERNAL_URL", "https://api.example.test/internal/");
   vi.stubEnv("WEB_BFF_WRITE_TOKEN", "server-write-secret");
   vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
   vi.stubEnv("WEB_BFF_ALLOW_COORD_WRITE", "1");
-  vi.stubEnv("WEB_BFF_ALLOW_COORD_ROUTING", routing ? "1" : "0");
 }
 
 describe("server-side integration adapter", () => {
@@ -175,7 +174,7 @@ describe("server-side integration adapter", () => {
     expect(await response.json()).toEqual({ error: { code: "invalid_upstream_response" } });
   });
 
-  it("reports write capability flags without exposing secrets or contacting the provider", async () => {
+  it("reports the task-creation capability without exposing secrets or contacting the provider", async () => {
     vi.stubEnv("API_INTERNAL_URL", "https://api.example.test");
     vi.stubEnv("WEB_BFF_WRITE_TOKEN", "server-write-secret");
     vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
@@ -184,13 +183,13 @@ describe("server-side integration adapter", () => {
 
     const disabled = await get(["coordination", "write-capabilities"]);
     expect(disabled.status).toBe(200);
-    expect(await disabled.json()).toEqual({ task_creation_enabled: false, task_routing_enabled: false });
+    expect(await disabled.json()).toEqual({ task_creation_enabled: false });
     expect(fetchMock).not.toHaveBeenCalled();
 
     vi.stubEnv("WEB_BFF_ALLOW_COORD_WRITE", "1");
     vi.stubEnv("WEB_BFF_ALLOW_COORD_ROUTING", "1");
     const enabled = await get(["coordination", "write-capabilities"]);
-    expect(await enabled.json()).toEqual({ task_creation_enabled: true, task_routing_enabled: true });
+    expect(await enabled.json()).toEqual({ task_creation_enabled: true });
     expect(enabled.headers.get("cache-control")).toContain("no-store");
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -234,7 +233,7 @@ describe("server-side integration adapter", () => {
     expect("task_id" in forwarded).toBe(false);
   });
 
-  it("fails closed for create and route writes unless their separate server flags are enabled", async () => {
+  it("fails closed for task creation unless its server-side gate is enabled", async () => {
     vi.stubEnv("API_INTERNAL_URL", "https://api.example.test");
     vi.stubEnv("WEB_BFF_WRITE_TOKEN", "server-write-secret");
     vi.stubEnv("CICC_OPS_TRUSTED_SINGLE_TENANT", "true");
@@ -242,38 +241,27 @@ describe("server-side integration adapter", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const createResponse = await post(["coordination", "tasks"], { kind: "review" });
-    const routeResponse = await post(["coordination", "tasks", "task-7", "route"]);
     expect(createResponse.status).toBe(503);
-    expect(routeResponse.status).toBe(503);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("routes one validated task path through the separately gated source-confirmed action", async () => {
-    configureTaskWrite(true);
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      task_id: "task-42",
-      agent: "agent_one",
-      state: "QUEUED",
-      explanation: { via: "score", score: 92, candidates: 1, reasons: ["specialization match"] },
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+  it("denies routing and every other task-state write even if an obsolete route flag is set", async () => {
+    configureTaskWrite();
+    vi.stubEnv("WEB_BFF_ALLOW_COORD_ROUTING", "1");
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    const response = await post(["coordination", "tasks", "task-42", "route"], undefined, {
-      Authorization: "Bearer browser-controlled-token",
-      Cookie: "session=browser-cookie",
-    });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ task_id: "task-42", agent: "agent_one", state: "QUEUED" });
-    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
-    expect(url.toString()).toBe("https://api.example.test/internal/api/v1/coordination/tasks/task-42/route");
-    expect(init.method).toBe("POST");
-    expect(init.body).toBeUndefined();
-    expect([...new Headers(init.headers).keys()].sort()).toEqual(["accept", "authorization"]);
-    expect(new Headers(init.headers).get("authorization")).toBe("Bearer server-write-secret");
+    const routeResponse = await post(["coordination", "tasks", "task-7", "route"]);
+    expect(routeResponse.status).toBe(404);
+    expect(await routeResponse.json()).toEqual({ error: { code: "not_found" } });
+
+    const completionResponse = await post(["coordination", "tasks", "task-7", "complete"]);
+    expect(completionResponse.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("rejects cross-origin, unsafe task IDs, browser-supplied idempotency, and extra write fields", async () => {
-    configureTaskWrite(true);
+  it("rejects cross-origin task creation, browser-supplied idempotency, and extra write fields", async () => {
+    configureTaskWrite();
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -282,9 +270,6 @@ describe("server-side integration adapter", () => {
       "Sec-Fetch-Site": "cross-site",
     });
     expect(crossSite.status).toBe(403);
-
-    const unsafeTaskId = await post(["coordination", "tasks", "../ops", "route"]);
-    expect(unsafeTaskId.status).toBe(400);
 
     const clientKey = await post(["coordination", "tasks"], { kind: "review", idempotency_key: "client-key" });
     expect(clientKey.status).toBe(422);

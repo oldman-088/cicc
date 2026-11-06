@@ -143,7 +143,6 @@ export type CoordinationTask = {
 
 export type CoordinationWriteCapabilities = {
   task_creation_enabled: boolean;
-  task_routing_enabled: boolean;
 };
 
 export type CreateCoordinationTaskInput = {
@@ -160,13 +159,6 @@ export type CreateCoordinationTaskResult = {
   state: string;
   duplicate: boolean;
   idempotency_key: string | null;
-};
-
-export type RouteCoordinationTaskResult = {
-  task_id: string;
-  agent: string | null;
-  state: string;
-  explanation: CoordinationRoutingExplanation;
 };
 
 export type CoordinationMetrics = {
@@ -261,8 +253,6 @@ export const integrationEndpoints = {
   coordinationHealth: "/api/integrations/coordination/health",
   coordinationTasks: "/api/integrations/coordination/tasks",
   coordinationWriteCapabilities: "/api/integrations/coordination/write-capabilities",
-  coordinationTaskRoute: (taskId: string) =>
-    `/api/integrations/coordination/tasks/${encodeURIComponent(taskId)}/route`,
   coordinationTaskTrace: (taskId: string) =>
     `/api/integrations/coordination/task-trace?task_id=${encodeURIComponent(taskId)}`,
   coordinationMetrics: "/api/integrations/coordination/metrics",
@@ -540,7 +530,6 @@ export function parseCoordinationWriteCapabilities(value: unknown): Coordination
   const root = object(value, "coordination write capabilities");
   return {
     task_creation_enabled: boolean(root.task_creation_enabled, "capabilities.task_creation_enabled"),
-    task_routing_enabled: boolean(root.task_routing_enabled, "capabilities.task_routing_enabled"),
   };
 }
 
@@ -551,16 +540,6 @@ export function parseCreateCoordinationTaskResult(value: unknown): Omit<CreateCo
     kind: nonEmptyString(root.kind, "create.kind"),
     state: nonEmptyString(root.state, "create.state"),
     duplicate: boolean(root.duplicate, "create.duplicate"),
-  };
-}
-
-export function parseRouteCoordinationTaskResult(value: unknown): RouteCoordinationTaskResult {
-  const root = object(value, "route task response");
-  return {
-    task_id: nonEmptyString(root.task_id, "route.task_id"),
-    agent: nullableString(root.agent, "route.agent"),
-    state: nonEmptyString(root.state, "route.state"),
-    explanation: parseCoordinationRoutingExplanation(root.explanation, "route.explanation"),
   };
 }
 
@@ -848,18 +827,4 @@ export async function createCoordinationTask(
     throw new IntegrationApiError("invalid_response", response.status);
   }
   return { ...value, idempotency_key: idempotencyKey };
-}
-
-export async function routeCoordinationTask(
-  taskId: string,
-  signal?: AbortSignal,
-): Promise<RouteCoordinationTaskResult> {
-  const { value } = await postIntegrationJson(
-    integrationEndpoints.coordinationTaskRoute(taskId),
-    undefined,
-    parseRouteCoordinationTaskResult,
-    signal,
-  );
-  if (value.task_id !== taskId) throw new IntegrationApiError("invalid_response", 200);
-  return value;
 }
