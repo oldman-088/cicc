@@ -40,8 +40,8 @@ def _synchronous_audit(callback, event):
 
 class _SecurityEvents:
     """Emit only trusted metadata for rejected/failed subapplication calls."""
-    def __init__(self, app, callback):
-        self.app, self.callback = app, callback
+    def __init__(self, app, callback, timeout):
+        self.app, self.callback, self.timeout = app, callback, timeout
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
@@ -67,7 +67,7 @@ class _SecurityEvents:
                         except (ValueError, UnicodeError):
                             pass
                     try:
-                        await run_in_threadpool(_synchronous_audit, self.callback, event)
+                        await asyncio.wait_for(run_in_threadpool(_synchronous_audit, self.callback, event), timeout=self.timeout)
                     except Exception:
                         rejected = True
                         started = True
@@ -132,7 +132,8 @@ class _TraceLink:
 
 
 def create_host_application(*, resolve_principal: Callable, engine_for_principal: Callable,
-                            security_audit: Callable, link_trace: Callable, trace_timeout_seconds: float = 2.0) -> FastAPI:
+                            security_audit: Callable, link_trace: Callable, trace_timeout_seconds: float = 2.0,
+                            dependency_timeout_seconds: float = 5.0) -> FastAPI:
     """Create an isolated ASGI subapplication to mount after owner approval.
 
     resolve_principal(request) returns a verified Principal or None. It MUST
@@ -145,6 +146,9 @@ def create_host_application(*, resolve_principal: Callable, engine_for_principal
     link_trace(UUID) binds a DB correlation to the authenticated gateway task
     via host-controlled context; it must not read untrusted IDs. The callback
     must be idempotent: a timed-out synchronous callback may finish later.
+    dependency_timeout_seconds bounds async waiting for principal/pool lookup and
+    failure-event delivery. Synchronous attempt-event delivery still needs its
+    own sink-side timeout; timed-out threads cannot be forcibly cancelled.
     """
     if not all(callable(x) for x in (resolve_principal, engine_for_principal, security_audit)):
         raise TypeError('host principal, database pool and audit callbacks are required')
@@ -152,14 +156,15 @@ def create_host_application(*, resolve_principal: Callable, engine_for_principal
         raise TypeError('security audit callback must be synchronous')
     if not callable(link_trace):
         raise TypeError('trace callback must be callable')
-    if (isinstance(trace_timeout_seconds, bool) or not isinstance(trace_timeout_seconds, (float, int))
-            or not math.isfinite(trace_timeout_seconds) or not 0 < trace_timeout_seconds <= 30):
-        raise ValueError('invalid trace timeout')
+    for timeout in (trace_timeout_seconds, dependency_timeout_seconds):
+        if (isinstance(timeout, bool) or not isinstance(timeout, (float, int))
+                or not math.isfinite(timeout) or not 0 < timeout <= 30):
+            raise ValueError('invalid host dependency timeout')
     application = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
     async def verified_principal(request: Request) -> Principal:
         try:
-            principal = await _invoke(resolve_principal, request)
+            principal = await asyncio.wait_for(_invoke(resolve_principal, request), timeout=dependency_timeout_seconds)
             if principal is None:
                 raise HTTPException(status_code=401)
             if not isinstance(principal, Principal):
@@ -176,7 +181,7 @@ def create_host_application(*, resolve_principal: Callable, engine_for_principal
 
     async def verified_store(principal: Principal = Depends(get_principal)):
         try:
-            engine = await _invoke(engine_for_principal, principal)
+            engine = await asyncio.wait_for(_invoke(engine_for_principal, principal), timeout=dependency_timeout_seconds)
             if not isinstance(engine, Engine):
                 raise TypeError('PostgreSQL Engine required')
             return TrustedWritePostgresRelationshipStore(engine)
@@ -202,5 +207,5 @@ def create_host_application(*, resolve_principal: Callable, engine_for_principal
         return JSONResponse(status_code=500, content={'detail':'Internal server error'})
 
     application.add_middleware(_TraceLink, callback=link_trace, timeout=trace_timeout_seconds)
-    application.add_middleware(_SecurityEvents, callback=security_audit)
+    application.add_middleware(_SecurityEvents, callback=security_audit, timeout=dependency_timeout_seconds)
     return application

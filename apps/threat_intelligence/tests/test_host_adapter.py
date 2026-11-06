@@ -175,3 +175,29 @@ def test_caller_supplied_correlation_cannot_impersonate_trace(host):
     assert actual != forged and links[-1]==actual
     with admin.connect() as conn:
         assert conn.execute(select(audit_event.c.event_id).where(audit_event.c.correlation_id==actual)).one()
+
+
+def test_host_resolver_and_pool_timeouts_fail_closed(databases):
+    import asyncio
+    _, a, _=databases
+    async def slow(_): await asyncio.sleep(1)
+    events=[]
+    kwargs=dict(security_audit=events.append,link_trace=lambda _:None,dependency_timeout_seconds=0.01)
+    app=FastAPI();app.mount('/approved-host-prefix',create_host_application(resolve_principal=slow,engine_for_principal=lambda _:a,**kwargs))
+    status, body, _=call(app,'GET','/relationships')
+    assert status==503 and body=={'detail':'Authentication unavailable'}
+    assert events[-1]=={'action':'host.security.response','status':503}
+    app=FastAPI();app.mount('/approved-host-prefix',create_host_application(resolve_principal=lambda _:Principal(subject='actor-A',tenant_id='tenant-A',permissions=frozenset({'threat:read'})),engine_for_principal=slow,**kwargs))
+    status, body, _=call(app,'GET','/relationships')
+    assert status==503 and body=={'detail':'Relationship storage unavailable'}
+    assert events[-1]['subject']=='actor-A' and events[-1]['status']==503
+
+
+def test_host_failure_audit_timeout_fails_closed(databases):
+    import time
+    _, a, _=databases
+    def slow(_): time.sleep(0.1)
+    domain=create_host_application(resolve_principal=lambda _:None,engine_for_principal=lambda _:a,security_audit=slow,link_trace=lambda _:None,dependency_timeout_seconds=0.01)
+    app=FastAPI();app.mount('/approved-host-prefix',domain)
+    code, body, _=call(app,'GET','/relationships')
+    assert code==503 and body=={'detail':'Security audit unavailable'}
