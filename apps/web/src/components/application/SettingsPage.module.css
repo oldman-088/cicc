@@ -1,0 +1,170 @@
+.page {
+  width: min(100%, 920px);
+  min-height: calc(100dvh - var(--cicc-topbar-height, 4.25rem));
+  margin-inline: auto;
+  padding: clamp(1.2rem, 3vw, 2.7rem);
+  color: var(--cicc-text, #e7f0ff);
+}
+
+.pageHeader {
+  margin-block-end: 1.8rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.55rem;
+  color: #70d7dd;
+  font-size: 0.67rem;
+  font-weight: 780;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  color: #f4f8ff;
+  font-size: clamp(1.8rem, 4vw, 2.7rem);
+  font-weight: 680;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+}
+
+.pageHeader > p:last-child {
+  margin: 0.8rem 0 0;
+  color: #9aacc2;
+  font-size: 0.9rem;
+}
+
+.settingsGroup > h2 {
+  margin: 0 0 0.7rem;
+  color: #d9e7f6;
+  font-size: 0.9rem;
+  font-weight: 680;
+}
+
+.settingCard {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--cicc-border, #20364b);
+  border-radius: 0.8rem;
+  background: rgb(12 25 39 / 82%);
+}
+
+.settingCard + .settingCard {
+  margin-block-start: 0.6rem;
+}
+
+.settingCopy {
+  min-width: 0;
+}
+
+.settingCopy h3,
+.settingCard legend {
+  margin: 0;
+  padding: 0;
+  color: #e6eff9;
+  font-size: 0.8rem;
+  font-weight: 680;
+}
+
+.settingCard legend {
+  width: auto;
+  margin-block-end: 0.35rem;
+}
+
+.settingCopy p {
+  max-width: 42rem;
+  margin: 0.35rem 0 0;
+  color: #91a6bc;
+  font-size: 0.73rem;
+  line-height: 1.6;
+}
+
+.languageControl select {
+  width: 9rem;
+  min-height: 2.7rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #344b60;
+  border-radius: 0.55rem;
+  color: #e7f0ff;
+  background: #0c1927;
+  font-size: 0.76rem;
+}
+
+.toggleControl {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.6rem;
+  color: #c4d2e1;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.toggleControl input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #73d6d2;
+}
+
+.languageControl select:focus-visible,
+.toggleControl input:focus-visible {
+  outline: 3px solid var(--cicc-focus, #f3bf68);
+  outline-offset: 3px;
+}
+
+.unavailableNote {
+  margin-block-start: 1.2rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #26394a;
+  border-radius: 0.75rem;
+  background: rgb(8 19 30 / 72%);
+}
+
+.unavailableNote h2 {
+  margin: 0;
+  color: #c8d7e6;
+  font-size: 0.77rem;
+}
+
+.unavailableNote p {
+  margin: 0.35rem 0 0;
+  color: #8fa3b8;
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 1.15rem 0.85rem 1.8rem;
+  }
+
+  .settingCard {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .languageControl,
+  .languageControl select {
+    width: 100%;
+  }
+
+  .toggleControl {
+    align-items: flex-start;
+  }
+}
