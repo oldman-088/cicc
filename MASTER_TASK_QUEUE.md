@@ -1,4 +1,4 @@
-> **Current verification (2026-11-06):** P2-01 now has experimental standalone FastAPI relationship routes with 10 real ASGI tests; full offline suite: 107 passed. The router is not mounted in Agent 1’s host. Authentication, persistent storage and durable audit require host integration; the injected in-memory store is test-only. The legacy dispatcher remains a simulation, not a gateway integration. Previous historical integration and aggregate test claims below are unverified. See `P2_01_VERIFICATION_REPORT.md` and `THREAT_RELATIONSHIP_API_CONTRACT.md`.
+> **Current verification (2026-11-06):** P2-01 has standalone experimental FastAPI routes and an independently owned PostgreSQL store/schema proposal. An isolated PostgreSQL run passed 118 tests (including 11 PostgreSQL tests and 10 standalone ASGI tests; categories overlap). Agent 1 host mounting, real identity binding and production security remain unverified. No shared migration was applied. Historical integration and aggregate test claims below are unverified. See `P2_01_VERIFICATION_REPORT.md` and `THREAT_RELATIONSHIP_API_CONTRACT.md`.
 
 # CICC Threat Intelligence Project - Master Task Queue
 

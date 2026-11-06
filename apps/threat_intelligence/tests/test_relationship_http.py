@@ -12,7 +12,7 @@ from apps.threat_intelligence.relationship_api import (
 )
 
 
-def request(method, path, body=None, headers=None, query=None, application=app):
+def request(method, path, body=None, headers=None, query=None, application=app, include_headers=False):
     async def call():
         messages = []
         data = json.dumps(body).encode() if body is not None else b''
@@ -39,7 +39,10 @@ def request(method, path, body=None, headers=None, query=None, application=app):
                 raise
         status = next(m['status'] for m in messages if m['type'] == 'http.response.start')
         raw = b''.join(m.get('body', b'') for m in messages if m['type'] == 'http.response.body')
-        return status, json.loads(raw) if raw else None
+        response = (status, json.loads(raw) if raw else None)
+        if include_headers:
+            response += (dict(next(m['headers'] for m in messages if m['type'] == 'http.response.start')), )
+        return response
     return asyncio.run(call())
 
 BASE = '/api/v1/threat-intelligence'
