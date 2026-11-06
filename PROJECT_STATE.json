@@ -19,7 +19,7 @@
     "DAG",
     "sweep"
    ],
-   "tests": "API 244/244; PG 41/41; web 35/35; contract 31/31; e2e 24/24; trials 23/23 + 32/32 + M40 23/23 (sandbox-labeled)"
+   "tests": "API 253/253; PG 41/41; web 35/35; contract 31/31; e2e 24/24; trials 23/23 + 32/32 + M40 23/23 (sandbox-labeled)"
   },
   "ops": {
    "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
@@ -105,7 +105,7 @@
  "agent_model": {
   "agent1": "coordination+ops (this branch, PR #4)",
   "agent2": "TI primary \u2014 AVAILABLE; PR #3 head 4f1776f (confirmed via GitHub API 2026-11-06T07:19Z)",
-  "agent3_replacement": "VI primary, PR #1 @84fca76 / PR #8 @222fdfc",
+  "agent3_replacement": "VI primary; PR #8 head 5215e31 (moved), PR #1 84fca76; merge order owner-reserved",
   "agent4": "frontend primary, PR #2 @747a86c (PR #7 backup inactive)",
   "inactive": [
    "Agent 5",

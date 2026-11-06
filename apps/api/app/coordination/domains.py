@@ -53,8 +53,35 @@ UNKNOWN = "UNKNOWN"
 STATES = (NOT_MOUNTED, MOUNTED, AVAILABLE, EXECUTION_VERIFIED, DEGRADED, FAILED, UNKNOWN)
 
 _REGISTRY: dict[str, dict] = {}
-# observable evidence per kind: {invokes, successes, last_status, last_error, last_invoke_at}
+# observable evidence per kind: {invokes, successes, consecutive_failures, last_status, last_error, last_invoke_at}
 _STATS: dict[str, dict] = {}
+
+
+def _empty_stat() -> dict:
+    return {"invokes": 0, "successes": 0, "consecutive_failures": 0,
+            "last_status": None, "last_error": None, "last_invoke_at": None}
+
+
+def load_persisted_stats(rows: list) -> None:
+    """M38: restore evidence from coord_domain_stats rows (restart persistence).
+    Only fills kinds that are currently mounted; in-memory values win on conflict
+    only when they are strictly fresher (higher invokes)."""
+    for row in rows:
+        kind = getattr(row, "kind", None)
+        if kind is None or kind not in _REGISTRY:
+            continue
+        cur = _STATS.get(kind)
+        persisted = {"invokes": row.invokes or 0, "successes": row.successes or 0,
+                     "consecutive_failures": 0, "last_status": row.last_status,
+                     "last_error": row.last_error, "last_invoke_at": row.last_invoke_at}
+        if cur is None or persisted["invokes"] >= cur["invokes"]:
+            merged = _empty_stat()
+            merged.update({k: v for k, v in persisted.items() if v is not None})
+            if cur is not None:
+                merged["consecutive_failures"] = cur.get("consecutive_failures", 0)
+                if cur["invokes"] > persisted["invokes"]:
+                    merged = cur
+            _STATS[kind] = merged
 
 
 class DomainNotMounted(Exception):
@@ -129,15 +156,16 @@ def is_mounted(kind: str) -> bool:
 def record_outcome(kind: str, ok: bool, error: str | None = None) -> None:
     """Record observable invoke evidence (called by the router per attempt
     outcome; persisted to coord_domain_stats for restart-survivable health)."""
-    st = _STATS.setdefault(kind, {"invokes": 0, "successes": 0, "last_status": None,
-                                  "last_error": None, "last_invoke_at": None})
+    st = _STATS.setdefault(kind, _empty_stat())
     st["invokes"] += 1
     st["last_invoke_at"] = _now()
     if ok:
         st["successes"] += 1
+        st["consecutive_failures"] = 0
         st["last_status"] = "ok"
         st["last_error"] = None
     else:
+        st["consecutive_failures"] = st.get("consecutive_failures", 0) + 1
         st["last_status"] = "error"
         st["last_error"] = (error or "error")[:200]  # sanitized, truncated
 
@@ -152,7 +180,7 @@ def domain_status(kind: str) -> str:
         return AVAILABLE if _REGISTRY[kind].get("validated") else MOUNTED
     if st["last_status"] == "ok":
         return EXECUTION_VERIFIED
-    return DEGRADED if st["successes"] > 0 else FAILED
+    return DEGRADED if st["successes"] > 0 else FAILED  # FAILED also covers retry-exhausted / consecutive failures
 
 
 def all_statuses() -> dict[str, dict]:
@@ -165,6 +193,7 @@ def all_statuses() -> dict[str, dict]:
             "source_ref": _REGISTRY.get(kind, {}).get("source_ref"),
             "mounted_at": _REGISTRY.get(kind, {}).get("mounted_at"),
             "invokes": st.get("invokes", 0), "successes": st.get("successes", 0),
+            "consecutive_failures": st.get("consecutive_failures", 0),
             "last_invoke_at": st.get("last_invoke_at"),
             "last_error": st.get("last_error"),  # sanitized already
         }
@@ -172,11 +201,21 @@ def all_statuses() -> dict[str, dict]:
 
 
 def _validate_response(kind: str, resp) -> dict:
+    """M38: hardened response validation — schema + parseable produced_at +
+    confidence in [0,1] if present. Corrupted/missing provenance -> DomainInvalid."""
     if not isinstance(resp, dict) or "result" not in resp:
         raise DomainInvalid(f"{kind}: response must be a dict with 'result'")
     prov = resp.get("provenance")
     if not isinstance(prov, dict) or not prov.get("source") or not prov.get("produced_at"):
         raise DomainInvalid(f"{kind}: provenance must include 'source' and 'produced_at'")
+    try:
+        datetime.fromisoformat(str(prov["produced_at"]).replace("Z", "+00:00"))
+    except ValueError:
+        raise DomainInvalid(f"{kind}: provenance.produced_at is not ISO-8601")
+    conf = prov.get("confidence")
+    if conf is not None and (not isinstance(conf, (int, float)) or isinstance(conf, bool)
+                             or not 0.0 <= conf <= 1.0):
+        raise DomainInvalid(f"{kind}: provenance.confidence must be a number in [0,1]")
     return {"result": resp["result"], "provenance": prov}
 
 

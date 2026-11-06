@@ -290,9 +290,17 @@ def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None =
         return {"tasks": registry.list_tasks(s, state, agent, kind, limit, dead_letter)}
 
 
+def _load_persisted_stats(s) -> None:
+    """M38: restore domain evidence from coord_domain_stats (restart persistence)."""
+    rows = s.execute(select(models.CoordinationDomainStat)).scalars().all()
+    domains.load_persisted_stats(list(rows))
+
+
 def _persist_domain_stats(s) -> None:
-    """M37: mirror in-memory domain evidence into coord_domain_stats so health
-    survives restarts. Sanitized fields only."""
+    """M37/M38: mirror in-memory domain evidence into coord_domain_stats so health
+    survives restarts. Sanitized fields only. Loads persisted rows first so a
+    re-mount after a restart does not clobber older evidence with zeros."""
+    _load_persisted_stats(s)
     for kind, st in domains.all_statuses().items():
         row = s.execute(select(models.CoordinationDomainStat).where(
             models.CoordinationDomainStat.kind == kind)).scalar_one_or_none()
@@ -305,6 +313,7 @@ def _persist_domain_stats(s) -> None:
         row.validated = 1 if domains.is_mounted(kind) and st["status"] != domains.MOUNTED else 0
         row.invokes = st["invokes"]
         row.successes = st["successes"]
+        row.consecutive_failures = st.get("consecutive_failures", 0)
         row.last_invoke_at = st["last_invoke_at"]
         row.last_status = "ok" if st["status"] == domains.EXECUTION_VERIFIED else (
             None if st["invokes"] == 0 else "error")
@@ -316,6 +325,7 @@ def list_domains(_gate: None = Depends(read_token_dependency)):
     """M35/M37: mounted domain handlers with evidence-based status (honest:
     empty list = no domain API mounted in this deployment)."""
     with ops.SessionLocal() as s:
+        _load_persisted_stats(s)
         _persist_domain_stats(s)
         s.commit()
     return {"domains": domains.mounted_domains(), "statuses": domains.all_statuses(),
@@ -327,6 +337,7 @@ def list_domains(_gate: None = Depends(read_token_dependency)):
 def domain_status(kind: str, _gate: None = Depends(read_token_dependency)):
     """M37: evidence-based lifecycle status for one domain + observable stats."""
     with ops.SessionLocal() as s:
+        _load_persisted_stats(s)
         _persist_domain_stats(s)
         s.commit()
     st = domains.all_statuses().get(kind)
@@ -453,6 +464,7 @@ def coordination_health(_gate: None = Depends(read_token_dependency)):
     (never healthy merely because a package exists)."""
     with ops.SessionLocal() as s:
         h = registry.health(s)
+        _load_persisted_stats(s)
         _persist_domain_stats(s)
         s.commit()
     st = domains.all_statuses()

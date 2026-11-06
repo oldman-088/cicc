@@ -1609,3 +1609,1615 @@ Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
 - [x] M36: logical backup/restore/verify + tested (SQLite+PG) + DISASTER_RECOVERY.md; release-readiness/traceability refreshed; backlog four-role corrections.
 - [x] M37: domain gateway lifecycle (mount from module read-only / deregister / status), evidence-based 7-state health (NOT_MOUNTED..UNKNOWN), retry+timeout with same idempotency key, sanitized errors, persisted stats (coord_domain_stats), state-chain fix QUEUED->COMPLETED; tests 7/7 (API 241/241, PG 41/41); integration matrix + frontend contracts docs; four-agent model confirmed (Agent 2 AVAILABLE). AMD-003 proposed pending.
 - [x] M38: Agent 2 HEAD reconciled to 4f1776f (GitHub API; confirmation requested on PR #4); TI contract comparison + read-only adapter (domain_adapters/threat_intel_adapter.py) verified vs real PR-head api.py (M40 trial 23/23); M40 integration trial script (lifecycle/invoke/provenance/trace/duplicate/retry/timeout/DEGRADED/recovery/health/BFF/deregister + honest readiness); AMD-003 doc with owner-approval split; tests 3/3 (API 244/244).
+
+<!-- log trimmed 2026-11-06 (M36): file exceeded the 100 MB push limit; full history preserved in git objects of this branch. kept last 400 lines. -->
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
+## In progress / next (priority)
+1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
+2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).
+3. Tenant isolation execution after owner DB-model decision (docs/TENANT_ISOLATION_PLAN.md).
+4. Retry backoff policy (CICC_COORD_RETRY_BACKOFF_S) + prefetch=1 runbook note.
+5. Webhook secret rotation + timestamp freshness check.
+6. Merge-time apps/ops/* reorg per strategy doc.
+
+## Blocked / needs owner
+- Outbound notification channels (owner authorization required; adapters disabled).
+- Shared DB vs read-only replica for platform auth (owner decision; recommendation in TENANT_ISOLATION_PLAN.md).
+- Destructive/shared migrations: never without approval.
+# MASTER TASK QUEUE — Agent 1 section (Central Coordination + System Health & Operations)
+
+> Ownership note: this file is maintained by Agent 1 for the coordination/ops
+> domain. Other agents keep their own sections/files; merge must reconcile
+> without overwriting (see docs/APPS_INTEGRATION_STRATEGY.md).
+
+Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
+
+## Done (M1–M8, commits …→89e3a3c + M8 commit)
+- Ops API v0.3.0+: health/overview/components/metrics/activity/dependencies/tasks/workers/alerts/broker/system; failure isolation; cache; 429; tokens; 413.
+- Alerts: rules, dedup, ack/resolve/assign/owner, escalation (occurrence+time+per-rule), flap detection, maintenance state + suppression, recovery events, per-component history. Notifications DISABLED by design.
+- Workers: register + heartbeat + history (throttled), stalled detection; task runs w/ attempts; failures analytics; stats w/ p50/p95/max, per-min, retry_rate.
+- Maintenance windows CRUD + cancel; retention purge (own tables only, OPS_RETENTION_DAYS).
+- Coordination: GitHub webhook (HMAC, replay dedup, allowlist, size cap, secret redaction) + LIVE GitHub API sync (api.github.com); task registry (14 states, audited transitions, deps, timeouts, TTL, cancel/retry, idempotency, dead-letter); agent registry; workload-aware explainable routing; approvals (approver-gated, expiry); delivery records (publisher confirms on real broker; honest human-assisted otherwise); progress reports; DAG; sweep.
+- Dashboard: 8 tabs incl. Coordination (agents, tasks, GitHub live panel); EN/AR 174 keys; a11y.
+- Platform-auth adapter (inert, fail-closed) matching verified contract on arena/da631853-cicc; tenant-isolation PLAN (not enabled).
+- Tooling: bench_scale.py, verify_rabbitmq.py (mgmt + AMQP roundtrip), ops_client.py, check_no_secrets.sh, docker-compose.verify.yml, validate_compose.sh (VERIFY_RABBITMQ=1).
+
+## Done — M11 (integration & reliability proof)
+- M11-01 lifecycle integration tests (9 scenarios) green at HTTP boundary; 2 real fixes: EXPIRED from CREATED/VALIDATING, deps→409.
+- M11-02 contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4 comment requesting confirmation.
+- M11-04 GitHub reliability: pagination, transient retry, full-body reads (live-caught truncation bug).
+- M11-05 tenant-isolation decision doc (options A–D, rec: B) — awaiting owner.
+- M11-06 dashboard: broker chip + delivery channel split + honest unavailable states.
+- API 135/135 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
+## Done — M12 (cross-agent integration & readiness)
+- Contract adoption record w/ per-agent evidence (docs/CONTRACT_ADOPTION.md);
+  v1.0 unchanged; PR #4 comments to Agents 2/3/4 (incl. Agent 4 visual verification).
+- E2E integration tests: threat-intel flow (submit→route→handoff→ack→progress→
+  complete→audit), vuln task depends_on threat (409 until done), dashboard payload
+  shapes. Simulated agents explicitly labeled; no Arena-session claims.
+- Reliability tests: stale agents, approval expiry (410/409), dead-letter filter +
+  audit, restart recovery, timeout, duplicates. API 142/142 (7 real-PG + 1 live-GitHub).
+- Live smoke: E2E on :8000, dashboard :3000 page 200, LIVE github via proxy ok.
+- Security review M12 section w/ unresolved owner decisions; tenant isolation still
+  pending; notifications disabled.
+
+## Done — M13 (integration stabilization)
+- Agent 4's 4 blockers answered on PR #4; docs/API_REFERENCE.md (read-side
+  contract: DTOs, error codes, cache semantics); path inconsistency fixed.
+  Agents 2/3 still silent — agreement NOT assumed; v1.0 unchanged.
+- Boundary tests (8): uniform errors, auth gates, cross-domain routing
+  isolation, webhook->dashboard read chain, audit completeness, idempotency,
+  no-network notifications, secret redaction. Fixes: report 409 on
+  non-applicable state; /events task_id. API 150/150.
+- Tenant isolation still pending owner (M13-04); notifications disabled;
+  RabbitMQ deprioritized per owner (M13-05) — human-assisted delivery kept.
+
+## Done — M14 (integration closure)
+- BFF server-side token injection implemented + tested + live-verified
+  (apps/web/app/api/[...path]/route.ts, lib/bff.mjs): no token in browser JS,
+  client auth headers stripped, writes 403, optional same-origin enforcement,
+  no token logging. web 23/23.
+- Webhook security findings documented (SECURITY_REVIEW.md §M14): real
+  protections + honest no-signed-timestamp limitation + remaining replay
+  risk + safe mitigations.
+- Adoption record split accepted/rejected/pending (CONTRACT_ADOPTION.md);
+  Agents 2/3 PENDING (not assumed); Agent 4 visual QA requested on PR #4.
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — M15 (final integration readiness)
+- E2E evidence script `scripts/e2e_check.py`: 22/22 PASS @2026-11-05T10:14:51Z —
+  simulated agent-2/3 register+submit+route+deliver+ack+progress+complete,
+  depends_on 409 gate, approval flow, audit chain, BFF tokenless reads
+  (agents/tasks/metrics/LIVE github), BFF write 403. Actors labeled simulated.
+- Security review M15 (SECURITY_REVIEW.md): BFF token handling, authz, BFF
+  writes 403, same-origin enforcement, session-architecture compatibility
+  requirement (platform auth_sessions sha256 — no parallel session store;
+  none implemented), webhook replay recap, redaction/audit.
+- Adoption re-checked: Agents 2/3/4 still PENDING explicit confirmation; no
+  agent PR references /api/v1/coordination yet (heads a1688bb/3462a8b/1a46f70).
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — M16 (continued development + master prompt alignment)
+- Master prompt located+reviewed read-only: README.md@main ca8f82c v1.0;
+  alignment doc docs/MASTER_PROMPT_ALIGNMENT.md; Agent-1-scoped deliverables
+  added: REQUIREMENTS_TRACEABILITY.md, ACCEPTANCE_TESTS.md, BLOCKERS.md,
+  RELEASE_READINESS.md, SECURITY_STATUS.md, API_DOCUMENTATION.md.
+- Contract conformance harness (fixture-labeled): tests/test_m16_conformance.py
+  (5) — DTO keys, 14-state enum, error codes 401/403/404/409/422, webhook DTO.
+- Webhook replay detection (M16-03): duplicate delivery older than
+  CICC_GH_MAX_REPLAY_AGE_S (default 24h) -> detection-only alert
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
+## In progress / next (priority)
+1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
+2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).
+3. Tenant isolation execution after owner DB-model decision (docs/TENANT_ISOLATION_PLAN.md).
+4. Retry backoff policy (CICC_COORD_RETRY_BACKOFF_S) + prefetch=1 runbook note.
+5. Webhook secret rotation + timestamp freshness check.
+6. Merge-time apps/ops/* reorg per strategy doc.
+
+## Blocked / needs owner
+- Outbound notification channels (owner authorization required; adapters disabled).
+- Shared DB vs read-only replica for platform auth (owner decision; recommendation in TENANT_ISOLATION_PLAN.md).
+- Destructive/shared migrations: never without approval.
+
+- [x] M28 (2026-11-05T13:00Z): PR#7 EXECUTED→VERIFIED shared-env (api-6387d0386482); dead_letter dup-event fix; PG recovery suite 6 (PG 20); /health + /tasks/{id}/trace; safe PR-body script. 205/205 API, 31/31 contract, 24/24 e2e.
+
+- [x] M28-cont (2026-11-05T13:11Z): delivery-lease recovery (sweep recovered_abandoned) + 2 PG tests. 207/207 API, 22 PG, web 31/31, contract 31/31, e2e 24/24.
+
+- [x] M29 (2026-11-05T13:19Z): contract amendment flow (amendments.py + endpoints + PG race test); live AMD-001 pending. 209/209 API, 23 PG, contract 31/31, e2e 24/24.
+
+- [x] M29-cont (2026-11-05T13:23Z): health last_operations + dashboard health panel. 210/210 API, web 31/31, contract 31/31, e2e 24/24.
+
+- [x] M29-cont2 (2026-11-05T13:29Z): PG progress-vs-complete race (PG 24); PR#7 @716a92b re-verified shared-env. API 211/211.
+
+- [x] M30 (2026-11-05T13:50Z): amendment lifecycle hardening + PR#7 @5f502a4 re-verify. API 212/212, PG 24, contract 31/31, e2e 24/24, web 31/31.
+
+- [x] M30-cont (2026-11-05T13:52Z): contract_governance in /health + BFF boundary regressions. API 213/213, web 34/34, PG 24, contract 31/31, e2e 24/24.
+
+- [x] M31 (2026-11-05T14:03Z): amendment PG race suite + self-approval enforcement + PR#7 @4d5b071 re-verify. API 221/221, PG 32, contract 31/31, e2e 24/24, web 34/34.
+
+- [x] M32 (2026-11-05T14:15Z): +4 amendment PG race tests + refs-table fix (PG 36, API 225); security-design + MVP-readiness docs; PR#7 @fb500a4 re-verified. contract 31/31, e2e 24/24, web 34/34.
+
+- [x] M33 (2026-11-05T14:54Z): +2 PG races (PG 38), BFF idempotency header, MVP sandbox trial 23/23, integration map. API 227/227, web 35/35, contract 31/31, e2e 24/24.
+
+- [x] M34: cross-domain sandbox trial 32/32 (scripts/cross_domain_trial.py); PG same-task_id race (PG 39, API 228); adoption stages CONSUMED/END_TO_END_VERIFIED.
+
+- [x] M35: domain gateway + provenance + honest not-mounted; idempotency_key unique constraint fix; PG invoke race (PG 40, API 231); docs corrected to four-role arrangement; AMD-002 proposed pending.
+- [x] M36: logical backup/restore/verify + tested (SQLite+PG) + DISASTER_RECOVERY.md; release-readiness/traceability refreshed; backlog four-role corrections.
+
+<!-- log trimmed 2026-11-06 (M36): file exceeded the 100 MB push limit; full history preserved in git objects of this branch. kept last 400 lines. -->
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
+## In progress / next (priority)
+1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
+2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).
+3. Tenant isolation execution after owner DB-model decision (docs/TENANT_ISOLATION_PLAN.md).
+4. Retry backoff policy (CICC_COORD_RETRY_BACKOFF_S) + prefetch=1 runbook note.
+5. Webhook secret rotation + timestamp freshness check.
+6. Merge-time apps/ops/* reorg per strategy doc.
+
+## Blocked / needs owner
+- Outbound notification channels (owner authorization required; adapters disabled).
+- Shared DB vs read-only replica for platform auth (owner decision; recommendation in TENANT_ISOLATION_PLAN.md).
+- Destructive/shared migrations: never without approval.
+# MASTER TASK QUEUE — Agent 1 section (Central Coordination + System Health & Operations)
+
+> Ownership note: this file is maintained by Agent 1 for the coordination/ops
+> domain. Other agents keep their own sections/files; merge must reconcile
+> without overwriting (see docs/APPS_INTEGRATION_STRATEGY.md).
+
+Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
+
+## Done (M1–M8, commits …→89e3a3c + M8 commit)
+- Ops API v0.3.0+: health/overview/components/metrics/activity/dependencies/tasks/workers/alerts/broker/system; failure isolation; cache; 429; tokens; 413.
+- Alerts: rules, dedup, ack/resolve/assign/owner, escalation (occurrence+time+per-rule), flap detection, maintenance state + suppression, recovery events, per-component history. Notifications DISABLED by design.
+- Workers: register + heartbeat + history (throttled), stalled detection; task runs w/ attempts; failures analytics; stats w/ p50/p95/max, per-min, retry_rate.
+- Maintenance windows CRUD + cancel; retention purge (own tables only, OPS_RETENTION_DAYS).
+- Coordination: GitHub webhook (HMAC, replay dedup, allowlist, size cap, secret redaction) + LIVE GitHub API sync (api.github.com); task registry (14 states, audited transitions, deps, timeouts, TTL, cancel/retry, idempotency, dead-letter); agent registry; workload-aware explainable routing; approvals (approver-gated, expiry); delivery records (publisher confirms on real broker; honest human-assisted otherwise); progress reports; DAG; sweep.
+- Dashboard: 8 tabs incl. Coordination (agents, tasks, GitHub live panel); EN/AR 174 keys; a11y.
+- Platform-auth adapter (inert, fail-closed) matching verified contract on arena/da631853-cicc; tenant-isolation PLAN (not enabled).
+- Tooling: bench_scale.py, verify_rabbitmq.py (mgmt + AMQP roundtrip), ops_client.py, check_no_secrets.sh, docker-compose.verify.yml, validate_compose.sh (VERIFY_RABBITMQ=1).
+
+## Done — M11 (integration & reliability proof)
+- M11-01 lifecycle integration tests (9 scenarios) green at HTTP boundary; 2 real fixes: EXPIRED from CREATED/VALIDATING, deps→409.
+- M11-02 contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4 comment requesting confirmation.
+- M11-04 GitHub reliability: pagination, transient retry, full-body reads (live-caught truncation bug).
+- M11-05 tenant-isolation decision doc (options A–D, rec: B) — awaiting owner.
+- M11-06 dashboard: broker chip + delivery channel split + honest unavailable states.
+- API 135/135 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
+## Done — M12 (cross-agent integration & readiness)
+- Contract adoption record w/ per-agent evidence (docs/CONTRACT_ADOPTION.md);
+  v1.0 unchanged; PR #4 comments to Agents 2/3/4 (incl. Agent 4 visual verification).
+- E2E integration tests: threat-intel flow (submit→route→handoff→ack→progress→
+  complete→audit), vuln task depends_on threat (409 until done), dashboard payload
+  shapes. Simulated agents explicitly labeled; no Arena-session claims.
+- Reliability tests: stale agents, approval expiry (410/409), dead-letter filter +
+  audit, restart recovery, timeout, duplicates. API 142/142 (7 real-PG + 1 live-GitHub).
+- Live smoke: E2E on :8000, dashboard :3000 page 200, LIVE github via proxy ok.
+- Security review M12 section w/ unresolved owner decisions; tenant isolation still
+  pending; notifications disabled.
+
+## Done — M13 (integration stabilization)
+- Agent 4's 4 blockers answered on PR #4; docs/API_REFERENCE.md (read-side
+  contract: DTOs, error codes, cache semantics); path inconsistency fixed.
+  Agents 2/3 still silent — agreement NOT assumed; v1.0 unchanged.
+- Boundary tests (8): uniform errors, auth gates, cross-domain routing
+  isolation, webhook->dashboard read chain, audit completeness, idempotency,
+  no-network notifications, secret redaction. Fixes: report 409 on
+  non-applicable state; /events task_id. API 150/150.
+- Tenant isolation still pending owner (M13-04); notifications disabled;
+  RabbitMQ deprioritized per owner (M13-05) — human-assisted delivery kept.
+
+## Done — M14 (integration closure)
+- BFF server-side token injection implemented + tested + live-verified
+  (apps/web/app/api/[...path]/route.ts, lib/bff.mjs): no token in browser JS,
+  client auth headers stripped, writes 403, optional same-origin enforcement,
+  no token logging. web 23/23.
+- Webhook security findings documented (SECURITY_REVIEW.md §M14): real
+  protections + honest no-signed-timestamp limitation + remaining replay
+  risk + safe mitigations.
+- Adoption record split accepted/rejected/pending (CONTRACT_ADOPTION.md);
+  Agents 2/3 PENDING (not assumed); Agent 4 visual QA requested on PR #4.
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — M15 (final integration readiness)
+- E2E evidence script `scripts/e2e_check.py`: 22/22 PASS @2026-11-05T10:14:51Z —
+  simulated agent-2/3 register+submit+route+deliver+ack+progress+complete,
+  depends_on 409 gate, approval flow, audit chain, BFF tokenless reads
+  (agents/tasks/metrics/LIVE github), BFF write 403. Actors labeled simulated.
+- Security review M15 (SECURITY_REVIEW.md): BFF token handling, authz, BFF
+  writes 403, same-origin enforcement, session-architecture compatibility
+  requirement (platform auth_sessions sha256 — no parallel session store;
+  none implemented), webhook replay recap, redaction/audit.
+- Adoption re-checked: Agents 2/3/4 still PENDING explicit confirmation; no
+  agent PR references /api/v1/coordination yet (heads a1688bb/3462a8b/1a46f70).
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — M16 (continued development + master prompt alignment)
+- Master prompt located+reviewed read-only: README.md@main ca8f82c v1.0;
+  alignment doc docs/MASTER_PROMPT_ALIGNMENT.md; Agent-1-scoped deliverables
+  added: REQUIREMENTS_TRACEABILITY.md, ACCEPTANCE_TESTS.md, BLOCKERS.md,
+  RELEASE_READINESS.md, SECURITY_STATUS.md, API_DOCUMENTATION.md.
+- Contract conformance harness (fixture-labeled): tests/test_m16_conformance.py
+  (5) — DTO keys, 14-state enum, error codes 401/403/404/409/422, webhook DTO.
+- Webhook replay detection (M16-03): duplicate delivery older than
+  CICC_GH_MAX_REPLAY_AGE_S (default 24h) -> detection-only alert
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
+## In progress / next (priority)
+1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
+2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).
+3. Tenant isolation execution after owner DB-model decision (docs/TENANT_ISOLATION_PLAN.md).
+4. Retry backoff policy (CICC_COORD_RETRY_BACKOFF_S) + prefetch=1 runbook note.
+5. Webhook secret rotation + timestamp freshness check.
+6. Merge-time apps/ops/* reorg per strategy doc.
+
+## Blocked / needs owner
+- Outbound notification channels (owner authorization required; adapters disabled).
+- Shared DB vs read-only replica for platform auth (owner decision; recommendation in TENANT_ISOLATION_PLAN.md).
+- Destructive/shared migrations: never without approval.
+
+- [x] M28 (2026-11-05T13:00Z): PR#7 EXECUTED→VERIFIED shared-env (api-6387d0386482); dead_letter dup-event fix; PG recovery suite 6 (PG 20); /health + /tasks/{id}/trace; safe PR-body script. 205/205 API, 31/31 contract, 24/24 e2e.
+
+- [x] M28-cont (2026-11-05T13:11Z): delivery-lease recovery (sweep recovered_abandoned) + 2 PG tests. 207/207 API, 22 PG, web 31/31, contract 31/31, e2e 24/24.
+
+- [x] M29 (2026-11-05T13:19Z): contract amendment flow (amendments.py + endpoints + PG race test); live AMD-001 pending. 209/209 API, 23 PG, contract 31/31, e2e 24/24.
+
+- [x] M29-cont (2026-11-05T13:23Z): health last_operations + dashboard health panel. 210/210 API, web 31/31, contract 31/31, e2e 24/24.
+
+- [x] M29-cont2 (2026-11-05T13:29Z): PG progress-vs-complete race (PG 24); PR#7 @716a92b re-verified shared-env. API 211/211.
+
+- [x] M30 (2026-11-05T13:50Z): amendment lifecycle hardening + PR#7 @5f502a4 re-verify. API 212/212, PG 24, contract 31/31, e2e 24/24, web 31/31.
+
+- [x] M30-cont (2026-11-05T13:52Z): contract_governance in /health + BFF boundary regressions. API 213/213, web 34/34, PG 24, contract 31/31, e2e 24/24.
+
+- [x] M31 (2026-11-05T14:03Z): amendment PG race suite + self-approval enforcement + PR#7 @4d5b071 re-verify. API 221/221, PG 32, contract 31/31, e2e 24/24, web 34/34.
+
+- [x] M32 (2026-11-05T14:15Z): +4 amendment PG race tests + refs-table fix (PG 36, API 225); security-design + MVP-readiness docs; PR#7 @fb500a4 re-verified. contract 31/31, e2e 24/24, web 34/34.
+
+- [x] M33 (2026-11-05T14:54Z): +2 PG races (PG 38), BFF idempotency header, MVP sandbox trial 23/23, integration map. API 227/227, web 35/35, contract 31/31, e2e 24/24.
+
+- [x] M34: cross-domain sandbox trial 32/32 (scripts/cross_domain_trial.py); PG same-task_id race (PG 39, API 228); adoption stages CONSUMED/END_TO_END_VERIFIED.
+
+- [x] M35: domain gateway + provenance + honest not-mounted; idempotency_key unique constraint fix; PG invoke race (PG 40, API 231); docs corrected to four-role arrangement; AMD-002 proposed pending.
+- [x] M36: logical backup/restore/verify + tested (SQLite+PG) + DISASTER_RECOVERY.md; release-readiness/traceability refreshed; backlog four-role corrections.
+- [x] M37: domain gateway lifecycle (mount from module read-only / deregister / status), evidence-based 7-state health (NOT_MOUNTED..UNKNOWN), retry+timeout with same idempotency key, sanitized errors, persisted stats (coord_domain_stats), state-chain fix QUEUED->COMPLETED; tests 7/7 (API 241/241, PG 41/41); integration matrix + frontend contracts docs; four-agent model confirmed (Agent 2 AVAILABLE). AMD-003 proposed pending.
+
+<!-- log trimmed 2026-11-06 (M36): file exceeded the 100 MB push limit; full history preserved in git objects of this branch. kept last 400 lines. -->
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
+## In progress / next (priority)
+1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
+2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).
+3. Tenant isolation execution after owner DB-model decision (docs/TENANT_ISOLATION_PLAN.md).
+4. Retry backoff policy (CICC_COORD_RETRY_BACKOFF_S) + prefetch=1 runbook note.
+5. Webhook secret rotation + timestamp freshness check.
+6. Merge-time apps/ops/* reorg per strategy doc.
+
+## Blocked / needs owner
+- Outbound notification channels (owner authorization required; adapters disabled).
+- Shared DB vs read-only replica for platform auth (owner decision; recommendation in TENANT_ISOLATION_PLAN.md).
+- Destructive/shared migrations: never without approval.
+# MASTER TASK QUEUE — Agent 1 section (Central Coordination + System Health & Operations)
+
+> Ownership note: this file is maintained by Agent 1 for the coordination/ops
+> domain. Other agents keep their own sections/files; merge must reconcile
+> without overwriting (see docs/APPS_INTEGRATION_STRATEGY.md).
+
+Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
+
+## Done (M1–M8, commits …→89e3a3c + M8 commit)
+- Ops API v0.3.0+: health/overview/components/metrics/activity/dependencies/tasks/workers/alerts/broker/system; failure isolation; cache; 429; tokens; 413.
+- Alerts: rules, dedup, ack/resolve/assign/owner, escalation (occurrence+time+per-rule), flap detection, maintenance state + suppression, recovery events, per-component history. Notifications DISABLED by design.
+- Workers: register + heartbeat + history (throttled), stalled detection; task runs w/ attempts; failures analytics; stats w/ p50/p95/max, per-min, retry_rate.
+- Maintenance windows CRUD + cancel; retention purge (own tables only, OPS_RETENTION_DAYS).
+- Coordination: GitHub webhook (HMAC, replay dedup, allowlist, size cap, secret redaction) + LIVE GitHub API sync (api.github.com); task registry (14 states, audited transitions, deps, timeouts, TTL, cancel/retry, idempotency, dead-letter); agent registry; workload-aware explainable routing; approvals (approver-gated, expiry); delivery records (publisher confirms on real broker; honest human-assisted otherwise); progress reports; DAG; sweep.
+- Dashboard: 8 tabs incl. Coordination (agents, tasks, GitHub live panel); EN/AR 174 keys; a11y.
+- Platform-auth adapter (inert, fail-closed) matching verified contract on arena/da631853-cicc; tenant-isolation PLAN (not enabled).
+- Tooling: bench_scale.py, verify_rabbitmq.py (mgmt + AMQP roundtrip), ops_client.py, check_no_secrets.sh, docker-compose.verify.yml, validate_compose.sh (VERIFY_RABBITMQ=1).
+
+## Done — M11 (integration & reliability proof)
+- M11-01 lifecycle integration tests (9 scenarios) green at HTTP boundary; 2 real fixes: EXPIRED from CREATED/VALIDATING, deps→409.
+- M11-02 contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4 comment requesting confirmation.
+- M11-04 GitHub reliability: pagination, transient retry, full-body reads (live-caught truncation bug).
+- M11-05 tenant-isolation decision doc (options A–D, rec: B) — awaiting owner.
+- M11-06 dashboard: broker chip + delivery channel split + honest unavailable states.
+- API 135/135 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
+## Done — M12 (cross-agent integration & readiness)
+- Contract adoption record w/ per-agent evidence (docs/CONTRACT_ADOPTION.md);
+  v1.0 unchanged; PR #4 comments to Agents 2/3/4 (incl. Agent 4 visual verification).
+- E2E integration tests: threat-intel flow (submit→route→handoff→ack→progress→
+  complete→audit), vuln task depends_on threat (409 until done), dashboard payload
+  shapes. Simulated agents explicitly labeled; no Arena-session claims.
+- Reliability tests: stale agents, approval expiry (410/409), dead-letter filter +
+  audit, restart recovery, timeout, duplicates. API 142/142 (7 real-PG + 1 live-GitHub).
+- Live smoke: E2E on :8000, dashboard :3000 page 200, LIVE github via proxy ok.
+- Security review M12 section w/ unresolved owner decisions; tenant isolation still
+  pending; notifications disabled.
+
+## Done — M13 (integration stabilization)
+- Agent 4's 4 blockers answered on PR #4; docs/API_REFERENCE.md (read-side
+  contract: DTOs, error codes, cache semantics); path inconsistency fixed.
+  Agents 2/3 still silent — agreement NOT assumed; v1.0 unchanged.
+- Boundary tests (8): uniform errors, auth gates, cross-domain routing
+  isolation, webhook->dashboard read chain, audit completeness, idempotency,
+  no-network notifications, secret redaction. Fixes: report 409 on
+  non-applicable state; /events task_id. API 150/150.
+- Tenant isolation still pending owner (M13-04); notifications disabled;
+  RabbitMQ deprioritized per owner (M13-05) — human-assisted delivery kept.
+
+## Done — M14 (integration closure)
+- BFF server-side token injection implemented + tested + live-verified
+  (apps/web/app/api/[...path]/route.ts, lib/bff.mjs): no token in browser JS,
+  client auth headers stripped, writes 403, optional same-origin enforcement,
+  no token logging. web 23/23.
+- Webhook security findings documented (SECURITY_REVIEW.md §M14): real
+  protections + honest no-signed-timestamp limitation + remaining replay
+  risk + safe mitigations.
+- Adoption record split accepted/rejected/pending (CONTRACT_ADOPTION.md);
+  Agents 2/3 PENDING (not assumed); Agent 4 visual QA requested on PR #4.
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — M15 (final integration readiness)
+- E2E evidence script `scripts/e2e_check.py`: 22/22 PASS @2026-11-05T10:14:51Z —
+  simulated agent-2/3 register+submit+route+deliver+ack+progress+complete,
+  depends_on 409 gate, approval flow, audit chain, BFF tokenless reads
+  (agents/tasks/metrics/LIVE github), BFF write 403. Actors labeled simulated.
+- Security review M15 (SECURITY_REVIEW.md): BFF token handling, authz, BFF
+  writes 403, same-origin enforcement, session-architecture compatibility
+  requirement (platform auth_sessions sha256 — no parallel session store;
+  none implemented), webhook replay recap, redaction/audit.
+- Adoption re-checked: Agents 2/3/4 still PENDING explicit confirmation; no
+  agent PR references /api/v1/coordination yet (heads a1688bb/3462a8b/1a46f70).
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — M16 (continued development + master prompt alignment)
+- Master prompt located+reviewed read-only: README.md@main ca8f82c v1.0;
+  alignment doc docs/MASTER_PROMPT_ALIGNMENT.md; Agent-1-scoped deliverables
+  added: REQUIREMENTS_TRACEABILITY.md, ACCEPTANCE_TESTS.md, BLOCKERS.md,
+  RELEASE_READINESS.md, SECURITY_STATUS.md, API_DOCUMENTATION.md.
+- Contract conformance harness (fixture-labeled): tests/test_m16_conformance.py
+  (5) — DTO keys, 14-state enum, error codes 401/403/404/409/422, webhook DTO.
+- Webhook replay detection (M16-03): duplicate delivery older than
+  CICC_GH_MAX_REPLAY_AGE_S (default 24h) -> detection-only alert
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
+## In progress / next (priority)
+1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
+2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).
+3. Tenant isolation execution after owner DB-model decision (docs/TENANT_ISOLATION_PLAN.md).
+4. Retry backoff policy (CICC_COORD_RETRY_BACKOFF_S) + prefetch=1 runbook note.
+5. Webhook secret rotation + timestamp freshness check.
+6. Merge-time apps/ops/* reorg per strategy doc.
+
+## Blocked / needs owner
+- Outbound notification channels (owner authorization required; adapters disabled).
+- Shared DB vs read-only replica for platform auth (owner decision; recommendation in TENANT_ISOLATION_PLAN.md).
+- Destructive/shared migrations: never without approval.
+
+- [x] M28 (2026-11-05T13:00Z): PR#7 EXECUTED→VERIFIED shared-env (api-6387d0386482); dead_letter dup-event fix; PG recovery suite 6 (PG 20); /health + /tasks/{id}/trace; safe PR-body script. 205/205 API, 31/31 contract, 24/24 e2e.
+
+- [x] M28-cont (2026-11-05T13:11Z): delivery-lease recovery (sweep recovered_abandoned) + 2 PG tests. 207/207 API, 22 PG, web 31/31, contract 31/31, e2e 24/24.
+
+- [x] M29 (2026-11-05T13:19Z): contract amendment flow (amendments.py + endpoints + PG race test); live AMD-001 pending. 209/209 API, 23 PG, contract 31/31, e2e 24/24.
+
+- [x] M29-cont (2026-11-05T13:23Z): health last_operations + dashboard health panel. 210/210 API, web 31/31, contract 31/31, e2e 24/24.
+
+- [x] M29-cont2 (2026-11-05T13:29Z): PG progress-vs-complete race (PG 24); PR#7 @716a92b re-verified shared-env. API 211/211.
+
+- [x] M30 (2026-11-05T13:50Z): amendment lifecycle hardening + PR#7 @5f502a4 re-verify. API 212/212, PG 24, contract 31/31, e2e 24/24, web 31/31.
+
+- [x] M30-cont (2026-11-05T13:52Z): contract_governance in /health + BFF boundary regressions. API 213/213, web 34/34, PG 24, contract 31/31, e2e 24/24.
+
+- [x] M31 (2026-11-05T14:03Z): amendment PG race suite + self-approval enforcement + PR#7 @4d5b071 re-verify. API 221/221, PG 32, contract 31/31, e2e 24/24, web 34/34.
+
+- [x] M32 (2026-11-05T14:15Z): +4 amendment PG race tests + refs-table fix (PG 36, API 225); security-design + MVP-readiness docs; PR#7 @fb500a4 re-verified. contract 31/31, e2e 24/24, web 34/34.
+
+- [x] M33 (2026-11-05T14:54Z): +2 PG races (PG 38), BFF idempotency header, MVP sandbox trial 23/23, integration map. API 227/227, web 35/35, contract 31/31, e2e 24/24.
+
+- [x] M34: cross-domain sandbox trial 32/32 (scripts/cross_domain_trial.py); PG same-task_id race (PG 39, API 228); adoption stages CONSUMED/END_TO_END_VERIFIED.
+
+- [x] M35: domain gateway + provenance + honest not-mounted; idempotency_key unique constraint fix; PG invoke race (PG 40, API 231); docs corrected to four-role arrangement; AMD-002 proposed pending.
+- [x] M36: logical backup/restore/verify + tested (SQLite+PG) + DISASTER_RECOVERY.md; release-readiness/traceability refreshed; backlog four-role corrections.
+
+<!-- log trimmed 2026-11-06 (M36): file exceeded the 100 MB push limit; full history preserved in git objects of this branch. kept last 400 lines. -->
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
+## In progress / next (priority)
+1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
+2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).
+3. Tenant isolation execution after owner DB-model decision (docs/TENANT_ISOLATION_PLAN.md).
+4. Retry backoff policy (CICC_COORD_RETRY_BACKOFF_S) + prefetch=1 runbook note.
+5. Webhook secret rotation + timestamp freshness check.
+6. Merge-time apps/ops/* reorg per strategy doc.
+
+## Blocked / needs owner
+- Outbound notification channels (owner authorization required; adapters disabled).
+- Shared DB vs read-only replica for platform auth (owner decision; recommendation in TENANT_ISOLATION_PLAN.md).
+- Destructive/shared migrations: never without approval.
+# MASTER TASK QUEUE — Agent 1 section (Central Coordination + System Health & Operations)
+
+> Ownership note: this file is maintained by Agent 1 for the coordination/ops
+> domain. Other agents keep their own sections/files; merge must reconcile
+> without overwriting (see docs/APPS_INTEGRATION_STRATEGY.md).
+
+Branch: `arena/961971ed-cicc` · PR: #4 (OPEN, never self-merged)
+
+## Done (M1–M8, commits …→89e3a3c + M8 commit)
+- Ops API v0.3.0+: health/overview/components/metrics/activity/dependencies/tasks/workers/alerts/broker/system; failure isolation; cache; 429; tokens; 413.
+- Alerts: rules, dedup, ack/resolve/assign/owner, escalation (occurrence+time+per-rule), flap detection, maintenance state + suppression, recovery events, per-component history. Notifications DISABLED by design.
+- Workers: register + heartbeat + history (throttled), stalled detection; task runs w/ attempts; failures analytics; stats w/ p50/p95/max, per-min, retry_rate.
+- Maintenance windows CRUD + cancel; retention purge (own tables only, OPS_RETENTION_DAYS).
+- Coordination: GitHub webhook (HMAC, replay dedup, allowlist, size cap, secret redaction) + LIVE GitHub API sync (api.github.com); task registry (14 states, audited transitions, deps, timeouts, TTL, cancel/retry, idempotency, dead-letter); agent registry; workload-aware explainable routing; approvals (approver-gated, expiry); delivery records (publisher confirms on real broker; honest human-assisted otherwise); progress reports; DAG; sweep.
+- Dashboard: 8 tabs incl. Coordination (agents, tasks, GitHub live panel); EN/AR 174 keys; a11y.
+- Platform-auth adapter (inert, fail-closed) matching verified contract on arena/da631853-cicc; tenant-isolation PLAN (not enabled).
+- Tooling: bench_scale.py, verify_rabbitmq.py (mgmt + AMQP roundtrip), ops_client.py, check_no_secrets.sh, docker-compose.verify.yml, validate_compose.sh (VERIFY_RABBITMQ=1).
+
+## Done — M11 (integration & reliability proof)
+- M11-01 lifecycle integration tests (9 scenarios) green at HTTP boundary; 2 real fixes: EXPIRED from CREATED/VALIDATING, deps→409.
+- M11-02 contract v1.0 (25 endpoints) + Agent 4 dashboard contract; PR #4 comment requesting confirmation.
+- M11-04 GitHub reliability: pagination, transient retry, full-body reads (live-caught truncation bug).
+- M11-05 tenant-isolation decision doc (options A–D, rec: B) — awaiting owner.
+- M11-06 dashboard: broker chip + delivery channel split + honest unavailable states.
+- API 135/135 (7 real-PG + 1 live-GitHub); web 17/17 + tsc + build; i18n 188/188.
+
+## Done — M12 (cross-agent integration & readiness)
+- Contract adoption record w/ per-agent evidence (docs/CONTRACT_ADOPTION.md);
+  v1.0 unchanged; PR #4 comments to Agents 2/3/4 (incl. Agent 4 visual verification).
+- E2E integration tests: threat-intel flow (submit→route→handoff→ack→progress→
+  complete→audit), vuln task depends_on threat (409 until done), dashboard payload
+  shapes. Simulated agents explicitly labeled; no Arena-session claims.
+- Reliability tests: stale agents, approval expiry (410/409), dead-letter filter +
+  audit, restart recovery, timeout, duplicates. API 142/142 (7 real-PG + 1 live-GitHub).
+- Live smoke: E2E on :8000, dashboard :3000 page 200, LIVE github via proxy ok.
+- Security review M12 section w/ unresolved owner decisions; tenant isolation still
+  pending; notifications disabled.
+
+## Done — M13 (integration stabilization)
+- Agent 4's 4 blockers answered on PR #4; docs/API_REFERENCE.md (read-side
+  contract: DTOs, error codes, cache semantics); path inconsistency fixed.
+  Agents 2/3 still silent — agreement NOT assumed; v1.0 unchanged.
+- Boundary tests (8): uniform errors, auth gates, cross-domain routing
+  isolation, webhook->dashboard read chain, audit completeness, idempotency,
+  no-network notifications, secret redaction. Fixes: report 409 on
+  non-applicable state; /events task_id. API 150/150.
+- Tenant isolation still pending owner (M13-04); notifications disabled;
+  RabbitMQ deprioritized per owner (M13-05) — human-assisted delivery kept.
+
+## Done — M14 (integration closure)
+- BFF server-side token injection implemented + tested + live-verified
+  (apps/web/app/api/[...path]/route.ts, lib/bff.mjs): no token in browser JS,
+  client auth headers stripped, writes 403, optional same-origin enforcement,
+  no token logging. web 23/23.
+- Webhook security findings documented (SECURITY_REVIEW.md §M14): real
+  protections + honest no-signed-timestamp limitation + remaining replay
+  risk + safe mitigations.
+- Adoption record split accepted/rejected/pending (CONTRACT_ADOPTION.md);
+  Agents 2/3 PENDING (not assumed); Agent 4 visual QA requested on PR #4.
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — M15 (final integration readiness)
+- E2E evidence script `scripts/e2e_check.py`: 22/22 PASS @2026-11-05T10:14:51Z —
+  simulated agent-2/3 register+submit+route+deliver+ack+progress+complete,
+  depends_on 409 gate, approval flow, audit chain, BFF tokenless reads
+  (agents/tasks/metrics/LIVE github), BFF write 403. Actors labeled simulated.
+- Security review M15 (SECURITY_REVIEW.md): BFF token handling, authz, BFF
+  writes 403, same-origin enforcement, session-architecture compatibility
+  requirement (platform auth_sessions sha256 — no parallel session store;
+  none implemented), webhook replay recap, redaction/audit.
+- Adoption re-checked: Agents 2/3/4 still PENDING explicit confirmation; no
+  agent PR references /api/v1/coordination yet (heads a1688bb/3462a8b/1a46f70).
+- Regression: API 150/150 (7 real-PG + 1 live-GitHub); web 23/23 + tsc + build.
+
+## Done — M16 (continued development + master prompt alignment)
+- Master prompt located+reviewed read-only: README.md@main ca8f82c v1.0;
+  alignment doc docs/MASTER_PROMPT_ALIGNMENT.md; Agent-1-scoped deliverables
+  added: REQUIREMENTS_TRACEABILITY.md, ACCEPTANCE_TESTS.md, BLOCKERS.md,
+  RELEASE_READINESS.md, SECURITY_STATUS.md, API_DOCUMENTATION.md.
+- Contract conformance harness (fixture-labeled): tests/test_m16_conformance.py
+  (5) — DTO keys, 14-state enum, error codes 401/403/404/409/422, webhook DTO.
+- Webhook replay detection (M16-03): duplicate delivery older than
+  CICC_GH_MAX_REPLAY_AGE_S (default 24h) -> detection-only alert
+  webhook_replay_after_window (no invented signed timestamp); router commit fix.
+- e2e_check.py now labels every check LIVE-API / LIVE-BFF / SIMULATED-FIXTURE;
+  rerun 22/22 PASS @2026-11-05T10:28:12Z.
+- Adoption per agent recorded (pending/partially-compatible) w/ specifics.
+- API 155/155; web 23/23 + tsc + build; i18n 188/188.
+
+## Done — M17 (evidence consistency + product alignment)
+- Reconciled PR heads: PR #1 is now d913cfa (M16 report cited a1688bb — stale
+  by 10 min); full file scan still shows no /api/v1/coordination refs in any
+  agent PR. CONTRACT_ADOPTION.md updated with timestamps.
+- i18n 188->187 explained: report miscount; per-commit counts 175/182/187,
+  parity en==ar intact at every commit; no key lost, no test removed.
+- Webhook replay detection verified across simulated restart (file DB, new
+  app instance): alert row persists, dedup holds, exactly one task/event.
+  tests/test_m17_reliability.py (2).
+- Master prompt re-confirmed: README.md@main@ca8f82c v1.0 unchanged.
+- API 157/157; web 23/23 + tsc + build; E2E 22/22 live (mode-labeled).
+
+## Done — M18 (integration execution & contract readiness)
+- Additive machine-readable contract: GET /api/v1/coordination/contract
+  (app/coordination/contract.py + router) — v1.0 paths/DTOs/states/errors/auth.
+- Executable agent-facing check: scripts/contract_check.py — 16/16 PASS live
+  @2026-11-05T10:48:05Z (fixture-labeled); docs/INTEGRATION_EXAMPLES.md.
+- Recovery defect fixed: POST /tasks/{id}/retry now works from RETRYING/BLOCKED
+  (auto dead-letter states) -> QUEUED; tests/test_m18_recovery.py (4): contract
+  descriptor, stale-agent sweep persistence, retry+audit, approval reject (403
+  non-approver, 409 terminal) + audit.
+- PR heads re-verified (PR#1 64e3c00); adoption unchanged (2/3 pending, 4
+  discussion-level); master prompt re-confirmed unchanged.
+- API 161/161; web 23/23 + tsc; E2E 22/22 live @10:48:17Z.
+
+## Done — M19 (actual-integration push + operational quality)
+- contract_check.py strengthened to 27 checks (DTO/422, auth 401/403, lifecycle,
+  idempotency, deps gate 409, approval gate 409, retry/dead-letter, audit+metrics,
+  error compatibility) — 27/27 PASS live @2026-11-05T10:57:36Z, fixture-labeled.
+- Defect fixed: complete now honors depends_on gate (409 until deps COMPLETED);
+  pinned by tests/test_m19_operational.py (4: deps gate incl. missing dep,
+  dead-letter after max attempts + retry still works, audit completeness).
+- Adoption request w/ smallest integration change posted on PR #4; PR#1 head
+  f56447c (65 commits) still has no /api/v1/coordination refs — code-level
+  adoption: none yet (Agents 2/3 PENDING, Agent 4 discussion-level).
+- API 165/165; web 23/23 + tsc; E2E 22/22 live @10:57:40Z.
+
+## Done — M20 (integration readiness & operational reliability)
+- Contract-consistency audit (tests/test_m20_contract_consistency.py, 8):
+  /contract descriptor verified against actual routes/DTOs/state machine;
+  drift fixed (TaskIn ttl_s?/requires_approval?, approve|reject split,
+  14 canonical states). Reliability edges: approval expiry 410, TTL expiry
+  via sweep, stale-agent heartbeat recovery, repeated duplicate-webhook
+  idempotency (1 task after 3 deliveries).
+- Live: contract_check 27/27 @11:12:05Z; E2E 22/22 @11:12:08Z; API 173/173;
+  web 23/23 + tsc. PR heads unchanged (f56447c/3462a8b/1a46f70); no
+  code-level adoption yet.
+
+## Done — M21 (first real cross-agent integration push)
+- Detected first code-level coordination references in an agent PR: PR #2
+  @744ccd3 apps/web/src/app/api/integrations/[...path]/route.ts (server-side
+  proxy for coordination reads, BFF invariants mirrored). Recorded as
+  read-only evidence in CONTRACT_ADOPTION.md; PR #4 comment posted.
+- Resolved Agent 4's flagged DTO mismatch: API_REFERENCE.md agent fields
+  corrected to wire (last_heartbeat/completed/failed/...); /contract
+  descriptor now includes AgentDTO; wire==descriptor pinned by test.
+- .env.example documents WEB_BFF_API_TOKEN / WEB_BFF_ENFORCE_SAME_ORIGIN /
+  CICC_OPS_TRUSTED_SINGLE_TENANT (shared BFF convention).
+- PR heads: #1 ce1b25e (still no coordination refs), #3 1a46f70 unchanged.
+  Agents 2/3 PENDING; Agent 2 remains primary TI owner (no Agent 6 takeover).
+- API 174/174; web 23/23 + tsc; contract_check 27/27 + E2E 22/22 live.
+
+## Done — M22 (verified cross-agent integration push)
+- PR #1 head reconciled to 8629c8f (live); scans: still no coordination refs
+  in any agent PR except PR #2's proxy. No new comments.
+- Agent 4 proxy declared surface verified LIVE (contract_check A4-proxy checks,
+  31/31 @11:34:10Z): /agents, /tasks?limit=100&state=QUEUED&..., /metrics,
+  /events?limit=100 — contract-compatible; actual Agent-4 execution still
+  UNVERIFIED (needs their live run evidence).
+- Heartbeat contract mismatch fixed: active_tasks?/meta? now accepted and
+  persisted (meta.heartbeat); descriptor + DTO test updated; regression test.
+- API 175/175; web 23/23 + tsc; E2E 22/22 live @11:34:17Z.
+
+## Done — M23 (lifecycle & agent-health reliability)
+- Defect fixed: dead_letter flag now clears when a task is revived to QUEUED
+  (previously dead_letter=true contradicted state=queued); regression test.
+- Agent health: explicit ACTIVE/STALE/UNAVAILABLE/UNKNOWN classification in
+  GET /agents (health field, descriptor updated, wire pinned); agent status
+  transitions audited to ops event log (heartbeat/deregister/stale sweep).
+- Audit consistency test: latest state event must equal persisted task state;
+  rejected transitions audited.
+- PR #6 (Agent 6 backup TI) opened @a221003 — recorded; PR#1 84fca76.
+  No coordination refs in any agent PR except PR#2 proxy code.
+- API 179/179; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M24 (coordination reliability, real integration push, hardening)
+- P0 concurrency defects fixed + proven under real threads
+  (tests/test_m24_concurrency.py, 6 tests, run repeatedly):
+  create_task IntegrityError race -> idempotent replay; transition() is now a
+  guarded compare-and-set UPDATE (atomic on SQLite+PG) — concurrent complete
+  applies exactly once, losers audited transition_rejected(concurrent);
+  report() uses transition's authoritative return; backoff monotonic + max
+  attempts dead-letter; TTL vs RUNNING-timeout distinct, no double-expire;
+  crash/restart recovery for intermediate states; idempotency across retry.
+- P1: docs/AGENT_HEALTH_MODEL.md (ACTIVE/STALE/UNAVAILABLE/UNKNOWN + transition
+  model + heartbeat!=Arena-session boundary); health badge in reference
+  dashboard (components/CoordinationView.tsx, lib/types.ts).
+- PR heads unchanged (84fca76/744ccd3/1a46f70/a221003); per-agent adoption
+  recorded in CONTRACT_ADOPTION.md; real cross-agent execution still NONE.
+- API 185/185; web 23/23 + tsc + build; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M25 (real cross-agent execution push + expanded concurrency)
+- Approval decide race fixed (guarded compare-and-set; loser -> 409).
+- Threaded SQLite tests (test_m25_concurrency.py, 4, repeated stable):
+  concurrent webhook duplicate delivery (8x -> 1 event/1 task),
+  approve/reject race (exactly one decision), concurrent retry+fail with
+  audit consistency, sweep under load (10 requeued exactly once).
+- Real PostgreSQL concurrency tests (test_m25_pg_concurrency.py, 2):
+  concurrent duplicate submission -> 1 row; concurrent complete -> 1 winner.
+- PR #7 (Backup Agent 4 @6bf5f7f) adopts canonical AgentDTO in code —
+  AGENT-REPORTED adoption; execution UNVERIFIED. Controlled live-run evidence
+  request posted on PR #4.
+- API 191/191; PG 9/9; web 23/23 + tsc; contract_check 31/31 + E2E 22/22 live.
+
+## Done — M26 (real frontend-originated execution + hardening)
+- Approved BFF write path implemented (single route POST
+  /api/v1/coordination/tasks; WEB_BFF_ALLOW_COORD_WRITE + separate server-only
+  WEB_BFF_WRITE_TOKEN; DTO allowlist; server idempotency_key; client auth
+  stripped) — bff.mjs + route.ts + 5 new tests (28/28) + dashboard button.
+- LIVE VERIFIED end-to-end: POST via :3000 BFF -> 201 task api-5a6a79bfa8d5,
+  DB row w/ idempotency_key bff-8e30e5e7-..., /tasks/{id} + /events via BFF;
+  negatives 403/422/stripped-auth. Reply ACCEPT posted to Backup Agent 4 (PR#7).
+- PG concurrency suite extended (5): webhook duplicate race on PG,
+  approval expiry vs decide race, concurrent sweep requeue (no double).
+- PR#7 head reconciled to 3222937; PR#6 d523ee0. e2e updated for write path
+  (24/24 live).
+- API 194/194; PG 12/12; web 28/28 + tsc + build.
+
+## In progress / next (priority)
+1. Real RabbitMQ verification + broker delivery loop — environment-blocked here (no Docker; egress allowlist); run `VERIFY_RABBITMQ=1 bash scripts/validate_compose.sh` where Docker exists; attach evidence to PR #4.
+2. Agent 4 heartbeat/task contract confirmation (PR #4 comment + issue #5).
+3. Tenant isolation execution after owner DB-model decision (docs/TENANT_ISOLATION_PLAN.md).
+4. Retry backoff policy (CICC_COORD_RETRY_BACKOFF_S) + prefetch=1 runbook note.
+5. Webhook secret rotation + timestamp freshness check.
+6. Merge-time apps/ops/* reorg per strategy doc.
+
+## Blocked / needs owner
+- Outbound notification channels (owner authorization required; adapters disabled).
+- Shared DB vs read-only replica for platform auth (owner decision; recommendation in TENANT_ISOLATION_PLAN.md).
+- Destructive/shared migrations: never without approval.
+
+- [x] M28 (2026-11-05T13:00Z): PR#7 EXECUTED→VERIFIED shared-env (api-6387d0386482); dead_letter dup-event fix; PG recovery suite 6 (PG 20); /health + /tasks/{id}/trace; safe PR-body script. 205/205 API, 31/31 contract, 24/24 e2e.
+
+- [x] M28-cont (2026-11-05T13:11Z): delivery-lease recovery (sweep recovered_abandoned) + 2 PG tests. 207/207 API, 22 PG, web 31/31, contract 31/31, e2e 24/24.
+
+- [x] M29 (2026-11-05T13:19Z): contract amendment flow (amendments.py + endpoints + PG race test); live AMD-001 pending. 209/209 API, 23 PG, contract 31/31, e2e 24/24.
+
+- [x] M29-cont (2026-11-05T13:23Z): health last_operations + dashboard health panel. 210/210 API, web 31/31, contract 31/31, e2e 24/24.
+
+- [x] M29-cont2 (2026-11-05T13:29Z): PG progress-vs-complete race (PG 24); PR#7 @716a92b re-verified shared-env. API 211/211.
+
+- [x] M30 (2026-11-05T13:50Z): amendment lifecycle hardening + PR#7 @5f502a4 re-verify. API 212/212, PG 24, contract 31/31, e2e 24/24, web 31/31.
+
+- [x] M30-cont (2026-11-05T13:52Z): contract_governance in /health + BFF boundary regressions. API 213/213, web 34/34, PG 24, contract 31/31, e2e 24/24.
+
+- [x] M31 (2026-11-05T14:03Z): amendment PG race suite + self-approval enforcement + PR#7 @4d5b071 re-verify. API 221/221, PG 32, contract 31/31, e2e 24/24, web 34/34.
+
+- [x] M32 (2026-11-05T14:15Z): +4 amendment PG race tests + refs-table fix (PG 36, API 225); security-design + MVP-readiness docs; PR#7 @fb500a4 re-verified. contract 31/31, e2e 24/24, web 34/34.
+
+- [x] M33 (2026-11-05T14:54Z): +2 PG races (PG 38), BFF idempotency header, MVP sandbox trial 23/23, integration map. API 227/227, web 35/35, contract 31/31, e2e 24/24.
+
+- [x] M34: cross-domain sandbox trial 32/32 (scripts/cross_domain_trial.py); PG same-task_id race (PG 39, API 228); adoption stages CONSUMED/END_TO_END_VERIFIED.
+
+- [x] M35: domain gateway + provenance + honest not-mounted; idempotency_key unique constraint fix; PG invoke race (PG 40, API 231); docs corrected to four-role arrangement; AMD-002 proposed pending.
+- [x] M36: logical backup/restore/verify + tested (SQLite+PG) + DISASTER_RECOVERY.md; release-readiness/traceability refreshed; backlog four-role corrections.
+- [x] M37: domain gateway lifecycle (mount from module read-only / deregister / status), evidence-based 7-state health (NOT_MOUNTED..UNKNOWN), retry+timeout with same idempotency key, sanitized errors, persisted stats (coord_domain_stats), state-chain fix QUEUED->COMPLETED; tests 7/7 (API 241/241, PG 41/41); integration matrix + frontend contracts docs; four-agent model confirmed (Agent 2 AVAILABLE). AMD-003 proposed pending.
+- [x] M38: Agent 2 HEAD reconciled to 4f1776f (GitHub API; confirmation requested on PR #4); TI contract comparison + read-only adapter (domain_adapters/threat_intel_adapter.py) verified vs real PR-head api.py (M40 trial 23/23); M40 integration trial script (lifecycle/invoke/provenance/trace/duplicate/retry/timeout/DEGRADED/recovery/health/BFF/deregister + honest readiness); AMD-003 doc with owner-approval split; tests 3/3 (API 244/244).
+- [x] M38b/M39: gateway hardening (consecutive_failures, strict response validation, restart-persistent domain stats), TI adapter hardened, VI adapter added; real PR-head TI (4f1776f) + VI (5215e31) modules executed read-only via gateway (sandbox-labeled); hardening tests 9/9 (API 253/253, PG 41/41); M40 trial 23/23; restart persistence verified live.
