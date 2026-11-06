@@ -5,6 +5,6 @@
 - PR #7 BFF write flow VERIFIED by Agent 1 (read-only, shared sandbox) @ 3736e74b, 716a92b, 5f502a4, fb500a4; head now 63a6064 (code markers present; live re-verify scheduled).
 - AMD-001 PENDING — owner-reserved; agents may only attach recommendations/evidence. Effective contract version 1.0. Self-approval prohibited server-side.
 - Open PRs: #1 84fca769, #2 744ccd35, #3 1a46f704, #4 (this branch), #6 02616bb5, #7 63a6064, #8 8e8b1c62. None of #1/#2/#3/#6/#7/#8 touch apps/api.
-- Roles: Agent 2 UNAVAILABLE (no tasks until explicit owner return signal); Agent 6 = active TI backup; Replacement Agent 3 independent on PR #8 stacked on #1; Backup Agent 4 full frontend takeover on #7; Agent 5 strictly read-only; Agent 1 = coordination/health/ops/verification.
+- Roles: Agent 2 UNAVAILABLE (no tasks until explicit owner return signal); Agent 6 INACTIVE (four-role arrangement; Agent 2 TI pending explicit availability confirmation); Replacement Agent 3 independent on PR #8 stacked on #1; Backup Agent 4 full frontend takeover on #7; Agent 5 strictly read-only; Agent 1 = coordination/health/ops/verification.
 - PR #2 vs #7 merge ordering = owner decision.
 - Next-day plan: docs/NEXT_DAY_EXECUTION_PLAN.md (corrected).

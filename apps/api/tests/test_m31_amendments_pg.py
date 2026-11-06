@@ -286,3 +286,30 @@ def test_pg_effective_version_under_concurrent_accepts(pg_app):
     c1 = pg_app.get("/api/v1/coordination/contract", headers=R).json()
     c2 = pg_app.get("/api/v1/coordination/contract", headers=R).json()
     assert c1["version"] == c2["version"] == "1.10"  # deterministic
+
+
+def test_pg_concurrent_domain_invoke_single_execution(pg_app):
+    """M35 real-PG race: 8 threads invoke the same domain kind with the SAME
+    idempotency_key — the handler executes exactly once; one task row."""
+    from app.coordination import domains
+    calls = []
+
+    def handler(payload, task):
+        calls.append(1)
+        return {"result": {"ok": True}, "provenance": {"source": "pg-fixture", "produced_at": "2026-11-06T06:00:00Z"}}
+
+    domains.register_domain("vuln_intel", handler, version="0.0-pg-fixture", source_ref="test-only")
+    try:
+        body = {"payload": {"x": 1}, "idempotency_key": "pg-dom-ik"}
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            rs = list(ex.map(lambda _: pg_app.post("/api/v1/coordination/domains/vuln_intel/invoke", json=body, headers=W), range(8)))
+        codes = [r.status_code for r in rs]
+        assert set(codes) <= {200, 201}, codes
+        assert codes.count(201) == 1 and codes.count(200) == 7
+        assert len(calls) == 1, f"handler executed {len(calls)} times"
+        with ops.SessionLocal() as s:
+            n = len(s.execute(select(models.CoordinationTask).where(
+                models.CoordinationTask.idempotency_key == "pg-dom-ik")).scalars().all())
+        assert n == 1
+    finally:
+        domains.unregister_domain("vuln_intel")

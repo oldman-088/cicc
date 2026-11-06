@@ -18,6 +18,7 @@ Reads honor CICC_OPS_READ_TOKEN when set; writes honor CICC_OPS_WRITE_TOKEN
 """
 import json
 import os
+import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -26,7 +27,7 @@ from sqlalchemy import select
 
 from app import models, ops
 from app.ratelimit import read_token_dependency, require_write_token, write_rate_limit_dependency
-from . import agents as agent_registry, amendments
+from . import agents as agent_registry, amendments, domains
 from . import approvals, contract, github_sync, handoff, registry, routing, webhook
 
 router = APIRouter(prefix="/api/v1/coordination", tags=["coordination"])
@@ -42,6 +43,7 @@ class RuleIn(BaseModel):
 
 class ReportIn(BaseModel):
     result: str | None = Field(default=None, max_length=4000)
+    provenance: dict | None = None  # M35: additive — domain outputs carry provenance (source, produced_at, ...)
 
 
 class TaskIn(BaseModel):
@@ -286,6 +288,69 @@ def list_tasks(_gate: None = Depends(read_token_dependency), state: str | None =
                limit: int = Query(100, ge=1, le=500)):
     with ops.SessionLocal() as s:
         return {"tasks": registry.list_tasks(s, state, agent, kind, limit, dead_letter)}
+
+
+@router.get("/domains")
+def list_domains(_gate: None = Depends(read_token_dependency)):
+    """M35: mounted domain handlers (honest: empty until a domain mounts)."""
+    return {"domains": domains.mounted_domains(),
+            "note": "empty list = no domain API mounted in this deployment"}
+
+
+@router.post("/domains/{kind}/invoke", status_code=201)
+def invoke_domain(kind: str, body: dict, _gate: None = Depends(read_token_dependency),
+                  authorization: str | None = Header(default=None)):
+    """M35: coordination-side domain consumption. Creates a task of the domain
+    kind, invokes the mounted handler (if any), and persists result +
+    provenance + trace events. API write-token protected; the browser/BFF write
+    path stays limited to POST /tasks (owner-approved route)."""
+    require_write_token(authorization)
+    payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    idempotency_key = body.get("idempotency_key") or None
+    task_id = body.get("task_id") or f"dom-{kind}-{uuid.uuid4().hex[:12]}"
+    with ops.SessionLocal() as s:
+        pre = None
+        if idempotency_key:
+            from sqlalchemy import select as _sel
+            pre = s.execute(_sel(models.CoordinationTask).where(
+                models.CoordinationTask.idempotency_key == idempotency_key)).scalar_one_or_none()
+        if pre is not None:
+            s.commit()
+            return JSONResponse(status_code=200, content={"task_id": pre.task_id, "duplicate": True,
+                                                           "state": registry.normalize_state(pre.state)})
+        t = registry.create_task(s, task_id=task_id, event_id=None, source="domain_gateway",
+                                 kind=kind, repo=None, pr_ref=None, branch_ref=None,
+                                 title=body.get("title") or f"domain invoke {kind}",
+                                 payload=payload, idempotency_key=idempotency_key)
+        if not getattr(t, "_created", True):
+            # M35: lost the concurrent-create race — replay, never re-execute
+            s.commit()
+            return JSONResponse(status_code=200, content={"task_id": t.task_id, "duplicate": True,
+                                                           "state": registry.normalize_state(t.state)})
+        if not domains.is_mounted(kind):
+            registry.record_event(s, task_id, "domain_not_mounted", f"kind={kind}")
+            s.commit()
+            raise HTTPException(status_code=409, detail=f"domain_not_mounted: {kind}")
+        try:
+            out = domains.invoke(kind, payload, task=t)
+        except domains.DomainError as e:
+            registry.record_event(s, task_id, "domain_error", str(e))
+            s.commit()
+            raise HTTPException(status_code=502, detail=str(e))
+        except domains.DomainInvalid as e:
+            registry.record_event(s, task_id, "domain_invalid", str(e))
+            s.commit()
+            raise HTTPException(status_code=422, detail=str(e))
+        # persist the real domain result with provenance
+        t.result = json.dumps({"result": out["result"], "provenance": out["provenance"]})
+        registry.record_event(s, task_id, "domain_result",
+                              f"source={out['provenance'].get('source')} produced_at={out['provenance'].get('produced_at')}")
+        registry.transition(s, t, "QUEUED", "domain gateway queued")
+        registry.transition(s, t, "COMPLETED", "domain result persisted")
+        s.commit()
+        return {"task_id": task_id, "kind": kind, "state": "COMPLETED",
+                "result": out["result"], "provenance": out["provenance"],
+                "idempotency_key": t.idempotency_key}
 
 
 @router.get("/health")

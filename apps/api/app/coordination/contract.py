@@ -71,7 +71,7 @@ def contract_v1() -> dict:
         "task_states": TASK_STATES,
         "dtos": {
             "TaskIn": ["task_id?", "idempotency_key?", "kind", "priority", "title?", "payload", "repo?", "pr_ref?", "branch_ref?", "owner?", "depends_on?", "timeout_s?", "ttl_s?", "requires_approval?"],
-            "ReportIn": ["result?"],
+            "ReportIn": ["result?", "provenance?"],
             "ProgressIn": ["percent", "note?"],
             "DecisionIn": ["decided_by", "note?"],
             "AgentRegisterIn": ["agent", "specialization?", "capabilities?", "version?", "meta?"],
@@ -89,7 +89,7 @@ def contract_v1() -> dict:
             "POST /contract/amendments/{id}/refs": ["refs[]"],
             "GET /health component": ["key", "status", "detail", "reasons"],  # keys incl. contract_governance (M30)
             "GET /health.last_operations": ["last_webhook_received", "last_github_sync_success", "last_github_sync_attempt", "last_task_event", "checked_at", "note"],
-            "GET /tasks/{id}/trace": ["task_id", "correlation.idempotency_key", "correlation.event_id", "state", "agent", "attempts", "dead_letter", "events[]", "deliveries[]", "approvals[]"],
+            "GET /tasks/{id}/trace": ["task_id", "correlation.idempotency_key", "correlation.event_id", "state", "agent", "attempts", "dead_letter", "result", "events[]", "deliveries[]", "approvals[]"],
             "TaskDTO (GET /tasks, /tasks/{id})": ["id", "task_id", "event_id", "source", "idempotency_key", "kind", "agent", "state", "priority", "repo", "pr_ref", "branch_ref", "title", "attempts", "result", "owner", "depends_on", "timeout_s", "expires_at", "dead_letter", "routing_explanation", "progress", "next_retry_at", "payload", "handoff", "created_at", "updated_at"],
             "AgentDTO (GET /agents)": ["agent", "specialization", "capabilities", "status", "stale", "health", "version", "meta", "last_heartbeat", "registered_at", "active_tasks", "completed", "failed", "retries", "by_state"],
         },
@@ -100,6 +100,9 @@ def contract_v1() -> dict:
         },
         "provenance": "every transition writes an audit event (actor, action, detail) visible via /events and /tasks/{id}/events; tasks carry correlation_id",
         "retry": "failed tasks are retried via POST /retry (retries counter) or sweep requeue; 409 on illegal transitions; clients should back off on 429",
-                "adoption_stages": "PROPOSED -> ACCEPTED -> IMPLEMENTED -> MOUNTED -> CONSUMED -> EXECUTED -> END_TO_END_VERIFIED (Agent 1 registry; CONSUMED = a consumer actively calls the endpoint, END_TO_END_VERIFIED = cross-domain sandbox/live trial green)",
+                "GET /domains": ["domains[]: kind, version, source_ref, mounted_at", "note"],
+                        "POST /domains/{kind}/invoke (API write-token only; BFF write path stays POST /tasks)": "body: payload, task_id?, idempotency_key?, title? -> 201 {task_id, state, result, provenance, idempotency_key} | 200 duplicate:true | 409 domain_not_mounted | 502 domain_error (sanitized) | 422 domain_invalid",
+            "ReportIn.provenance?": "additive (M35, proposed as AMD-002, pending owner): agent/domain-reported results may carry provenance persisted with the result and shown in /tasks/{id}/trace",
+            "adoption_stages": "PROPOSED -> ACCEPTED -> IMPLEMENTED -> MOUNTED -> CONSUMED -> EXECUTED -> END_TO_END_VERIFIED (Agent 1 registry; CONSUMED = a consumer actively calls the endpoint, END_TO_END_VERIFIED = cross-domain sandbox/live trial green)",
         "lease_recovery": "M28: POST /sweep re-queues ASSIGNED/DELIVERING/ACKNOWLEDGED tasks whose delivery lease elapsed (timeout_s or CICC_COORD_LEASE_S, default 600s) — worker crash/abandon recovery; reported in sweep response field recovered_abandoned; additive transition (QUEUED reachable from those states)",
     }

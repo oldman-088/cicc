@@ -27,9 +27,9 @@ W = os.environ.get("WRITE_TOKEN", "smoke-write")
 R = os.environ.get("READ_TOKEN", "smoke-read")
 
 DOMAINS = [
-    ("threat_intel", "agent-ti"),        # Agent 2 (unavailable) / Agent 6 backup domain
+    ("threat_intel", "agent-ti"),        # Agent 2 domain (Agent 2 UNAVAILABLE pending explicit confirmation; Agent 6 NOT active under four-role arrangement)
     ("vuln_intel", "agent-vi"),          # Replacement Agent 3 domain
-    ("frontend_e2e", "agent-frontend"),  # Backup Agent 4 domain
+    ("frontend_e2e", "agent-frontend"),  # Agent 4 domain (Backup Agent 4 INACTIVE under four-role arrangement)
 ]
 
 results = []
@@ -94,10 +94,16 @@ def main():
               and any(e["kind"].endswith("->COMPLETED") for e in tr.get("events", [])))
         check(f"[{kind}] trace: correlation + created + COMPLETED", ok)
 
-    # cross-domain health view
+    # cross-domain health view: the 3 trial domain agents must be ACTIVE in /agents
+    # (robust to other agents registered by earlier trials in the same deployment)
     st, h, _ = call(WEB, "GET", "/api/v1/coordination/health")
-    agents = next((c for c in h.get("components", []) if c["key"] == "agents"), {})
-    check("health shows 3 domain agents active", st == 200 and "3 active" in agents.get("detail", ""), agents.get("detail", ""))
+    agents_comp = next((c for c in h.get("components", []) if c["key"] == "agents"), {})
+    st, al, _ = call(API, "GET", "/api/v1/coordination/agents", token=R)
+    active = {a.get("agent") for a in al.get("agents", []) if a.get("health") == "ACTIVE"}
+    trial_agents = {agent for _, agent in DOMAINS}
+    check("health shows the 3 domain agents ACTIVE",
+          st == 200 and trial_agents <= active and agents_comp.get("status") in ("healthy", "degraded"),
+          f"health={agents_comp.get('detail', '')} active={sorted(active)}")
     st, m, _ = call(API, "GET", "/api/v1/coordination/metrics", token=R)
     check("metrics by_kind covers all 3 domains",
           st == 200 and all(k in m.get("by_kind", {}) for k, _ in DOMAINS), str(m.get("by_kind")))

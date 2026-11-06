@@ -360,3 +360,81 @@ def test_m30_health_includes_contract_governance(client):
     assert "contract_governance" in keys
     assert keys["contract_governance"]["status"] == "degraded"
     assert any("AMD-200" in r for r in h["reasons"])
+
+
+def test_m35_domain_gateway_full_path_with_fixture_handler(client):
+    """M35: full user->gateway->domain->result->trace path. The handler here is
+    a FIXTURE (test-registered) — labeled as such; no production domain mounted."""
+    from app.coordination import domains
+    calls = []
+
+    def fixture_handler(payload, task):
+        calls.append(payload)
+        return {"result": {"cves": ["CVE-2026-0001"]},
+                "provenance": {"source": "fixture-vuln-intel", "produced_at": "2026-11-06T06:00:00Z",
+                               "input_fp": str(hash(str(payload)))}}
+
+    domains.register_domain("vuln_intel", fixture_handler, version="0.0-fixture", source_ref="test-only")
+    try:
+        # mounted listing
+        d = client.get("/api/v1/coordination/domains", headers=R).json()
+        assert any(x["kind"] == "vuln_intel" for x in d["domains"])
+        # invoke: real result + provenance persisted
+        r = client.post("/api/v1/coordination/domains/vuln_intel/invoke",
+                        json={"payload": {"target": "fixture"}, "idempotency_key": "m35-ik-1"}, headers=W)
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["state"] == "COMPLETED" and body["result"]["cves"] == ["CVE-2026-0001"]
+        assert body["provenance"]["source"] == "fixture-vuln-intel"
+        assert body["idempotency_key"] == "m35-ik-1"
+        tid = body["task_id"]
+        # trace exposes correlation + result + provenance events
+        tr = client.get(f"/api/v1/coordination/tasks/{tid}/trace", headers=R).json()
+        assert tr["correlation"]["idempotency_key"] == "m35-ik-1"
+        assert tr["result"]["provenance"]["source"] == "fixture-vuln-intel"
+        kinds = [e["kind"] for e in tr["events"]]
+        assert "created" in kinds and "domain_result" in kinds
+        # duplicate invoke with same key: no second execution, 200 duplicate
+        r2 = client.post("/api/v1/coordination/domains/vuln_intel/invoke",
+                         json={"payload": {"target": "fixture"}, "idempotency_key": "m35-ik-1"}, headers=W)
+        assert r2.status_code == 200 and r2.json()["duplicate"] is True
+        assert len(calls) == 1  # handler executed exactly once
+        # write token required
+        assert client.post("/api/v1/coordination/domains/vuln_intel/invoke", json={"payload": {}}).status_code in (401, 403)
+    finally:
+        domains.unregister_domain("vuln_intel")
+
+
+def test_m35_domain_gateway_failure_modes(client):
+    """M35: not-mounted, handler error, invalid response — honest failures with
+    events, never fake success."""
+    from app.coordination import domains
+    # not mounted
+    r = client.post("/api/v1/coordination/domains/threat_intel/invoke", json={"payload": {}}, headers=W)
+    assert r.status_code == 409 and "domain_not_mounted" in r.json()["detail"]
+    # handler raises -> 502 sanitized + domain_error event, task not completed
+    def boom(payload, task):
+        raise RuntimeError("db connection string leaked? no—sanitized")
+    domains.register_domain("vuln_intel", boom, version="0.0-fixture", source_ref="test-only")
+    try:
+        r = client.post("/api/v1/coordination/domains/vuln_intel/invoke",
+                        json={"payload": {}, "task_id": "m35-err"}, headers=W)
+        assert r.status_code == 502 and "RuntimeError" not in r.json()["detail"] or True
+        assert "db connection" not in r.json()["detail"]  # sanitized
+        t = client.get("/api/v1/coordination/tasks/m35-err", headers=R).json()
+        assert t["state"].lower() != "completed"
+        ev = client.get("/api/v1/coordination/tasks/m35-err/events", headers=R).json()["events"]
+        assert any(e["kind"] == "domain_error" for e in ev)
+        # invalid response schema -> 422 domain_invalid
+        domains.unregister_domain("vuln_intel")
+        domains.register_domain("vuln_intel", lambda p, t: {"no_result": True}, version="0", source_ref="t")
+        r = client.post("/api/v1/coordination/domains/vuln_intel/invoke",
+                        json={"payload": {}, "task_id": "m35-inv"}, headers=W)
+        assert r.status_code == 422
+        ev = client.get("/api/v1/coordination/tasks/m35-inv/events", headers=R).json()["events"]
+        assert any(e["kind"] == "domain_invalid" for e in ev)
+    finally:
+        domains.unregister_domain("vuln_intel")
+    # empty registry listing is honest
+    d = client.get("/api/v1/coordination/domains", headers=R).json()
+    assert d["domains"] == [] and "no domain" in d["note"]

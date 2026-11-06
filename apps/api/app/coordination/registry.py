@@ -81,9 +81,11 @@ def create_task(s, *, task_id: str, event_id: str | None, source: str, kind: str
         if existing is not None:
             record_event(s, existing.task_id, "duplicate_idempotency_key", task_id)
             s.flush()
+            existing._created = False  # M35: signal replay to callers
             return existing
     t = s.execute(select(models.CoordinationTask).where(models.CoordinationTask.task_id == task_id)).scalar_one_or_none()
     if t is not None:
+        t._created = False
         return t
     now = utcnow()
     t = models.CoordinationTask(
@@ -110,8 +112,10 @@ def create_task(s, *, task_id: str, event_id: str | None, source: str, kind: str
         if existing is not None:
             record_event(s, existing.task_id, "duplicate_idempotency_key", task_id)
             s.flush()
+            existing._created = False
             return existing
         raise
+    t._created = True
     record_event(s, task_id, "created", f"kind={kind} repo={repo} pr={pr_ref} requires_approval={requires_approval}")
     if requires_approval:
         transition(s, t, "WAITING_FOR_APPROVAL", "requires approval per policy")
@@ -454,6 +458,17 @@ def health(s) -> dict:
             "last_operations": last_ops, "at": _iso(now)}
 
 
+def _parsed_result(raw):
+    """M35: task result may be a plain string or JSON {result, provenance}."""
+    if not raw:
+        return None
+    try:
+        v = json.loads(raw)
+        return v if isinstance(v, dict) else {"result": v}
+    except Exception:
+        return {"result": raw}
+
+
 def trace(s, task_id: str) -> dict | None:
     """M28 P1: full correlation trace for one task — identifiers, lifecycle
     events (chronological), delivery attempts, approval decision. Read-only."""
@@ -479,6 +494,7 @@ def trace(s, task_id: str) -> dict | None:
         "agent": t.agent,
         "attempts": t.attempts,
         "dead_letter": bool(t.dead_letter),
+        "result": _parsed_result(t.result),
         "events": [{"id": e.id, "at": _iso(e.at), "kind": e.kind, "detail": e.detail} for e in evs],
         "deliveries": [{"id": d.id, "channel": d.channel, "queue": d.queue, "message_id": d.message_id,
                         "status": d.status, "attempt": d.attempt, "at": _iso(d.at)} for d in dls],

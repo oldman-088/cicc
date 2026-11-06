@@ -6,8 +6,7 @@ no modifications of other agents' branches/PRs.
 
 ## Correction log (owner directives applied)
 1. **Agent 2 is UNAVAILABLE** — no implementation tasks are assigned to Agent 2 until an
-   explicit return signal from the owner. **Agent 6 is the active Threat Intelligence
-   backup and continues TI work independently.**
+   explicit return signal from the owner. **Agent 2 remains UNAVAILABLE until explicit owner confirmation; Agent 6 is NOT active under the current four-role arrangement — no tasks assigned to Agent 6.**
 2. **AMD-001 is owner-reserved** — agents may attach technical recommendations/evidence
    only; no agent may accept, reject, or activate it. It stays `pending`.
 3. **PR #2 vs PR #7 merge ordering is an owner decision** — no agent merges, rewrites,
@@ -35,7 +34,7 @@ Open PRs (head SHAs):
 | #2 | arena/09952395-cicc | 744ccd35 | Agent 4 original frontend |
 | #3 | arena/93315d2c-cicc | 1a46f704 | Agent 2 TI (**Agent 2 unavailable — no new tasks**) |
 | #4 | arena/961971ed-cicc | 59c28fa | **Agent 1 (this branch)** |
-| #6 | arena/28e50255-cicc | 02616bb5 | Agent 6 — ACTIVE TI backup |
+| #6 | arena/28e50255-cicc | 02616bb5 | Agent 6 — INACTIVE under current four-role arrangement |
 | #7 | arena/6a028355-cicc | 63a6064 | Backup Agent 4 frontend takeover |
 | #8 | arena/259e5471-cicc | 8e8b1c62 | Replacement Agent 3 VI, stacked on #1 |
 
@@ -70,7 +69,7 @@ do not touch apps/api (read-only diff verified).
 - **Parallel:** yes with all other agents (disjoint branches).
 - **Estimate:** Agent 1 scope ≈ 90% complete.
 
-### Agent 6 — ACTIVE Threat Intelligence backup (PR #6, `02616bb5`) — Agent 2 unavailable
+### Agent 6 — INACTIVE (PR #6, `02616bb5`) — no tasks assigned under the current four-role arrangement
 - Done (per PR #6 body): Domain B reports, relationship analysis, conflict
   resolution, observability, OSINT P1-04, persistence P3-01/02/03.
 - **Next-day tasks (concrete):**

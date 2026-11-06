@@ -270,7 +270,7 @@ class CoordinationTask(Base):
     depends_on = Column(Text, nullable=True)               # JSON list of task_ids
     timeout_s = Column(Integer, nullable=True)             # max runtime once RUNNING
     expires_at = Column(DateTime(timezone=True), nullable=True)  # task TTL
-    idempotency_key = Column(String(128), nullable=True, index=True)
+    idempotency_key = Column(String(128), nullable=True, index=True, unique=True)  # M35: DB-enforced dedup (multiple NULLs allowed)
     dead_letter = Column(Boolean, default=False, nullable=False)
     routing_explanation = Column(Text, nullable=True)      # why this agent was chosen
     progress = Column(Integer, default=0, nullable=False)  # 0..100 structured progress (M8)
