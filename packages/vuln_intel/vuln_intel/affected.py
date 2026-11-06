@@ -44,6 +44,7 @@ from .versions import VersionScheme, compare, scheme_for_ecosystem
 
 __all__ = [
     "AffectedAssessment",
+    "ExclusionSide",
     "Verdict",
     "VersionRange",
     "assess_affected",
@@ -60,6 +61,18 @@ class Verdict(str, Enum):
     @property
     def is_positive(self) -> bool:
         return self is Verdict.AFFECTED
+
+
+
+class ExclusionSide(str, Enum):
+    """Which side of an affected range a NOT_AFFECTED version fell outside of."""
+
+    #: Below the range: the installed version predates the vulnerability.
+    BEFORE = "before"
+    #: At or above the fixed version: the installed version already contains the fix.
+    AFTER = "after"
+    #: Refused or inconsistent input meant no comparison could be relied on.
+    UNKNOWN = "unknown"
 
 
 _ECOSYSTEM_ALIASES = {
@@ -202,8 +215,14 @@ def _in_interval(
     fixed: str | None,
     last_affected: str | None,
     scheme: VersionScheme,
-) -> bool | None:
-    """``True``/``False`` when decidable, ``None`` when the interval can't be read."""
+) -> bool | ExclusionSide | None:
+    """``True`` inside, an :class:`ExclusionSide` outside, ``None`` if unreadable.
+
+    Returning the side rather than a bare ``False`` is what lets the VEX adapters say
+    *why* a version is not affected. A boolean was enough to decide the verdict and not
+    enough to explain it, and "not affected" is the one verdict that removes work from a
+    consumer's queue.
+    """
     # OSV uses the literal "0" for "since the beginning of time"; no ecosystem
     # has a real version below it, so the lower bound is treated as open.
     if introduced is not None and introduced not in ("0", ""):
@@ -211,19 +230,19 @@ def _in_interval(
         if cmp_intro is None:
             return None
         if cmp_intro < 0:
-            return False
+            return ExclusionSide.BEFORE
     if fixed is not None:
         cmp_fixed = compare(version, fixed, scheme)
         if cmp_fixed is None:
             return None
         if cmp_fixed >= 0:
-            return False
+            return ExclusionSide.AFTER
     if last_affected is not None:
         cmp_last = compare(version, last_affected, scheme)
         if cmp_last is None:
             return None
         if cmp_last > 0:
-            return False
+            return ExclusionSide.AFTER
     return True
 
 
@@ -240,6 +259,17 @@ class AffectedAssessment:
     fixed_version: str | None
     reasons: tuple[str, ...]
     advisory_ids: tuple[str, ...] = ()
+    #: Which side of the published range excluded this version, when the verdict is
+    #: NOT_AFFECTED. ``None`` for any other verdict, and for a NOT_AFFECTED that came
+    #: from an unusable range rather than a comparison.
+    #:
+    #: This exists because "not affected" is three different statements. A version
+    #: *below* the affected range is a version that predates the vulnerability; one
+    #: *after* it is patched. OpenVEX needs exactly that distinction in its
+    #: ``justification`` field, and CycloneDX VEX consumers use it to decide whether to
+    #: take a patch. Collapsing both into a single "not affected" gave a downstream
+    #: consumer no way to tell "you are safe" from "you need to upgrade anyway".
+    excluded_by: ExclusionSide | None = None
 
     @property
     def remediation(self) -> str | None:
@@ -262,6 +292,7 @@ class AffectedAssessment:
             "remediation": self.remediation,
             "reasons": list(self.reasons),
             "advisory_ids": list(self.advisory_ids),
+            "excluded_by": self.excluded_by.value if self.excluded_by else None,
         }
 
 
@@ -340,6 +371,7 @@ def assess_affected(
 
     saw_decidable = False
     fixed_version: str | None = None
+    excluded_by: ExclusionSide | None = None
     for pkg in items:
         if pkg.versions and _explicit_match(pkg.versions, version):
             fixed = pkg.fixed
@@ -366,7 +398,13 @@ def assess_affected(
                     )
                     continue
                 saw_decidable = True
-                if outcome:
+                if isinstance(outcome, ExclusionSide):
+                    # Recorded from the *last* range that excluded the version. Honest
+                    # for the single-range case that dominates real advisories; for a
+                    # version below one range and above another the reason text stays
+                    # authoritative and this only informs the VEX justification.
+                    excluded_by = outcome
+                else:
                     return AffectedAssessment(
                         Verdict.AFFECTED, name, eco, version, scheme.value,
                         _describe(introduced, fixed, last_affected),
@@ -384,6 +422,7 @@ def assess_affected(
     return AffectedAssessment(
         Verdict.NOT_AFFECTED, name, eco, version, scheme.value, None, fixed_version,
         ("outside every published affected range", *reasons[-2:]),
+        excluded_by=excluded_by,
     )
 
 

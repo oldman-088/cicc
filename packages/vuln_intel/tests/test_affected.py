@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from vuln_intel.affected import (
+    ExclusionSide,
     Verdict,
     _range_from_package,
     assess_affected,
@@ -554,3 +555,85 @@ class TestRubyGemsOrdering:
             packages, ecosystem="RubyGems", name="rails", version="6.1.7.1.rc1"
         )
         assert result.verdict is Verdict.AFFECTED
+
+
+class TestExclusionSideIsRecorded:
+    """Which side of a range excluded a version is a different fact from exclusion.
+
+    It was added for the OpenVEX adapter, which must justify ``not_affected`` from a
+    fixed enumeration: "the code was never here" and "the fix is already here" are
+    different justifications, and only one of them is available to us in each case.
+    """
+
+    def test_below_the_range_is_before(self):
+        packages = _advisory(
+            [
+                {
+                    "package": {"ecosystem": "npm", "name": "lodash"},
+                    "ranges": [
+                        {"type": "SEMVER", "events": [{"introduced": "4.17.0"}, {"fixed": "4.17.21"}]}
+                    ],
+                }
+            ]
+        )
+        result = assess_affected(packages, ecosystem="npm", name="lodash", version="4.16.0")
+        assert result.verdict is Verdict.NOT_AFFECTED
+        assert result.excluded_by is ExclusionSide.BEFORE
+
+    def test_at_the_fix_is_after(self):
+        packages = _advisory(
+            [
+                {
+                    "package": {"ecosystem": "npm", "name": "lodash"},
+                    "ranges": [
+                        {"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "4.17.21"}]}
+                    ],
+                }
+            ]
+        )
+        result = assess_affected(packages, ecosystem="npm", name="lodash", version="4.17.21")
+        assert result.excluded_by is ExclusionSide.AFTER
+
+    def test_affected_has_no_exclusion_side(self):
+        packages = _advisory(
+            [
+                {
+                    "package": {"ecosystem": "npm", "name": "lodash"},
+                    "ranges": [
+                        {"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "4.17.21"}]}
+                    ],
+                }
+            ]
+        )
+        result = assess_affected(packages, ecosystem="npm", name="lodash", version="4.17.20")
+        assert result.verdict is Verdict.AFFECTED
+        assert result.excluded_by is None
+
+    def test_unknown_has_no_exclusion_side(self):
+        packages = _advisory(
+            [
+                {
+                    "package": {"ecosystem": "unknown-ecosystem", "name": "thing"},
+                    "ranges": [{"type": "GIT", "events": [{"introduced": "0"}]}],
+                }
+            ]
+        )
+        result = assess_affected(
+            packages, ecosystem="unknown-ecosystem", name="thing", version="1.0"
+        )
+        assert result.verdict is Verdict.UNKNOWN
+        assert result.excluded_by is None
+
+    def test_it_survives_as_dict(self):
+        packages = _advisory(
+            [
+                {
+                    "package": {"ecosystem": "npm", "name": "lodash"},
+                    "ranges": [
+                        {"type": "SEMVER", "events": [{"introduced": "4.17.0"}, {"fixed": "4.17.21"}]}
+                    ],
+                }
+            ]
+        )
+        result = assess_affected(packages, ecosystem="npm", name="lodash", version="4.16.0")
+        assert result.as_dict()["excluded_by"] == "before"
