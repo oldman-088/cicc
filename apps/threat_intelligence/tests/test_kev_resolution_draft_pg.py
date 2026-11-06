@@ -26,10 +26,11 @@ def args(inspection):
 def test_draft_history_reproducibility_idempotency_and_preserved_bytes(db,inspection):
     old=verify_source_bytes(inspection['previous']);new=verify_source_bytes(inspection['candidate'])
     one=prepare_resolution(inspection,**args(inspection)); assert one==prepare_resolution(inspection,**args(inspection))
-    retry=prepare_resolution(inspection,**args(inspection),history=one.history)
+    head=json.loads(one.event_json)['event_sha256']
+    retry=prepare_resolution(inspection,**args(inspection),history=one.history,expected_history_head=head)
     assert retry.replayed and retry.history==one.history
     later=args(inspection);later['idempotency_key']=UUID(int=2);later['disposition']='request_source_recheck'
-    two=prepare_resolution(inspection,**later,history=one.history)
+    two=prepare_resolution(inspection,**later,history=one.history,expected_history_head=head)
     assert len(two.history)==2 and json.loads(two.event_json)['previous_event_sha256']==json.loads(one.event_json)['event_sha256']
     assert verify_source_bytes(inspection['previous'])==old and verify_source_bytes(inspection['candidate'])==new
     assert load_snapshot(db,origin=inspection['origin']).content_sha256==inspection['previous_sha256']
@@ -44,7 +45,7 @@ def test_denied_stale_tampered_and_unsupported_fail_closed(inspection):
     first=prepare_resolution(inspection,**args(inspection));bad=first.event_json.replace('fixture:evidence:1','fixture:evidence:0')
     with pytest.raises(ResolutionDraftError): prepare_resolution(inspection,**args(inspection),history=[bad])
     kw=args(inspection);kw['rationale']='different fixture'
-    with pytest.raises(ResolutionDraftError,match='idempotency'): prepare_resolution(inspection,**kw,history=first.history)
+    with pytest.raises(ResolutionDraftError,match='idempotency'): prepare_resolution(inspection,**kw,history=first.history,expected_history_head=json.loads(first.event_json)['event_sha256'])
     inspection['candidate']._source_bytes=b'broken fixture'
     with pytest.raises(ResolutionDraftError): prepare_resolution(inspection,**args(inspection))
 
@@ -52,3 +53,16 @@ def test_rationale_evidence_and_aware_time_required(inspection):
     for change in ({'rationale':' '},{'evidence_refs':[]},{'decided_at':datetime(2026,1,1)}):
         kw=args(inspection);kw.update(change)
         with pytest.raises(ResolutionDraftError): prepare_resolution(inspection,**kw)
+
+
+def test_optimistic_history_head_rejects_conflicting_concurrent_drafts(db,inspection):
+    """Simulate an external serializing store; planner alone has no CAS or persistence."""
+    from concurrent.futures import ThreadPoolExecutor
+    first=args(inspection);second=args(inspection);second['idempotency_key']=UUID(int=2);second['rationale']='EXPERIMENTAL_DEMO_DATA_ONLY other rationale'
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        proposals=list(pool.map(lambda kw:prepare_resolution(inspection,**kw),[first,second]))
+    assert proposals[0].history!=proposals[1].history  # two independent drafts, not commits
+    current=proposals[0].history
+    with pytest.raises(ResolutionDraftError,match='stale draft history head'):
+        prepare_resolution(inspection,**second,history=current,expected_history_head=None)
+    assert load_snapshot(db,origin=inspection['origin']).content_sha256==inspection['previous_sha256']

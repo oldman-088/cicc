@@ -45,7 +45,8 @@ def _history(history, identity):
 
 
 def prepare_resolution(inspection, *, expected_previous_sha256, expected_candidate_sha256, resolver,
-                       authorize, disposition, rationale, evidence_refs, decided_at, idempotency_key, history=()):
+                       authorize, disposition, rationale, evidence_refs, decided_at, idempotency_key, history=(),
+                       expected_history_head=None):
     """Build/replay a draft event; identity and authorization are injected, not trusted.
 
     Does not save history, mutate conflict/streams, alter active snapshots, or
@@ -80,6 +81,9 @@ def prepare_resolution(inspection, *, expected_previous_sha256, expected_candida
     conflict={'origin':inspection['origin'],'conflict_id':inspection['conflict_id'],'previous_snapshot_id':inspection['previous_snapshot_id'],
               'previous_sha256':expected_previous_sha256,'candidate_sha256':expected_candidate_sha256}
     parsed=_history(history,conflict)
+    actual_head=parsed[-1]['event_sha256'] if parsed else None
+    if expected_history_head != actual_head:
+        raise ResolutionDraftError('stale draft history head')
     request={'schema_version':'cicc.kev-resolution-draft/1','conflict':conflict,'resolver':resolver,
              'disposition':disposition,'rationale':rationale,'evidence_refs':refs,
              'decided_at':decided_at.astimezone(timezone.utc).isoformat(),'idempotency_key':key}

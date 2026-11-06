@@ -79,12 +79,17 @@ def import_sbom(raw: bytes, *, document_id: str, provenance: str, collected_at: 
                     _obj(entry,('license','expression'),'CycloneDX license')
                     if ('license' in entry)==('expression' in entry): raise SBOMError('ambiguous license')
                     if 'license' in entry:
-                        lic=_obj(entry['license'],('id',),'CycloneDX license identity'); expression=lic.get('id')
-                    else: expression=entry['expression']
-                    if not isinstance(expression,str) or not expression.strip(): raise SBOMError('invalid license expression')
-                    statements.append((ref,'license' if 'license' in entry else 'expression',expression))
+                        lic=_obj(entry['license'],('id','name'),'CycloneDX license identity')
+                        if ('id' in lic)==('name' in lic): raise SBOMError('ambiguous license identity')
+                        field='license' if 'id' in lic else 'license.name'
+                        statement=lic.get('id') if 'id' in lic else lic.get('name')
+                        expression=statement if 'id' in lic else None
+                    else:
+                        field='expression'; statement=entry['expression']; expression=statement
+                    if not isinstance(statement,str) or not statement.strip(): raise SBOMError('invalid license expression')
+                    statements.append((ref,field,statement))
                     licenses.append(LicenseEvidence(evidence_id=uuid5(NAMESPACE_URL,f'{digest}:{ref}:license:{i}'),expression=expression,
-                        collected_at=collected_at,provenance=prov,origin=origin))
+                        collected_at=collected_at,provenance=prov+'#license.name' if field=='license.name' else prov,origin=origin))
                 components.append(Component(bom_ref=ref,name=component['name'],version=component.get('version'),purl=component.get('purl'),licenses=licenses))
             known_refs={c.bom_ref for c in components}
             for dependency in _list(doc.get('dependencies',[]),10000,'dependencies'):
@@ -117,10 +122,17 @@ def import_sbom(raw: bytes, *, document_id: str, provenance: str, collected_at: 
                             expression=None if value in ('NOASSERTION','NONE') else value,collected_at=collected_at,
                             provenance=prov+'#'+field,origin=origin))
                 components.append(Component(bom_ref=ref,name=package['name'],version=package.get('versionInfo'),purl=purls[0] if purls else None,licenses=licenses))
+            known_refs={c.bom_ref for c in components}
             for relation in _list(doc.get('relationships',[]),10000,'relationships'):
                 _obj(relation,('spdxElementId','relationshipType','relatedSpdxElement'),'SPDX relationship')
-                if relation.get('relationshipType')!='DEPENDS_ON': raise SBOMError('unsupported SPDX relationship')
-                edges.append(Dependency(from_ref=relation['spdxElementId'],to_ref=relation['relatedSpdxElement']))
+                kind=relation.get('relationshipType'); left=relation['spdxElementId']; right=relation['relatedSpdxElement']
+                if kind=='DEPENDS_ON': edges.append(Dependency(from_ref=left,to_ref=right))
+                elif kind=='DEPENDENCY_OF': edges.append(Dependency(from_ref=right,to_ref=left))
+                elif kind=='DESCRIBES':
+                    if left!=doc.get('SPDXID') or right not in known_refs:
+                        raise SBOMError('unsupported SPDX document relationship')
+                    ignored.append('relationships.DESCRIBES')
+                else: raise SBOMError('unsupported SPDX relationship')
             fmt,version='SPDX','2.3'
         else: raise SBOMError('unsupported SBOM format or version')
         inv=Inventory(document_id=document_id,component_completeness='unknown',dependency_completeness='unknown',

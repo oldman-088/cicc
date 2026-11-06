@@ -70,3 +70,40 @@ def test_import_does_not_infer_vulnerability_from_component_identity():
         provenance='EXPERIMENTAL_DEMO_DATA_ONLY explicit link',collected_at=NOW,origin='EXPERIMENTAL_DEMO_DATA_ONLY').model_dump()]
     linked=quality_document(Inventory.model_validate(data),[evidence],[],as_of=NOW,max_observation_age=timedelta(days=1))
     assert linked['evidence']['assessments'][0]['linked_components'][0]['basis']=='analyst_declared'
+
+
+def test_spdx_reverse_dependency_and_document_describes_are_explicit():
+    d=spdx();d['relationships']=[{'spdxElementId':'SPDXRef-B','relationshipType':'DEPENDENCY_OF','relatedSpdxElement':'SPDXRef-A'},
+        {'spdxElementId':'SPDXRef-DOCUMENT','relationshipType':'DESCRIBES','relatedSpdxElement':'SPDXRef-A'}]
+    result=load(d)
+    assert [(e.from_ref,e.to_ref) for e in result.inventory.dependencies]==[('SPDXRef-A','SPDXRef-B')]
+    assert 'relationships.DESCRIBES' in result.ignored_fields
+    assert result.inventory.dependency_completeness=='unknown'
+
+
+def test_cyclonedx_license_name_remains_unknown_not_spdx_license():
+    d=cyclone();d['components'][0]['licenses']=[{'license':{'name':'Fixture private label'}}]
+    a=load(d);assert a.inventory.components[0].licenses[0].expression is None
+    assert ('a','license.name','Fixture private label') in a.license_statements
+
+
+@pytest.mark.parametrize('factory,field',[(cyclone,'bom-ref'),(spdx,'SPDXID')])
+def test_duplicate_and_missing_component_identity_rejected(factory,field):
+    d=factory(); key='components' if field=='bom-ref' else 'packages'
+    d[key].append(dict(d[key][0]))
+    with pytest.raises(SBOMError): load(d)
+    d=factory(); del d[key][0][field]
+    with pytest.raises(SBOMError): load(d)
+    d=factory();d[key][0][field]=' '
+    with pytest.raises(SBOMError): load(d)
+
+
+def test_provenance_digest_and_timestamp_track_original_bytes_without_fabrication():
+    from datetime import timedelta
+    d=cyclone();orig=load(d);d['components'][0]['version']='2';changed=load(d)
+    assert orig.source_sha256!=changed.source_sha256
+    assert orig.inventory.provenance.endswith('#sha256:'+orig.source_sha256)
+    assert orig.inventory.collected_at==NOW and orig.inventory.origin=='EXPERIMENTAL_DEMO_DATA_ONLY'
+    assert orig.inventory.components[0].licenses[0].collected_at==NOW
+    for bad in ('', ' '*3, 'x'*901):
+        with pytest.raises(SBOMError): import_sbom(raw(d),document_id='fixture',provenance=bad,collected_at=NOW,origin='EXPERIMENTAL_DEMO_DATA_ONLY')

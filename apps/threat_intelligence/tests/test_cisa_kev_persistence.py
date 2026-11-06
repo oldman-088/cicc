@@ -365,6 +365,9 @@ def test_versioned_inspection_document_is_read_only_and_json_reproducible(db):
     one=conflict_document(db,**kw); two=conflict_document(db,**kw)
     assert json.dumps(one,sort_keys=True)==json.dumps(two,sort_keys=True)
     assert one['schema_version']=='cicc.kev-conflict-summary/1'
+    assert one['origin']==before.origin and one['previous_sha256']==before.content_sha256
+    assert len(one['candidate_sha256'])==64 and len(one['candidate_blob_sha'])==40
+    assert one['release_at'] and one['previous_collected_at'] and one['candidate_collected_at']
     assert 'previous' not in one and 'candidate' not in one and one['observed_at'].endswith('+00:00')
     assert counts(db)==before_counts
     with pytest.raises(ValueError,match='unsupported'): conflict_document(db,**(kw|{'schema_version':'cicc.kev-conflict-summary/2'}))
