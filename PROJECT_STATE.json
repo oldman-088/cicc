@@ -1,104 +1,105 @@
 {
-  "schema": "cicc-project-state/1",
-  "updated": "2026-11-05",
-  "maintainer": "Agent 1 \u2014 Central Coordination & System Health/Operations",
-  "branch": "arena/961971ed-cicc",
-  "pr": 4,
-  "domains": {
-    "coordination": {
-      "status": "implemented+tested; live-verified vs api.github.com; broker delivery environment-blocked",
-      "components": [
-        "webhook (HMAC/replay/allowlist)",
-        "github api sync (LIVE)",
-        "task registry (14 states, audited)",
-        "agent registry",
-        "workload-aware explainable routing",
-        "approvals",
-        "delivery records",
-        "progress",
-        "DAG",
-        "sweep"
-      ],
-      "tests": "API 194/194 (12 real-PG incl. 5 PG-concurrency + 1 live-GitHub, 10 threaded SQLite); contract_check 31/31 live; E2E 24/24 live"
-    },
-    "ops": {
-      "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
-      "components": [
-        "health/metrics/alerts/maintenance/workers/tasks/system",
-        "escalation+flap",
-        "retention",
-        "platform-auth adapter (inert)"
-      ],
-      "tests": "included in 112/112; web 17/17 + tsc + build"
-    }
+ "schema": "cicc-project-state/1",
+ "updated": "2026-11-06",
+ "maintainer": "Agent 1 \u2014 Central Coordination & System Health/Operations",
+ "branch": "arena/961971ed-cicc",
+ "pr": 4,
+ "domains": {
+  "coordination": {
+   "status": "implemented+tested; live-verified vs api.github.com; broker delivery environment-blocked",
+   "components": [
+    "webhook (HMAC/replay/allowlist)",
+    "github api sync (LIVE)",
+    "task registry (14 states, audited)",
+    "agent registry",
+    "workload-aware explainable routing",
+    "approvals",
+    "delivery records",
+    "progress",
+    "DAG",
+    "sweep"
+   ],
+   "tests": "API 234/234 (incl. real-PG races + 1 live-GitHub); PG suite 41/41; web 35/35; contract 31/31; e2e 24/24; sandbox trials 23/23 + 32/32"
   },
-  "not_production_ready": [
-    "tenant isolation (plan only, owner decision)",
-    "real RabbitMQ broker verification (env-blocked)",
-    "outbound notifications (disabled until authorized)"
-  ],
-  "repo_rules": {
-    "never_push_main": true,
-    "never_self_merge": true,
-    "never_touch_other_branches": true
-  },
-  "milestones_done": [
-    "M1..M35"
-  ],
-  "contracts": "{'version': 'v1.0', 'doc': 'docs/INTEGRATION_CONTRACTS.md', 'confirmation': 'requested on PR #4, pending Agents 2/3/4', 'adoption': 'Agents 2/3/4: PENDING explicit confirmation (no replies as of 2026-11-05 10:10 UTC; no agent PR references /api/v1/coordination yet); v1.0 proposed, additive, unchanged \u2014 docs/CONTRACT_ADOPTION.md'} | M29: amendment workflow live (AMD-001 pending owner accept)",
-  "tenant_isolation": "decision doc only (docs/TENANT_ISOLATION_DECISION.md); awaiting owner; not production-ready",
-  "rabbitmq": "deprioritized per owner (M13-05); human-assisted delivery supported and honestly reported; live verification environment-blocked (no Docker)",
-  "bff": {
-    "status": "implemented+tested+live-verified",
-    "files": [
-      "apps/web/app/api/[...path]/route.ts",
-      "apps/web/lib/bff.mjs"
-    ],
-    "invariants": [
-      "no token in browser JS",
-      "no secrets in web storage",
-      "client auth headers stripped",
-      "writes 403 unless WEB_BFF_ALLOW_WRITES=1",
-      "same-origin enforcement optional",
-      "no token logging"
-    ],
-    "tests": "web 23/23 (6 BFF unit) + live :3000 checks"
-  },
-  "webhook_security": "HMAC+dedup+allowlist+rotation in force; no signed timestamp exists at GitHub (documented, not invented); remaining replay risk + mitigations in SECURITY_REVIEW.md \u00a7M14",
-  "e2e": {
-    "script": "scripts/e2e_check.py",
-    "last_run": "2026-11-05T10:28:12Z",
-    "result": "22/22 PASS",
-    "note": "agent-2/3 actors are simulated script submissions, NOT Arena sessions; BFF reads verified tokenless"
-  },
-  "master_prompt": {
-    "path": "README.md@main",
-    "version": "ULTIMATE MASTER PROMPT v1.0",
-    "commit": "ca8f82c",
-    "reconfirmed": "2026-11-05 (main unchanged @ ca8f82c)",
-    "alignment_doc": "docs/MASTER_PROMPT_ALIGNMENT.md"
-  },
-  "i18n": "en/ar parity 187/187 at every commit since M11 (M14 '188' was a report miscount; no key lost)",
-  "pr_heads_checked": {
-    "1": "84fca76",
-    "2": "744ccd3",
-    "3": "1a46f70",
-    "6": "d523ee0",
-    "7": "3222937",
-    "checked": "2026-11-05T12:25Z"
-  },
-  "adoption": {
-    "agent2": "PENDING (primary TI)",
-    "agent6": "PENDING (authorized backup TI, PR#6)",
-    "agent3": "PENDING (PR#1)",
-    "agent4": "PR#2 code-level reads, surface verified compatible",
-    "backup_agent4": "PR#7 @6bf5f7f adopts canonical AgentDTO in code (AGENT-REPORTED); execution UNVERIFIED"
-  },
-  "cross_agent_execution": "VERIFIED via PR#4 reference-dashboard BFF (task api-5a6a79bfa8d5); PR#7 Backup-Agent-4 component execution: UNVERIFIED | M27: Backup Agent 4 PR #7 EXECUTED = AGENT-REPORTED, LOCAL FIXTURE VERIFIED (comment @12:28:14Z, task api-be4338ee4efc); VERIFIED pending; idempotency_key now on task reads | M28: PR#7 @3736e74b VERIFIED by Agent 1 in shared sandbox env (task api-6387d0386482, key bff-e55f8476-\u2026); not production",
-  "bff_write_path": "APPROVED+IMPLEMENTED on PR#4 reference BFF: POST /api/v1/coordination/tasks only, WEB_BFF_ALLOW_COORD_WRITE=1 + WEB_BFF_WRITE_TOKEN, DTO allowlist, server idempotency_key; live VERIFIED 201 + persisted + events @2026-11-05T12:22Z",
-  "updated_at": "2026-11-06T06:05Z",
-  "last_commit": "9e97bc84cbdcd19cfc7c553c6658fdb11ef4d8f6",
-  "milestone_notes": {
-    "M27": "complete: idempotency_key on reads, BFF hardening 31/31, PG 14, traceability doc, 197/197 API, 31/31 contract, 24/24 e2e"
+  "ops": {
+   "status": "implemented+tested+live-smoked; rabbitmq broker verification environment-blocked (procedure committed)",
+   "components": [
+    "health/metrics/alerts/maintenance/workers/tasks/system",
+    "escalation+flap",
+    "retention",
+    "platform-auth adapter (inert)"
+   ],
+   "tests": "included in 112/112; web 17/17 + tsc + build"
   }
+ },
+ "not_production_ready": [
+  "tenant isolation (plan only, owner decision)",
+  "real RabbitMQ broker verification (env-blocked)",
+  "outbound notifications (disabled until authorized)"
+ ],
+ "repo_rules": {
+  "never_push_main": true,
+  "never_self_merge": true,
+  "never_touch_other_branches": true
+ },
+ "milestones_done": [
+  "M1..M36"
+ ],
+ "contracts": "{'version': 'v1.0', 'doc': 'docs/INTEGRATION_CONTRACTS.md', 'confirmation': 'requested on PR #4, pending Agents 2/3/4', 'adoption': 'Agents 2/3/4: PENDING explicit confirmation (no replies as of 2026-11-05 10:10 UTC; no agent PR references /api/v1/coordination yet); v1.0 proposed, additive, unchanged \u2014 docs/CONTRACT_ADOPTION.md'} | M29: amendment workflow live (AMD-001 pending owner accept)",
+ "tenant_isolation": "decision doc only (docs/TENANT_ISOLATION_DECISION.md); awaiting owner; not production-ready",
+ "rabbitmq": "deprioritized per owner (M13-05); human-assisted delivery supported and honestly reported; live verification environment-blocked (no Docker)",
+ "bff": {
+  "status": "implemented+tested+live-verified",
+  "files": [
+   "apps/web/app/api/[...path]/route.ts",
+   "apps/web/lib/bff.mjs"
+  ],
+  "invariants": [
+   "no token in browser JS",
+   "no secrets in web storage",
+   "client auth headers stripped",
+   "writes 403 unless WEB_BFF_ALLOW_WRITES=1",
+   "same-origin enforcement optional",
+   "no token logging"
+  ],
+  "tests": "web 23/23 (6 BFF unit) + live :3000 checks"
+ },
+ "webhook_security": "HMAC+dedup+allowlist+rotation in force; no signed timestamp exists at GitHub (documented, not invented); remaining replay risk + mitigations in SECURITY_REVIEW.md \u00a7M14",
+ "e2e": {
+  "script": "scripts/e2e_check.py",
+  "last_run": "2026-11-05T10:28:12Z",
+  "result": "22/22 PASS",
+  "note": "agent-2/3 actors are simulated script submissions, NOT Arena sessions; BFF reads verified tokenless"
+ },
+ "master_prompt": {
+  "path": "README.md@main",
+  "version": "ULTIMATE MASTER PROMPT v1.0",
+  "commit": "ca8f82c",
+  "reconfirmed": "2026-11-05 (main unchanged @ ca8f82c)",
+  "alignment_doc": "docs/MASTER_PROMPT_ALIGNMENT.md"
+ },
+ "i18n": "en/ar parity 187/187 at every commit since M11 (M14 '188' was a report miscount; no key lost)",
+ "pr_heads_checked": {
+  "1": "84fca76",
+  "2": "744ccd3",
+  "3": "1a46f70",
+  "6": "d523ee0",
+  "7": "3222937",
+  "checked": "2026-11-05T12:25Z"
+ },
+ "adoption": {
+  "agent2": "PENDING (primary TI)",
+  "agent6": "PENDING (authorized backup TI, PR#6)",
+  "agent3": "PENDING (PR#1)",
+  "agent4": "PR#2 code-level reads, surface verified compatible",
+  "backup_agent4": "PR#7 @6bf5f7f adopts canonical AgentDTO in code (AGENT-REPORTED); execution UNVERIFIED"
+ },
+ "cross_agent_execution": "VERIFIED via PR#4 reference-dashboard BFF (task api-5a6a79bfa8d5); PR#7 Backup-Agent-4 component execution: UNVERIFIED | M27: Backup Agent 4 PR #7 EXECUTED = AGENT-REPORTED, LOCAL FIXTURE VERIFIED (comment @12:28:14Z, task api-be4338ee4efc); VERIFIED pending; idempotency_key now on task reads | M28: PR#7 @3736e74b VERIFIED by Agent 1 in shared sandbox env (task api-6387d0386482, key bff-e55f8476-\u2026); not production",
+ "bff_write_path": "APPROVED+IMPLEMENTED on PR#4 reference BFF: POST /api/v1/coordination/tasks only, WEB_BFF_ALLOW_COORD_WRITE=1 + WEB_BFF_WRITE_TOKEN, DTO allowlist, server idempotency_key; live VERIFIED 201 + persisted + events @2026-11-05T12:22Z",
+ "updated_at": "2026-11-06T06:05Z",
+ "last_commit": "9e97bc84cbdcd19cfc7c553c6658fdb11ef4d8f6",
+ "milestone_notes": {
+  "M27": "complete: idempotency_key on reads, BFF hardening 31/31, PG 14, traceability doc, 197/197 API, 31/31 contract, 24/24 e2e"
+ },
+ "backup_restore": "DONE M36: scripts/backup_restore.py tested vs SQLite+PG; docs/DISASTER_RECOVERY.md"
 }

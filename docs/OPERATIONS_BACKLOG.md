@@ -322,7 +322,7 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
   race, sweep race on real PostgreSQL); SQLite threaded suite separate.
 - M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
-  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Four-role arrangement: Agent 1 coordination/ops; Agent 2 TI pending explicit availability; Replacement Agent 3 VI; Agent 4 frontend — Agent 6 INACTIVE (NOT a backup), Agent 5/Backup Agent 4 inactive,
   Backup Agent 4 frontend.
 - M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
@@ -590,7 +590,7 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
   race, sweep race on real PostgreSQL); SQLite threaded suite separate.
 - M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
-  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Four-role arrangement: Agent 1 coordination/ops; Agent 2 TI pending explicit availability; Replacement Agent 3 VI; Agent 4 frontend — Agent 6 INACTIVE (NOT a backup), Agent 5/Backup Agent 4 inactive,
   Backup Agent 4 frontend.
 - M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
@@ -861,7 +861,7 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
   race, sweep race on real PostgreSQL); SQLite threaded suite separate.
 - M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
-  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Four-role arrangement: Agent 1 coordination/ops; Agent 2 TI pending explicit availability; Replacement Agent 3 VI; Agent 4 frontend — Agent 6 INACTIVE (NOT a backup), Agent 5/Backup Agent 4 inactive,
   Backup Agent 4 frontend.
 - M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
@@ -1125,7 +1125,7 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
   race, sweep race on real PostgreSQL); SQLite threaded suite separate.
 - M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
-  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Four-role arrangement: Agent 1 coordination/ops; Agent 2 TI pending explicit availability; Replacement Agent 3 VI; Agent 4 frontend — Agent 6 INACTIVE (NOT a backup), Agent 5/Backup Agent 4 inactive,
   Backup Agent 4 frontend.
 - M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
@@ -1387,7 +1387,7 @@ Owner: Lead System Health & Operations Engineer. Updated at each milestone.
 - M26 P1: PG concurrency suite now 5 tests (webhook race, approval expiry
   race, sweep race on real PostgreSQL); SQLite threaded suite separate.
 - M26 P2: PR heads re-verified (PR#7=3222937, PR#6=d523ee0, ...); ownership:
-  Agent 2 primary TI, Agent 6 backup, Agent 3 on leave (replacement active),
+  Four-role arrangement: Agent 1 coordination/ops; Agent 2 TI pending explicit availability; Replacement Agent 3 VI; Agent 4 frontend — Agent 6 INACTIVE (NOT a backup), Agent 5/Backup Agent 4 inactive,
   Backup Agent 4 frontend.
 - M26 P7: master prompt re-verified README.md@main@ca8f82c v1.0 unchanged.
 - Regression: API 194/194 (12 real-PG + 1 live-GitHub); web 28/28 + tsc +
