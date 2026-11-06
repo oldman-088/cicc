@@ -190,23 +190,30 @@ RUBY_EOF
 
 printf '%s\n' "${versions[@]}" | ruby "${work_dir}/rubygems_vectors.rb" > "${work_dir}/rubygems.json"
 
+# The corpus is written out so the combine step can check completeness against what
+# was *declared*, not against what came back.
+printf '%s\n' "${versions[@]}" > "${work_dir}/corpus.txt"
+
 # -- combine ------------------------------------------------------------------
 mkdir -p "$(dirname "$out_file")"
-"${PYTHON:-python3}" - "${work_dir}/maven.json" "${work_dir}/rubygems.json" "$out_file" <<'PY_EOF'
+"${PYTHON:-python3}" - "${work_dir}/maven.json" "${work_dir}/rubygems.json" "$out_file" \
+  "${work_dir}/corpus.txt" <<'PY_EOF'
 import json
 import os
 import subprocess
 import sys
 from datetime import datetime, timezone
 
-maven_path, rubygems_path, out_path = sys.argv[1:4]
+maven_path, rubygems_path, out_path, corpus_path = sys.argv[1:5]
 maven = json.load(open(maven_path))
 rubygems = json.load(open(rubygems_path))
 
-#: Every version the corpus actually contains, taken from the parsed output rather
-#: than re-read from the shell, so there is one source of truth.
-corpus_set = {v for pair in maven["pairs"] for v in pair[:2]}
-corpus_set |= {v for pair in rubygems["pairs"] for v in pair[:2]}
+#: Every version that was piped into the runtimes. This is the only list that can prove
+#: a version was declared, because it comes from the declaration rather than from the
+#: answers. A version absent here was never asked about; a version asked about but
+#: absent from the output is a runtime fault, which the bucket check catches separately.
+with open(corpus_path, encoding="utf-8") as handle:
+    parsed_corpus = {row.strip() for row in handle if row.strip()}
 
 
 # ---- self-check -------------------------------------------------------------
@@ -256,8 +263,14 @@ for family, checks in SELF_CHECK.items():
 # I read that as the Java output not reaching its bucket, when the versions had simply
 # never been added. Check completeness explicitly, name it as its own failure, and
 # report the bucket sizes so a dead runtime cannot look like an empty corpus.
+# Only the *declared* corpus can be checked against itself. Looking for a version in
+# the parsed output can never prove it was declared: if the corpus never contained it,
+# there is nothing in the output to find, and the check silently passes. Exit code 127
+# in CI came from exactly that — a NameError on a helper I had deleted, while the
+# version lists themselves were fine. So compare against the shell's corpus, and keep
+# the parsed set for the separate per-bucket emptiness check below.
 declared = [v for family in SELF_CHECK.values() for pair in family for v in pair[:2]]
-missing_versions = sorted({v for v in declared if v not in corpus_set})
+missing_versions = sorted({v for v in declared if v not in parsed_corpus})
 if missing_versions:
     print("::error title=runtime-vector corpus incomplete::The self-check asserts pairs "
           "whose versions were never added to the corpus, so they cannot be evaluated: "
