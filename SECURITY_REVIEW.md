@@ -1,3 +1,5 @@
+> **Verification correction (2026-11-06):** The current checkout collects 96 tests (`venv/bin/python -m pytest -q --disable-warnings`), all passing offline. Earlier cumulative counts and claims of HTTP mounting, gateway integration, and enforced security are not substantiated by this run. The FastAPI router has no routes; gateway registration is simulated; the in-memory prototype lacks proven authentication, tenant isolation, persistence, and audit logging. Previous mock HTTP tests did not exercise the application and were removed. Live source ingestion was not verified. Treat historical claims below as unverified. See `P2_01_VERIFICATION_REPORT.md` for current status.
+
 # Security Review Documentation - Threat Intelligence Domain
 
 ## Project Overview
