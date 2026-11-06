@@ -47,10 +47,24 @@ VERSIONS_QUALIFIER: list[str] = [
 ]
 
 #: ``VERSIONS_NUMBER`` — strictly increasing, same all-pairs rule.
+#:
+#: Verbatim from ComparableVersionTest at maven-3.9.9. This list has now been wrong
+#: twice, in two different directions, which is worth recording:
+#:
+#: 1. it previously read ``"2.0", "2-1", "2.0.a", "2.0.0.a", ...`` — the order of
+#:    ``2.0.a`` and ``2-1`` was swapped, and ``"2.0.0.a"`` does not appear upstream at
+#:    all. The comparator happened to agree with the wrong order, so all 55 tests
+#:    passed while both were wrong.
+#: 2. correcting the comparator's sublist and normalize rules then failed *this* list,
+#:    because the list was the thing that was wrong.
+#:
+#: The lesson is the same one the SNAPSHOT defect taught: a hand-maintained corpus is
+#: only independent of the implementation if it is re-read from upstream. It is now
+#: copied character for character.
 VERSIONS_NUMBER: list[str] = [
-    "2.0", "2-1", "2.0.a", "2.0.0.a", "2.0.2", "2.0.123", "2.1.0", "2.1-a", "2.1b",
-    "2.1-c", "2.1-1", "2.1.0.1", "2.2", "2.123", "11.a2", "11.a11", "11.b2", "11.b11",
-    "11.m2", "11.m11", "11", "11.a", "11b", "11c", "11m",
+    "2.0", "2.0.a", "2-1", "2.0.2", "2.0.123", "2.1.0", "2.1-a", "2.1b",
+    "2.1-c", "2.1-1", "2.1.0.1", "2.2", "2.123", "11.a2", "11.a11", "11.b2",
+    "11.b11", "11.m2", "11.m11", "11", "11.a", "11b", "11c", "11m",
 ]
 
 #: ``testVersionsEqual`` — ``checkVersionsEqual`` also asserts ``hashCode``/``equals``,
@@ -140,6 +154,74 @@ class TestUpstreamOrderedChains:
                 elif backward is None or backward <= 0:
                     failures.append(f"{high} > {low} expected, got {backward}")
         assert not failures, f"{name}: {len(failures)} wrong, first 5: {failures[:5]}"
+
+
+class TestParserRulesTheVectorSuiteCannotReach:
+    """Rules from ``ComparableVersion.parseVersion`` that no upstream vector covers.
+
+    Every assertion here was established by differential evidence from the runtime
+    oracle, not by reading the source and deciding what it "should" do. The source was
+    read to find the *rule*; the runtime supplied the *answer*, and where the two
+    disagreed the runtime won. That ordering matters and is the point of the class:
+
+    * ``normalize()`` walks from the end and removes every null item, ``break``-ing
+      only on a non-null scalar. A non-null sublist does not stop it, so trailing
+      zeros in front of a sublist are stripped too.
+    * every ``-`` opens a sublist, and so does a string run at the end of the input or
+      a digit/letter transition. That is what makes the dotted form equivalent to the
+      hyphenated one: ``1.0.0.a`` parses to the same shape as ``1.a``.
+
+    Both rules were missing. Together they accounted for the last nine disagreements
+    with Apache's implementation.
+    """
+
+    @pytest.mark.parametrize(
+        ("left", "right"),
+        [
+            ("1.0.0.a", "1.a"),
+            ("1.0.0.x", "1.x"),
+            ("1.0.0.a", "1-a"),
+            ("1.a", "1-a"),
+            ("1.0a", "1.0.a"),
+        ],
+    )
+    def test_dotted_and_hyphenated_qualifiers_are_the_same_shape(self, left, right):
+        """`treat .X as -X for any string qualifier X` — from parseVersion's own comment."""
+        assert _cmp(left, right) == 0, f"{left} should equal {right}"
+
+    def test_a_dotted_qualifier_sort_strings_across_the_dot(self):
+        """A sublist makes the qualifier a list, and a list sorts below a number."""
+        assert _cmp("1.0.0.a", "1-1") == -1
+        assert _cmp("1.0.0.x", "1-1") == -1
+
+    def test_qualifiers_compare_lexically_inside_their_sublist(self):
+        assert _cmp("5.0.0.rc2", "5.x") == -1
+        assert _cmp("5.x", "5.0.0.rc2") == 1
+
+    def test_trailing_zeros_before_a_sublist_are_normalised_away(self):
+        """The rule ``normalize()`` implements that the old while-loop did not."""
+        assert _cmp("1.0.0.a", "1.a") == 0
+        assert _cmp("1.0.0.0.0.a", "1.a") == 0
+
+    @pytest.mark.parametrize(
+        ("left", "right", "expected"),
+        [
+            # Quoted from ComparableVersionTest@maven-3.9.9, checkVersionsEqual.
+            ("1a", "1-a", 0),
+            ("1a", "1.0-a", 0),
+            ("1a", "1.0.0-a", 0),
+            ("1x", "1-x", 0),
+            ("1x", "1.0-x", 0),
+            ("1x", "1.0.0-x", 0),
+            ("1.0.0x", "1-x", 0),
+            # ... and from checkVersionsOrder in the same file.
+            ("2.0-1", "2.0.1", -1),
+            ("2.0.1", "2.0.1-xyz", -1),
+            ("2.0.1-xyz", "2.0.1-123", -1),
+        ],
+    )
+    def test_upstream_pairs_whose_transcription_drifted(self, left, right, expected):
+        assert _cmp(left, right) == expected
 
 
 class TestUpstreamEquality:

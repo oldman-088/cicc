@@ -167,9 +167,29 @@ def _maven_is_null(item: tuple[object, ...]) -> bool:
 
 
 def _maven_normalize(items: list[tuple[object, ...]]) -> None:
-    """``ListItem.normalize``: drop *trailing* null items, so ``1.0-* == 1-*``."""
-    while items and _maven_is_null(items[-1]):
-        items.pop()
+    """``ListItem.normalize``: drop *trailing* null items, so ``1.0-* == 1-*``.
+
+    Apache walks from the end and removes every null item, ``break``-ing only on a
+    non-null **scalar**.  A non-null sublist therefore does *not* stop the walk, so
+    trailing zeros sitting immediately before a sublist are stripped too::
+
+        for (int i = size() - 1; i >= 0; i--) {
+            Item lastItem = get(i);
+            if (lastItem.isNull())              remove(i);
+            else if (!(lastItem instanceof ListItem)) break;
+        }
+
+    Stopping at the first non-null item instead left ``[1, 0, 0, ['a']]`` intact, so
+    ``1.0.0.a`` never equalled ``1.a`` — the shape the real implementation compares
+    as identical. That single difference accounted for most of the remaining
+    disagreements with the runtime oracle.
+    """
+    for index in range(len(items) - 1, -1, -1):
+        item = items[index]
+        if _maven_is_null(item):
+            items.pop(index)
+        elif item[0] != _M_LIST:
+            break
 
 
 def _maven_string_item(text: str, followed_by_digit: bool) -> tuple[object, ...]:
@@ -601,29 +621,55 @@ def _maven_parse_version(version: str) -> tuple[object, ...]:
             else:
                 current.append(parse_item(is_digit, text[start:index]))
             start = index + 1
-            if char == "-" and is_digit:
-                _maven_normalize(current)  # 1.0-* = 1-*
-                if index + 1 < len(text) and text[index + 1].isdigit():
-                    # A new sublist only when the previous token was numeric *and*
-                    # a digit follows: that is what separates 1.1 from 1-1.
-                    sublist: list[tuple[object, ...]] = []
+            if char == "-":
+                # Apache opens a sublist on *every* hyphen, not only before a digit:
+                # "1-1" and "1-a" are both sublists. Gating this on a following digit
+                # left every dotted qualifier ("1.a", "5.x") as a flat item, which is
+                # what made 1.0.0.a and 1.a compare unequal where Maven says equal.
+                sublist: list[tuple[object, ...]] = []
+                lists.append(sublist)
+                current.append((_M_LIST, sublist))
+                stack.append(current)
+                current = sublist
+        elif char.isdigit():
+            if not is_digit and index > start:
+                # 1.0.0.X1 < 1.0.0-X2: treat .X as -X for any string qualifier X, by
+                # opening the same sublist a hyphen would have opened.
+                if current:
+                    sublist = []
                     lists.append(sublist)
                     current.append((_M_LIST, sublist))
                     stack.append(current)
                     current = sublist
-        elif char.isdigit():
-            if not is_digit and index > start:
                 current.append(_maven_string_item(text[start:index], True))
                 start = index
+                sublist = []
+                lists.append(sublist)
+                current.append((_M_LIST, sublist))
+                stack.append(current)
+                current = sublist
             is_digit = True
         else:
             if is_digit and index > start:
                 current.append(parse_item(True, text[start:index]))
                 start = index
+                sublist = []
+                lists.append(sublist)
+                current.append((_M_LIST, sublist))
+                stack.append(current)
+                current = sublist
             is_digit = False
         index += 1
 
     if len(text) > start:
+        # The mirror of the rule above: a trailing string run also opens a sublist, so
+        # "1.a" and "1-a" parse identically and Maven reports them equal.
+        if not is_digit and current:
+            sublist = []
+            lists.append(sublist)
+            current.append((_M_LIST, sublist))
+            stack.append(current)
+            current = sublist
         current.append(parse_item(is_digit, text[start:]))
 
     # Normalise every list bottom-up, then freeze the live sublists into tuples.
