@@ -19,7 +19,7 @@
     "DAG",
     "sweep"
    ],
-   "tests": "API 309/309; PostgreSQL-selected 42/42; Web 40/40; typecheck PASS; production build PASS; local disposable M49 API/BFF smoke PASS; Agent 1 PR CI 42252536511 and push CI 42252527313 each 3/3 jobs PASS at code commit e1122bd3aed644af8607bd0873f1863a2a2edf94; exact merged-app preflight BLOCKED before app startup; MERGED-APPLICATION NOT RUN"
+   "tests": "API 309/309; PostgreSQL-selected 42/42; Web 40/40; typecheck PASS; production build PASS; local disposable M49 API/BFF smoke PASS; Agent 1 PR CI 42252536511 and push CI 42252527313 each 3/3 jobs PASS at code commit e1122bd3aed644af8607bd0873f1863a2a2edf94; exact merged-app preflight BLOCKED before app startup; MERGED-APPLICATION NOT RUN; docs-head PR CI 42255068598 and push CI 42255057408 also 3/3 PASS at 4e8da4da2d7e4c11fef72705211aa76b1d955866"
   },
   "ops": {
    "status": "implemented and locally/CI tested on Agent 1 PR #4; M49 dashboard only adds gateway lifecycle/probe visibility; optional platform-auth adapter is not verified production identity; no production deployment",
@@ -29,7 +29,7 @@
     "retention",
     "platform-auth adapter (inert)"
    ],
-   "tests": "API 309/309; PostgreSQL-selected 42/42; Web 40/40; typecheck PASS; production build PASS; disposable production-BFF smoke PASS locally and in CI runs 42252536511/42252527313; branch evidence only"
+   "tests": "API 309/309; PostgreSQL-selected 42/42; Web 40/40; typecheck PASS; production build PASS; disposable production-BFF smoke PASS locally and in CI runs 42252536511/42252527313; branch evidence only; docs-head PR CI 42255068598 and push CI 42255057408 also 3/3 PASS at 4e8da4da2d7e4c11fef72705211aa76b1d955866"
   }
  },
  "not_production_ready": [
@@ -94,11 +94,11 @@
   "1": "a942baabc3260683ec1a2b8c9d953c04dceaae9a (OPEN; 6/6 CI jobs PASS)",
   "2": "e745cc2b8ff995b040896212eab2995607c48963 (OPEN; Web check PASS)",
   "3": "7136538f74ab08b33607774c507785fc0c59cd03 (OPEN/Draft; PostgreSQL check PASS; actual-host 0/8)",
-  "4": "e1122bd3aed644af8607bd0873f1863a2a2edf94 (OPEN; M49 PR run 42252536511 and push run 42252527313 each 3/3 PASS, including production-BFF smoke)",
+  "4": "4e8da4da2d7e4c11fef72705211aa76b1d955866 (OPEN/CLEAN; docs head; PR run 42255068598 and push run 42255057408 each 3/3 PASS; tested M49 code baseline e1122bd3aed644af8607bd0873f1863a2a2edf94)",
   "6": "02616bb5a34bc0dfa6beaee598948b09b7ba1127 (OPEN; no checks)",
   "7": "63a6064618b888d4c6a5effea324ccbedab9d154 (OPEN; older Web check PASS)",
   "8": "3bc65275a941b7cb53202516d81add1dac650e99 (MERGED into PR #1 feature branch, not main)",
-  "checked": "2026-11-06T16:29Z"
+  "checked": "2026-11-06T16:45Z"
  },
  "adoption": {
   "agent2": "No integration approval inferred. PR #3 contains Agent 2 TI lineage plus replacement-VI work; experimental relationship host is unmounted, actual-host tests remain 0/8 and no principal/DB/audit/trace contract is approved. M49 own-branch evidence/contract request at PR #3 comment 6689783355; no response observed.",
@@ -110,8 +110,8 @@
  },
  "cross_agent_execution": "M49 status: Agent 1 code e1122bd is pushed and both PR/push CI runs 42252536511/42252527313 pass 3/3 jobs, including isolated production-BFF smoke. New dashboard feature is read-only gateway status; no Agent 2/Replacement Agent 3 route mounted. PR #3 actual-host tests remain 0/8. No owner-approved revision/module/host/tenant/auth/DB/audit/trace contract; exact merged-app gate remains BLOCKED. M49 requests posted on PRs #1/#2/#3; no acknowledgement or owner approval observed. No merged-app, production auth, tenant-isolation, or TI/VI integration claim.",
  "bff_write_path": "APPROVED+IMPLEMENTED on PR#4 reference BFF: POST /api/v1/coordination/tasks only, WEB_BFF_ALLOW_COORD_WRITE=1 + WEB_BFF_WRITE_TOKEN, DTO allowlist, server idempotency_key; live VERIFIED 201 + persisted + events @2026-11-05T12:22Z",
- "updated_at": "2026-11-06T16:43Z",
- "last_commit": "e1122bd3aed644af8607bd0873f1863a2a2edf94 (M49 product-code and CI evidence baseline; subsequent M49 docs align against this tested code revision)",
+ "updated_at": "2026-11-06T16:47Z",
+ "last_commit": "M49 tested product-code baseline e1122bd3aed644af8607bd0873f1863a2a2edf94; documentation head 4e8da4da2d7e4c11fef72705211aa76b1d955866 also passed PR/push CI",
  "milestone_notes": {
   "M27": "complete: idempotency_key on reads, BFF hardening 31/31, PG 14, traceability doc, 197/197 API, 31/31 contract, 24/24 e2e",
   "M44": "complete: domain gateway observability GET /domains/metrics (per-kind invokes/successes/failures/success_rate/timeouts/retries/stale_count/skew_count/latency{count,avg_s,max_s,last_s}/circuit{open,opens,closes}/mount_count/status; labels=[kind] bounded, no tenant ids/tokens/payloads; latency+circuit counters process-local, invokes/successes persisted) + M43 regression tests (concurrent failures open once, concurrent recovery closes once, repeated remounts, boundary payloads, restart = process-local documented); test_m44_observability.py 6/6; m44_observability_trial.py 17/17 @09:44:12Z SANDBOX/FIXTURE; API 275/275, PG 42/42",
@@ -119,7 +119,7 @@
   "M46": "complete: reliability edge fixes — one concurrent half-open probe per process with exact lease identity (only admitted probe closes/re-arms; unrelated in-flight outcomes cannot consume it), failed-probe cooldown re-arm/audit without duplicate opens count, remount/deregister circuit reset (including prior-handler consecutive_failures), acknowledged-alert recovery/reactivation with stale ack metadata cleared; persisted-stat ties preserve volatile M44 counters and M44 trial now baselines after remount; test_m46_ops_reliability.py 9/9 + test_m46_acceptance_gate.py 4/4; API 295/295, PG 42/42, web 35/35; live SANDBOX: M44 17/17 @12:21:42Z, M43 11/11 @12:20:46Z, M45 PR#3 5fec62ef + PR#1 78f869b8 26/26 @12:25:40Z, M40 PR#3 23/23 @12:26:11Z, M46 ops 7/7 @12:26:21Z; contract 31/31, E2E 24/24, MVP 23/23, cross-domain 32/32, M41 17/17, M42 16/16. Main ca8f82c0500637e22851d7128cddf99081ef3c08; PR#1/#3 OPEN, heads not on main; MERGED-APPLICATION NOT RUN. AMD-003 PENDING; no shared schema changes; no production claims. M46 implementation commit 9bd95949004331d3d07c0345f6dc6339a8bcb208.",
   "M47": "published implementation/handover commit 7e480d26be3b07515b6bc63b722f5b61b37e43f4 on Agent 1 branch; GitHub confirmed PR #4 OPEN/CLEAN at this SHA at 13:38Z, empty statusCheckRollup and gh pr checks reported no checks. Exact current branch HEAD must always be refreshed with git rev-parse/gh pr view. Exact expiring UUID half-open circuit probe leases with stale-owner callback rejection; per-mount generations guard remount/deregister callbacks; specified coordination GETs SQL-DML-free; repeated startup/stat restore idempotent; optional build_commit and probe lease metrics; exact-revision runner and preflight. Focused M46/M47 group 23/23; full API 309/309; PostgreSQL-selected 42/42; web 35/35; typecheck passed; M44 clean/non-empty fixture 17/17 with threshold 3. No schema change. PR #1 a942baab, #2 e745cc2b, #3 7136538f, #6 02616bb5; main ca8f82c. PR #3 Agent 2 TI handover + Replacement Agent 3 VI coexist; actual-host tests 0/8, no owner approval; Agent 1 TI adapter mismatch. No-manifest exact-app preflight BLOCKED before startup; merged-app and production NOT RUN/NOT CLAIMED; authentication, tenant isolation, migration process, AMD-003 and source ownership remain pending. Full handover: docs/handover/AGENT1_CENTRAL_COORDINATION_HANDOVER.md.",
   "M48": "Historical snapshot at 157645e9: Agent 1 API 309/309, PostgreSQL-selected 42/42, Web 35/35, typecheck/build; CI 42246801975/42246787299 each 3/3. Exact merged-app gate BLOCKED for no owner manifest. M48 incorrectly described the current PR #1 handover as reversing role assignments; corrected after exact-head review in M49. See M49 milestone note and docs/handover/CICC_PROJECT_COMPLETION_STATUS.md.",
-  "M49": "Agent 1 commit e1122bd3aed644af8607bd0873f1863a2a2edf94: read-only domain gateway evidence panel; fail-closed normalizer/declaration; five Web tests; disposable API + production-BFF smoke in scripts/m49_domain_gateway_smoke.py; CI workflow runs smoke after production build. Local Web 40/40, typecheck/build PASS, API 309/309, PostgreSQL-selected 42/42, smoke PASS. Hosted PR run 42252536511 and push run 42252527313 each 3/3 PASS; Web jobs include production-BFF smoke. M49 requirement-by-requirement Master Prompt review and exact PR #1/#3 ownership/source/host/migration review added. Role map corrected: PR #1 original Agent 3 VI; PR #3 replacement Agent 3 VI with earlier Agent 2 TI history; no independent human identity or owner/source approval. PR #1 migration 0043 exists despite body claim, is marked unapplied; no migration applied. PR #3 actual-host 0/8; exact-app acceptance remains BLOCKED. No TI/VI mounted, no production auth/tenant isolation claim; whole-product integrated Beta remains 29%, tenant-isolation acceptance 0%."
+  "M49": "Agent 1 commit e1122bd3aed644af8607bd0873f1863a2a2edf94: read-only domain gateway evidence panel; fail-closed normalizer/declaration; five Web tests; disposable API + production-BFF smoke in scripts/m49_domain_gateway_smoke.py; CI workflow runs smoke after production build. Local Web 40/40, typecheck/build PASS, API 309/309, PostgreSQL-selected 42/42, smoke PASS. Hosted PR run 42252536511 and push run 42252527313 each 3/3 PASS; Web jobs include production-BFF smoke. M49 requirement-by-requirement Master Prompt review and exact PR #1/#3 ownership/source/host/migration review added. Role map corrected: PR #1 original Agent 3 VI; PR #3 replacement Agent 3 VI with earlier Agent 2 TI history; no independent human identity or owner/source approval. PR #1 migration 0043 exists despite body claim, is marked unapplied; no migration applied. PR #3 actual-host 0/8; exact-app acceptance remains BLOCKED. No TI/VI mounted, no production auth/tenant isolation claim; whole-product integrated Beta remains 29%, tenant-isolation acceptance 0%. Documentation-only head 4e8da4da2d7e4c11fef72705211aa76b1d955866 is OPEN/CLEAN; PR run 42255068598 and push run 42255057408 also passed all three jobs, including the production-BFF smoke."
  },
  "backup_restore": "DONE M36: scripts/backup_restore.py tested vs SQLite+PG; docs/DISASTER_RECOVERY.md",
  "agent_model": {

@@ -1,10 +1,10 @@
 # CICC Project Completion Status
 
-**Snapshot:** 2026-11-06 (M49; after Agent 1 push and hosted CI)
+**Snapshot:** 2026-11-06 16:45 UTC (M49; after Agent 1 code/docs pushes and hosted CI)
 
 **Product status:** **Beta not accepted; whole-product integration is incomplete.**
 
-**Evidence baseline:** Agent 1 M49 code commit `e1122bd3aed644af8607bd0873f1863a2a2edf94` on `arena/961971ed-cicc`, PR #4. Later M49 documentation commits do not change that tested product-code baseline. The code commit is pushed to Agent 1's branch; it is not merged to `main`.
+**Evidence baseline:** Agent 1 M49 code commit `e1122bd3aed644af8607bd0873f1863a2a2edf94` on `arena/961971ed-cicc`, PR #4. Current PR #4 branch head at this snapshot is documentation commit `4e8da4da2d7e4c11fef72705211aa76b1d955866`; PR run `42255068598` and push run `42255057408` each passed all three jobs on that head, including the BFF smoke. The docs commit does not change the tested product-code baseline. Both commits are pushed to Agent 1's branch and remain unmerged to `main`.
 
 **Main:** `ca8f82c0500637e22851d7128cddf99081ef3c08`.
 
@@ -58,7 +58,7 @@ The percentages are approximate engineering estimates. They do not substitute fo
 | Web typecheck | **Passed** | `npm run typecheck`. |
 | Production web build | **Passed** | `NEXT_TELEMETRY_DISABLED=1 npm run build`; Next.js generated the app routes. |
 | Disposable API-to-production-BFF smoke | **Passed locally and in hosted CI** | `scripts/m49_domain_gateway_smoke.py`; temporary API DB and tokens, production Next.js server. Direct API read was 401; tokenless browser BFF reads 200; cross-site GET/POST 403; no TI/VI mounted or server token leaked. Not production or tenant-isolation acceptance. |
-| GitHub Agent 1 CI at M49 code commit | **3/3 jobs passed** on PR run [42252536511](https://github.com/oldman-088/cicc/actions/runs/42252536511) and push run [42252527313](https://github.com/oldman-088/cicc/actions/runs/42252527313), both at `e1122bd3…`. | Jobs: API full suite, PostgreSQL-selected suite, and Web tests + typecheck + production build + `Verify domain gateway through the production BFF`. Branch CI only; not a deployment or full-product acceptance. |
+| GitHub Agent 1 CI | **3/3 jobs passed** on code commit `e1122bd3…` (PR [42252536511](https://github.com/oldman-088/cicc/actions/runs/42252536511), push [42252527313](https://github.com/oldman-088/cicc/actions/runs/42252527313)) and current docs head `4e8da4d…` (PR [42255068598](https://github.com/oldman-088/cicc/actions/runs/42255068598), push [42255057408](https://github.com/oldman-088/cicc/actions/runs/42255057408)). | Jobs: API full suite, PostgreSQL-selected suite, and Web tests + typecheck + production build + `Verify domain gateway through the production BFF`. Branch CI only; not a deployment or full-product acceptance. |
 | Exact-revision merged-app acceptance | **BLOCKED; not run** | `scripts/m47_merged_app_acceptance.py --checkout .` exited 2: no owner-approved revision manifest; it started no application. PR #1 and #3 remain open. |
 
 ### Other PR evidence (not Agent 1 application acceptance)
@@ -76,7 +76,7 @@ Snapshot from `gh pr view` / Actions on 2026-11-06. No branch other than `arena/
 | [#1 — original VI candidate](https://github.com/oldman-088/cicc/pull/1) | OPEN, non-draft; `a942baabc3260683ec1a2b8c9d953c04dceaae9a` | CLEAN; six CI jobs succeeded; no review decision recorded. | Standalone package; not merged to `main`, not mounted in Agent 1. |
 | [#2 — frontend candidate](https://github.com/oldman-088/cicc/pull/2) | OPEN, non-draft; `e745cc2b8ff995b040896212eab2995607c48963` | CLEAN; Web check succeeded; no review decision recorded. | Separate frontend implementation; domain/TI/VI connections unapproved. |
 | [#3 — replacement VI / TI-history candidate](https://github.com/oldman-088/cicc/pull/3) | OPEN, **Draft**; `7136538f74ab08b33607774c507785fc0c59cd03` | CLEAN; PostgreSQL job succeeded; no review decision recorded. | Mixed TI/VI candidate; actual-host acceptance 0/8. |
-| [#4 — Agent 1 Ops/Coord](https://github.com/oldman-088/cicc/pull/4) | OPEN, non-draft; M49 code head `e1122bd3aed644af8607bd0873f1863a2a2edf94` | CLEAN; M49 PR run [42252536511](https://github.com/oldman-088/cicc/actions/runs/42252536511) and push run [42252527313](https://github.com/oldman-088/cicc/actions/runs/42252527313) each passed all three jobs, including the production-BFF smoke; no review decision recorded. | Only integrated control-plane slice in the current checkout; M49 panel is status-only; exact product acceptance remains blocked. |
+| [#4 — Agent 1 Ops/Coord](https://github.com/oldman-088/cicc/pull/4) | OPEN, non-draft; current docs head `4e8da4da2d7e4c11fef72705211aa76b1d955866`; tested M49 code baseline `e1122bd3aed644af8607bd0873f1863a2a2edf94` | CLEAN; M49 code PR/push runs `42252536511` / `42252527313` and current-head PR/push runs `42255068598` / `42255057408` each passed all three jobs, including the production-BFF smoke; no review decision recorded. | Only integrated control-plane slice in the current checkout; M49 panel is status-only; exact product acceptance remains blocked. |
 | #5 | Not returned by `gh pr list --state all` in this snapshot. | No current PR #5 status verified. | Older documentation that refers to issue/PR #5 is historical, not a current tracked PR. |
 | [#6 — Agent 6 backup](https://github.com/oldman-088/cicc/pull/6) | OPEN, non-draft; `02616bb5a34bc0dfa6beaee598948b09b7ba1127` | CLEAN; no status checks or review decision recorded. | Separate backup candidate; no adoption/integration approval. |
 | [#7 — Backup Agent 4](https://github.com/oldman-088/cicc/pull/7) | OPEN, non-draft; `63a6064618b888d4c6a5effea324ccbedab9d154` | CLEAN; one older successful Web check; no review decision recorded. | Separate backup contribution; not current Agent 1 integration evidence. |
