@@ -232,9 +232,9 @@ class TrustedReadsUnavailable(Exception):
 
 
 class TrustedWritePostgresRelationshipStore(PostgresRelationshipStore):
-    """Experimental controlled write-only adapter with DB-derived audit identity.
+    """Experimental controlled create/get adapter with DB-derived audit identity.
 
-    Explicitly refuses reads until audited DB-side read entry points are available.
+    Explicitly refuses list and traversal until audited entry points are available.
     The host must provision per-actor authenticated login roles, reviewed function
     ownership and restricted table privileges; nothing is provisioned here.
     """
@@ -256,8 +256,16 @@ class TrustedWritePostgresRelationshipStore(PostgresRelationshipStore):
             parsed = RelationshipRecord.model_validate(result['record']) if result['record'] else None
             return parsed, result['outcome'], UUID(result['correlation_id'])
 
-    def get(self, *args, **kwargs):
-        raise TrustedReadsUnavailable()
+    def get(self, ctx: AuditContext, record_id: UUID):
+        with self._transaction(ctx) as conn:
+            actor = conn.execute(text('SELECT ti_security.authenticated_actor()')).scalar_one_or_none()
+            if not actor or actor != ctx.actor:
+                raise RuntimeError('Database login is not bound to the authenticated actor')
+            result = conn.execute(text('SELECT ti_security.trusted_get_relationship(:rid)'), {'rid': record_id}).scalar_one()
+            if result['tenant'] != ctx.tenant_id or result['actor'] != ctx.actor:
+                raise RuntimeError('Database identity changed during the operation')
+            parsed = RelationshipRecord.model_validate(result['record']) if result['record'] else None
+            return parsed, UUID(result['correlation_id'])
 
     def list(self, *args, **kwargs):
         raise TrustedReadsUnavailable()

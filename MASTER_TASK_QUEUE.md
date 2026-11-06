@@ -1,10 +1,10 @@
-> **Current verification (2026-11-06):** Isolated run: 169 passed, 7 skipped (6 real-host tests + 1 live-source opt-in). A separate CISA GitHub mirror network-read test passed. Controlled PostgreSQL write/audit is tested under restricted local roles, but audited reads, actual host identity/integration and production immutability remain unverified. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `TRUSTED_RELATIONSHIP_WRITES.md`; historical claims below are unverified.
+> **Current verification (2026-11-06):** Isolated run: 173 passed, 7 skipped (6 real-host tests + 1 live-source opt-in). A separate CISA GitHub mirror network-read test passed. Controlled PostgreSQL create/get audit is tested under restricted local roles, but audited list/traversal, actual host identity/integration and production immutability remain unverified. No shared migration applied. See `P2_01_VERIFICATION_REPORT.md` and `TRUSTED_RELATIONSHIP_WRITES.md`; historical claims below are unverified.
 
 ## Current delivery checklist (living)
 
-- [x] Restricted-role PostgreSQL controlled relationship create and DB-derived transactional audit: isolated tests only.
+- [x] Restricted-role PostgreSQL controlled relationship create/get and DB-derived transactional audit: isolated tests only.
 - [x] CISA KEV GitHub mirror collector: offline tests and one opt-in real network read.
-- [ ] Implement and test controlled, audited read/list/traversal paths; current trusted adapter fails closed on reads.
+- [ ] Implement and test controlled, audited list/traversal paths; current trusted adapter fails closed on these operations.
 - [ ] Strengthen DB-side validation, audit protection against privileged roles, and per-user authorization.
 - [ ] Add durable, tenant-scoped collection workflow, retry/rate-limit coordination and production source observability.
 - [ ] Complete temporal/conflict frameworks and evaluate/calibrate confidence with authorized real methodology/data.

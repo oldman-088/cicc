@@ -25,7 +25,7 @@ Creation validates bounded nonempty references/provenance, enums and up to 100 e
 
 ## Controlled trusted-write alternative
 
-`TrustedWritePostgresRelationshipStore` provides an optional DB-identity-derived create/audit path with restricted DB grants. Its read, list and traversal methods fail closed with 503 until equally trusted audited read entry points exist. This is not the default store or actual host integration; see `TRUSTED_RELATIONSHIP_WRITES.md` for required role controls, migration, limited integrity guarantees and DB-generated correlation semantics.
+`TrustedWritePostgresRelationshipStore` provides an optional DB-identity-derived create and single-record read/audit path with restricted DB grants. Its list and traversal methods fail closed with 503 until equally trusted audited entry points exist. This is not the default store or actual host integration; see `TRUSTED_RELATIONSHIP_WRITES.md` for required role controls, migration, limited integrity guarantees and DB-generated correlation semantics.
 
 ## PostgreSQL and migration proposal
 `apps/threat_intelligence/relationship_storage.py` defines PostgreSQL SQLAlchemy Core tables, tenant-aware entity/relationship/idempotency constraints, adjacency/type indexes and transactional audit. A per-tenant PostgreSQL transaction advisory lock serializes creation across workers; database uniqueness and foreign keys enforce identity and idempotency. Graph reads use indexed frontier queries. This is a reviewed-domain proposal, not an approved shared schema. No schema is created at app startup.

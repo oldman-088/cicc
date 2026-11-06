@@ -264,6 +264,10 @@ def get_relationship(
         record = store.get(ctx, relationship_id)
     except TrustedReadsUnavailable:
         raise HTTPException(status_code=503, detail='Trusted reads not configured') from None
+    if isinstance(record, tuple):
+        record, correlation = record
+        ctx = AuditContext(tenant_id=ctx.tenant_id, actor=ctx.actor, correlation_id=correlation)
+        response.headers['X-Correlation-ID'] = str(correlation)
     if record is None:
         raise HTTPException(status_code=404, detail='Relationship not found', headers={'X-Correlation-ID': str(ctx.correlation_id)})
     return record
